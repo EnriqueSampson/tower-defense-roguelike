@@ -1,18 +1,22 @@
 class_name BattlefieldCamera
 extends Camera3D
 
-## Fixed three-quarter orthographic view of the battlefield. It never rotates;
-## players zoom toward the cursor and pan while zoomed in. Zoom 1.0 frames the
-## whole map, so panning is inert until the player zooms in.
+## Fixed WC3-style perspective view of the battlefield. It never rotates;
+## zooming dollies the camera along its tilt toward the cursor. Zoom 1.0 frames
+## the whole map, so panning is inert until the player zooms in.
 
 signal view_changed
 
-const PITCH_DEGREES := 55.0
-const CAMERA_DISTANCE := 120.0
-const PAN_SPEED := 720.0
-const ZOOM_STEP := 0.1
+## Close to Warcraft III's default camera (angle of attack 304°, i.e. 56° down).
+const PITCH_DEGREES := 56.0
+const FOV_DEGREES := 50.0
+## Closest dolly distance in units (tiles); about WC3's default view.
+const CLOSE_DISTANCE := 12.0
+## Screens per second of pan at any zoom.
+const PAN_SCREENS_PER_SECOND := 0.9
+const ZOOM_FACTOR := 1.15
 const MIN_ZOOM := 1.0
-const MAX_ZOOM := 2.0
+const MAX_ZOOM := 8.0
 const FRAME_INSET := 0.96
 
 @export var edge_pan_enabled := true
@@ -27,15 +31,16 @@ var _edge_pan_area: Control
 var _world_rect := Rect2()
 ## Sim-pixel point on the ground plane at the screen centre.
 var _focus := Vector2.ZERO
-## Orthographic size that frames the whole map.
-var _fit_size := 80.0
+## Dolly distance (units) and focus that frame the whole map at zoom 1.0.
+var _fit_distance := 100.0
+var _fit_focus := Vector2.ZERO
 
 
 func _ready() -> void:
-	projection = PROJECTION_ORTHOGONAL
+	projection = PROJECTION_PERSPECTIVE
 	keep_aspect = KEEP_HEIGHT
-	near = 1.0
-	far = CAMERA_DISTANCE * 3.0
+	fov = FOV_DEGREES
+	near = 0.1
 	rotation = Vector3(deg_to_rad(-PITCH_DEGREES), 0.0, 0.0)
 	_map = get_parent().get_node_or_null("WintermaulMap") as WintermaulMap
 	if _map != null:
@@ -43,9 +48,9 @@ func _ready() -> void:
 		_map.attach_camera(self)
 	else:
 		_world_rect = Rect2(Vector2.ZERO, Vector2(ClassicWintermaulLayout.GRID_SIZE) * WintermaulMap.TILE_SIZE)
-	_focus = _world_rect.get_center()
 	get_viewport().size_changed.connect(_on_viewport_resized)
-	_fit_size = _compute_fit_size()
+	_compute_fit()
+	_focus = _fit_focus
 	_apply_view()
 
 
@@ -69,22 +74,23 @@ func plane_to_screen(plane: Vector2, height := 0.0) -> Vector2:
 	return unproject_position(MapProjection.to_3d(plane, height))
 
 
-## Screen pixels per sim pixel along the map's x axis.
+## Screen pixels per sim pixel along the map's x axis, measured at the focus
+## (perspective makes nearer ground larger and farther ground smaller).
 func get_screen_scale() -> float:
-	var visible := get_visible_plane_size()
-	return _viewport_size().x / visible.x if visible.x > 0.0 else 1.0
+	var step := WintermaulMap.TILE_SIZE
+	var measured := plane_to_screen(_focus + Vector2(step, 0.0)).distance_to(plane_to_screen(_focus))
+	return measured / step if measured > 0.0 else 1.0
 
 
-## Ground-plane extent (sim pixels) currently on screen.
+## Ground-plane extent (sim pixels) of the visible area's bounding box.
 func get_visible_plane_size() -> Vector2:
-	var viewport_size := _viewport_size()
-	var aspect := viewport_size.x / viewport_size.y if viewport_size.y > 0.0 else 1.0
-	return Vector2(size * aspect, size / sin(deg_to_rad(PITCH_DEGREES))) * WintermaulMap.TILE_SIZE
+	return get_visible_plane_rect().size
 
 
+## Bounding box of the ground visible on screen (a trapezoid in perspective).
 func get_visible_plane_rect() -> Rect2:
-	var visible := get_visible_plane_size()
-	return Rect2(_focus - visible * 0.5, visible)
+	var offset := _visible_offset_rect(_distance())
+	return Rect2(_focus + offset.position, offset.size)
 
 
 # --- Zoom and pan -------------------------------------------------------------
@@ -141,7 +147,7 @@ func _can_edge_pan() -> bool:
 
 
 func _move_camera(direction: Vector2, delta: float) -> void:
-	_focus += direction.normalized() * PAN_SPEED * delta / zoom_level
+	_focus += direction.normalized() * get_visible_plane_size().x * PAN_SCREENS_PER_SECOND * delta
 	_apply_view()
 
 
@@ -151,14 +157,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			_dragging = event.pressed
 			get_viewport().set_input_as_handled()
 		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			set_zoom_level(zoom_level + ZOOM_STEP, event.position)
+			set_zoom_level(zoom_level * ZOOM_FACTOR, event.position)
 			get_viewport().set_input_as_handled()
 		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			set_zoom_level(zoom_level - ZOOM_STEP, event.position)
+			set_zoom_level(zoom_level / ZOOM_FACTOR, event.position)
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion and _dragging:
-		var plane_per_pixel := get_visible_plane_size() / _viewport_size()
-		_focus -= event.relative * plane_per_pixel
+		# Screen-to-ground scale at the focus; exact enough for a drag and safe
+		# for any pointer delta (rays never leave the ground plane).
+		_focus -= event.relative / get_screen_scale()
 		_apply_view()
 		get_viewport().set_input_as_handled()
 
@@ -173,39 +180,114 @@ func _viewport_size() -> Vector2:
 	return viewport_size
 
 
-func _compute_fit_size() -> float:
+func _distance() -> float:
+	return _fit_distance / zoom_level
+
+
+## Unit vector from the focus point toward the camera.
+func _back_vector() -> Vector3:
+	var pitch := deg_to_rad(PITCH_DEGREES)
+	return Vector3(0.0, sin(pitch), cos(pitch))
+
+
+## Visible ground bounding box, relative to the focus, for a dolly distance.
+## Depends only on distance, pitch, fov and aspect, never on the focus.
+func _visible_offset_rect(distance: float) -> Rect2:
+	var corners := _ground_corners(distance)
+	var rect := Rect2(corners[0], Vector2.ZERO)
+	for point in corners:
+		rect = rect.expand(point)
+	return rect
+
+
+## Area that must stay on the map, relative to the focus: the near (bottom)
+## screen edge horizontally and the full depth vertically. The wider far
+## corners may show a little void past the map edge, as in WC3.
+func _clamp_offset_rect(distance: float) -> Rect2:
+	var corners := _ground_corners(distance)
+	var bounds := _visible_offset_rect(distance)
+	return Rect2(Vector2(corners[2].x, bounds.position.y), Vector2(corners[3].x - corners[2].x, bounds.size.y))
+
+
+## Ground hits (sim pixels, relative to the focus) of the screen corners:
+## top-left, top-right, bottom-left, bottom-right.
+func _ground_corners(distance: float) -> Array[Vector2]:
 	var viewport_size := _viewport_size()
-	var aspect := viewport_size.x / viewport_size.y
-	var map_units := _world_rect.size * MapProjection.UNITS_PER_PIXEL
-	var fit_height := map_units.y * sin(deg_to_rad(PITCH_DEGREES))
-	var fit_width := map_units.x / aspect
-	return maxf(fit_height, fit_width) / FRAME_INSET
+	var half_v := tan(deg_to_rad(FOV_DEGREES) * 0.5)
+	var half_h := half_v * viewport_size.x / viewport_size.y
+	var pitch := deg_to_rad(PITCH_DEGREES)
+	var forward := Vector3(0.0, -sin(pitch), -cos(pitch))
+	var up := Vector3(0.0, cos(pitch), -sin(pitch))
+	var origin := _back_vector() * distance
+	var points: Array[Vector2] = []
+	for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+		var ray := forward + Vector3.RIGHT * corner.x * half_h + up * -corner.y * half_v
+		# Rays above the horizon would never land; clamp them just below it.
+		ray.y = minf(ray.y, -0.02)
+		var hit := origin + ray * (-origin.y / ray.y)
+		points.append(Vector2(hit.x, hit.z) * WintermaulMap.TILE_SIZE)
+	return points
+
+
+## Finds the smallest distance at which the whole map fits inside the visible
+## ground trapezoid (with an inset), top-aligned and centred horizontally.
+func _compute_fit() -> void:
+	var margin := _world_rect.size * (1.0 / FRAME_INSET - 1.0) * 0.5
+	var target := _world_rect.grow_individual(margin.x, margin.y, margin.x, margin.y)
+	var low := 1.0
+	var high := 4000.0
+	for _step in range(40):
+		var mid := (low + high) * 0.5
+		if _fits(mid, target):
+			high = mid
+		else:
+			low = mid
+	_fit_distance = maxf(high, CLOSE_DISTANCE)
+	var offset := _visible_offset_rect(_fit_distance)
+	_fit_focus = Vector2(_world_rect.get_center().x, target.position.y - offset.position.y)
+
+
+## True when `target`, top-aligned to the view, fits inside the trapezoid.
+## The trapezoid narrows toward the camera, so the target's bottom row is
+## the binding width.
+func _fits(distance: float, target: Rect2) -> bool:
+	var corners := _ground_corners(distance)
+	var depth := corners[2].y - corners[0].y
+	if depth < target.size.y:
+		return false
+	var t := target.size.y / depth
+	var width_at_bottom := lerpf(corners[1].x - corners[0].x, corners[3].x - corners[2].x, t)
+	return width_at_bottom >= target.size.x
 
 
 func _apply_view() -> void:
-	size = _fit_size / zoom_level
-	_clamp_focus_to_world()
-	var pitch := deg_to_rad(PITCH_DEGREES)
-	position = MapProjection.to_3d(_focus) + Vector3(0.0, sin(pitch), cos(pitch)) * CAMERA_DISTANCE
+	var distance := _distance()
+	_clamp_focus_to_world(distance)
+	far = maxf(distance * 4.0, 50.0)
+	position = MapProjection.to_3d(_focus) + _back_vector() * distance
 	view_changed.emit()
 
 
-func _clamp_focus_to_world() -> void:
+## Zoom 1.0 is locked to the whole-map framing. Zoomed in, the clamp area
+## (see _clamp_offset_rect) stays on the map; an axis that cannot fit centres
+## horizontally or top-aligns vertically, matching the zoom 1.0 framing.
+func _clamp_focus_to_world(distance: float) -> void:
 	if _world_rect.size == Vector2.ZERO:
 		return
-	var visible_half := get_visible_plane_size() * 0.5
-	var world_half := _world_rect.size * 0.5
-	var center := _world_rect.get_center()
-	if visible_half.x >= world_half.x:
-		_focus.x = center.x
+	if zoom_level <= MIN_ZOOM:
+		_focus = _fit_focus
+		return
+	var offset := _clamp_offset_rect(distance)
+	if offset.size.x >= _world_rect.size.x:
+		_focus.x = _world_rect.get_center().x
 	else:
-		_focus.x = clampf(_focus.x, _world_rect.position.x + visible_half.x, _world_rect.end.x - visible_half.x)
-	if visible_half.y >= world_half.y:
-		_focus.y = center.y
+		_focus.x = clampf(_focus.x, _world_rect.position.x - offset.position.x, _world_rect.end.x - offset.end.x)
+	if offset.size.y >= _world_rect.size.y:
+		_focus.y = _world_rect.position.y - offset.position.y
 	else:
-		_focus.y = clampf(_focus.y, _world_rect.position.y + visible_half.y, _world_rect.end.y - visible_half.y)
+		_focus.y = clampf(_focus.y, _world_rect.position.y - offset.position.y, _world_rect.end.y - offset.end.y)
 
 
 func _on_viewport_resized() -> void:
-	_fit_size = _compute_fit_size()
+	_compute_fit()
 	_apply_view()

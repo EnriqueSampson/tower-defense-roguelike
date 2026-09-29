@@ -27,7 +27,7 @@ A faithful co-op Wintermaul for modern players:
 - Five creep roles, including one boss, across 10 waves.
 - 17 seeded run upgrades, offered after waves 2, 4, 6 and 8.
 - A data-driven content catalog: towers, creeps, waves and upgrades are `.tres` resources.
-- A 3D presentation layer: an orthographic 55° camera over a 2D simulation, with procedural primitive meshes.
+- A 3D presentation layer over a 2D simulation, with procedural primitive meshes. At the Phase 0 baseline (tag `baseline-phase0`) the camera was orthographic at 55°.
 - HUD, main menu, lobby, settings, end screen, procedural audio, and export presets.
 
 ### Not yet validated
@@ -78,7 +78,7 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 
 **Goal:** A screenshot reads as a Wintermaul-like game.
 
-- [ ] Camera: switch to perspective at a fixed WC3-like angle and field of view, with zoom and pan. Rework screen-to-ground picking, overlays, and the startup framing for the whole map.
+- [x] Camera: switched to perspective at a fixed WC3-like angle (56° pitch, 50° FOV). Zoom moves the camera closer (zoom 1.0 frames the whole map, the closest zoom is about 12 tiles away) and anchors on the cursor. Picking uses ray casts, and overlays project correctly. Zoomed in, the near edge and the view's depth stay on the map; the far corners may show void past the edge, as in WC3.
 - [ ] Placeholder models for the three towers, five creeps and the terrain props, with idle, walk, attack and death animations where they apply.
 - [ ] Terrain: replace flat tiles with height, cliffs and lane borders in WC3 style, and add lighting and shadows within Iris 550 budgets.
 - [ ] Unit readability: selection circles, health bars, damage numbers, and projectile and impact effects sized for a perspective camera. Model creeps no longer show the procedural lane-color band, so bring back a lane or position signal (for example a colored ground ring).
