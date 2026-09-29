@@ -36,6 +36,8 @@ const TILE_SIZE := MapProjection.TILE_SIZE
 const GOAL_CELL := Layout.FINAL_GATE
 const LANE_COLORS: Array[Color] = Layout.PLAYER_COLORS
 const GROUND_DETAIL_TILES := 12.0
+## Terrain texture resolution; 8 px per cell keeps the 144x160 map at 1152x1280.
+const BAKE_PIXELS_PER_CELL := 8
 const DECAL_HEIGHT := 0.015
 const LANDMARK_HEIGHT := 0.03
 
@@ -1017,7 +1019,7 @@ func _paint_dynamic_canvas(canvas: CanvasItem) -> void:
 ## One texture for the whole battlefield: hedges, ground, spawn pads, exit,
 ## and the local player's ownership tint.
 func _bake_terrain_texture() -> ImageTexture:
-	var tile := int(TILE_SIZE)
+	var tile := BAKE_PIXELS_PER_CELL
 	var image := Image.create(GRID_SIZE.x * tile, GRID_SIZE.y * tile, false, Image.FORMAT_RGBA8)
 	var controlled: Dictionary = {}
 	for position_index in range(_owners.size()):

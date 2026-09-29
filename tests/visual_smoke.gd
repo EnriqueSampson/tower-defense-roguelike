@@ -19,9 +19,9 @@ func _start() -> void:
 	root.get_node("GameSettings").set("controls_seen", true)
 	_game = (load("res://scenes/game/Game.tscn") as PackedScene).instantiate()
 	root.add_child(_game)
-	_game.call("_try_place_tower", "bolt", Vector2i(17, 10))
-	_game.call("_try_place_tower", "cannon", Vector2i(40, 68))
-	_game.call("_try_place_tower", "frost", Vector2i(30, 66))
+	_game.call("_try_place_tower", "bolt", Vector2i(34, 20))
+	_game.call("_try_place_tower", "cannon", Vector2i(80, 136))
+	_game.call("_try_place_tower", "frost", Vector2i(60, 132))
 	_game.call("_on_palette_selected", "bolt")
 	_game.set("build_countdown", 0.5)
 
@@ -43,7 +43,7 @@ func _process(_delta: float) -> bool:
 		image.save_png("/tmp/wintermaul_smoke.png")
 		print("SMOKE screenshot saved to /tmp/wintermaul_smoke.png")
 		var camera := _game.get_node("WorldClip/BattlefieldView/BattlefieldViewport/World/BattlefieldCamera") as BattlefieldCamera
-		camera.set_zoom_level(BattlefieldCamera.MAX_ZOOM, camera.plane_to_screen((_game.get_node("WorldClip/BattlefieldView/BattlefieldViewport/World/WintermaulMap") as WintermaulMap).grid_to_world(Vector2i(40, 68))))
+		camera.set_zoom_level(BattlefieldCamera.MAX_ZOOM, camera.plane_to_screen((_game.get_node("WorldClip/BattlefieldView/BattlefieldViewport/World/WintermaulMap") as WintermaulMap).grid_to_world(Vector2i(80, 136))))
 	if _frames == 315:
 		RenderingServer.force_draw(false)
 		var zoomed := root.get_viewport().get_texture().get_image()

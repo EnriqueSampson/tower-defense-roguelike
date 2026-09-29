@@ -23,18 +23,19 @@ const MAP_PATH := "WorldClip/BattlefieldView/BattlefieldViewport/World/Wintermau
 const CAMERA_PATH := "WorldClip/BattlefieldView/BattlefieldViewport/World/BattlefieldCamera"
 const ALL_POSITIONS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 ## Stylized layout reference cells.
-const P1_OPEN := Vector2i(17, 10)
-const P1_OPEN_B := Vector2i(18, 10)
-const P1_CREEP := Vector2i(17, 11)
-const P2_OPEN := Vector2i(36, 12)
-const P4_OPEN := Vector2i(58, 36)
-const P9_OPEN := Vector2i(40, 70)
-const VOID_CELL := Vector2i(3, 10)
-const PORTAL_CELL := Vector2i(17, 3)
-## Lane 1 exits through a five-wide, two-deep gap (x 15-19, y 29-30). Two 2x2
-## towers leave only column 17 open; a 2x2 anchored at SEAL_CELL caps it from above.
-const SEAL_CELL := Vector2i(16, 27)
-const SEAL_NEIGHBOURS: Array[Vector2i] = [Vector2i(15, 29), Vector2i(18, 29)]
+## Reference cells on the 144x160 grid (design grid x2).
+const P1_OPEN := Vector2i(34, 20)
+const P1_OPEN_B := Vector2i(36, 20)
+const P1_CREEP := Vector2i(34, 22)
+const P2_OPEN := Vector2i(72, 24)
+const P4_OPEN := Vector2i(116, 72)
+const P9_OPEN := Vector2i(80, 140)
+const VOID_CELL := Vector2i(6, 20)
+const PORTAL_CELL := Vector2i(35, 7)
+## Lane 1 exits through a ten-wide, four-deep gap (x 30-39, y 58-61). Four 2x2
+## towers across rows 58-59 leave only x 36-37 open; a 2x2 at SEAL_CELL closes it.
+const SEAL_CELL := Vector2i(36, 58)
+const SEAL_NEIGHBOURS: Array[Vector2i] = [Vector2i(30, 58), Vector2i(32, 58), Vector2i(34, 58), Vector2i(38, 58)]
 
 var _failures := 0
 var _checks := 0
@@ -189,7 +190,7 @@ func _test_host_disconnect_cleanup() -> void:
 func _test_classic_layout_coordinates() -> void:
 	var positions := ClassicWintermaulLayout.setup_map_coordinates()
 	_check(positions.size() == 9, "classic layout defines nine player positions")
-	_check(ClassicWintermaulLayout.GRID_SIZE == Vector2i(72, 80), "stylized layout uses the 72 by 80 grid")
+	_check(ClassicWintermaulLayout.GRID_SIZE == Vector2i(144, 160), "layout scales the 72 by 80 design grid to 144 by 160 cells (72 by 80 towers)")
 	_check(ClassicWintermaulLayout.SPATIAL_PLAYER_ORDER == [1, 2, 3, 6, 5, 4, 7, 9, 8], "classic layout preserves Warcraft color order")
 	var spawn_cells: Dictionary = {}
 	var all_bounds_valid := true
@@ -204,12 +205,12 @@ func _test_classic_layout_coordinates() -> void:
 	_check(positions[4]["spawns"].size() == 2 and positions[8]["spawns"].size() == 2, "positions five and nine spawn from two pads each")
 	_check(all_bounds_valid, "macro bounds fit the grid and every spawn sits on a pad with a reachable checkpoint")
 	var p9: Dictionary = positions[8]
-	_check(p9["macro_bounds"] == Rect2i(27, 45, 20, 33), "position nine owns the bottom-center final defense")
-	_check(p9["checkpoint"] == ClassicWintermaulLayout.FINAL_CHECKPOINT and ClassicWintermaulLayout.FINAL_GATE == Vector2i(35, 77), "position nine exits through the relay checkpoint and final gate")
+	_check(p9["macro_bounds"] == Rect2i(54, 90, 40, 66), "position nine owns the bottom-center final defense")
+	_check(p9["checkpoint"] == ClassicWintermaulLayout.FINAL_CHECKPOINT and ClassicWintermaulLayout.FINAL_GATE == Vector2i(71, 155), "position nine exits through the relay checkpoint and final gate")
 	_check(ClassicWintermaulLayout.terrain_at(ClassicWintermaulLayout.FINAL_GATE) == ClassicWintermaulLayout.Terrain.EXIT_PAD, "the final gate sits on the exit pad")
-	_check(ClassicWintermaulLayout.terrain_at(Vector2i(0, 0)) == ClassicWintermaulLayout.Terrain.VOID and ClassicWintermaulLayout.terrain_at(Vector2i(8, 0)) == ClassicWintermaulLayout.Terrain.WALL, "void surrounds the outer hedge")
+	_check(ClassicWintermaulLayout.terrain_at(Vector2i(0, 0)) == ClassicWintermaulLayout.Terrain.VOID and ClassicWintermaulLayout.terrain_at(Vector2i(16, 0)) == ClassicWintermaulLayout.Terrain.WALL, "void surrounds the outer hedge")
 	_check(ClassicWintermaulLayout.terrain_at(P1_OPEN) == ClassicWintermaulLayout.Terrain.OPEN and ClassicWintermaulLayout.position_index_at(P1_OPEN) == 0, "lane one ground below the spawn pad belongs to position one")
-	_check(ClassicWintermaulLayout.terrain_at(Vector2i(8, 36)) == ClassicWintermaulLayout.Terrain.OPEN, "side entrances carve gaps through the outer hedge")
+	_check(ClassicWintermaulLayout.terrain_at(Vector2i(16, 72)) == ClassicWintermaulLayout.Terrain.OPEN, "side entrances carve gaps through the outer hedge")
 
 
 func _test_content_catalog_validation() -> void:
@@ -535,8 +536,8 @@ func _test_grid_projection_and_placement() -> void:
 		routes_share_goal = routes_share_goal and map.get_route_start(lane_id) != map.get_route_goal(lane_id)
 		routes_share_goal = routes_share_goal and map.get_route_goal(lane_id) == WintermaulMap.GOAL_CELL
 	_check(routes_share_goal, "all nine positions converge on the final gate")
-	_check(map.get_route_targets(0) == [Vector2i(17, 30), ClassicWintermaulLayout.FINAL_CHECKPOINT, Vector2i(35, 77)], "P1 relays through its checkpoint and the shared relay checkpoint")
-	_check(map.get_route_targets(8) == [ClassicWintermaulLayout.FINAL_CHECKPOINT, Vector2i(35, 77)], "P9 defends the relay checkpoint before the final gate")
+	_check(map.get_route_targets(0) == [Vector2i(35, 61), ClassicWintermaulLayout.FINAL_CHECKPOINT, Vector2i(71, 155)], "P1 relays through its checkpoint and the shared relay checkpoint")
+	_check(map.get_route_targets(8) == [ClassicWintermaulLayout.FINAL_CHECKPOINT, Vector2i(71, 155)], "P9 defends the relay checkpoint before the final gate")
 	_check(map.get_spawner_cells(4).size() == 2 and map.get_spawner_cells(8).size() == 2 and map.get_spawner_cells(0).size() == 1, "positions five and nine expose two spawners")
 	var first := map.spawn_creep(1, 4, _creep(1.0, 10))
 	var second := map.spawn_creep(2, 4, _creep(1.0, 10))
@@ -548,7 +549,7 @@ func _test_grid_projection_and_placement() -> void:
 	_check(all_routes_open, "every spawner reaches its position checkpoint through the hedges")
 	_check(not map.can_place_tower(PORTAL_CELL), "tower placement rejects spawn pad cells")
 	_check(not map.can_place_tower(VOID_CELL), "tower placement rejects terrain outside the hedges")
-	_check(not map.can_place_tower(Vector2i(8, 0)) and not map.can_place_tower(WintermaulMap.GOAL_CELL), "tower placement rejects hedge walls and the exit pad")
+	_check(not map.can_place_tower(Vector2i(16, 0)) and not map.can_place_tower(WintermaulMap.GOAL_CELL), "tower placement rejects hedge walls and the exit pad")
 	_check(map.can_place_tower(open_cell), "tower placement accepts an open cell")
 	_check(map.get_cell_position_index(open_cell) == 0 and map.get_cell_position_index(P9_OPEN) == 8, "build cells resolve to their owning position")
 	var tower := map.spawn_tower(1, open_cell, Bolt)
@@ -589,7 +590,7 @@ func _test_tower_collision_pathing() -> void:
 	_check(map.get_grid_revision() == 1, "accepted tower collision increments the path revision")
 	_check(not obstacle_cell in path_after and path_after != path_before, "tower collision forces a new shortest path")
 	_seal_lane_one_except(map, SEAL_CELL)
-	_check(map.can_place_tower(Vector2i(19, 27), Bolt.footprint), "a tower beside the gap still leaves the route open")
+	_check(map.can_place_tower(Vector2i(42, 54), Bolt.footprint), "a tower beside the gap still leaves the route open")
 	_check(not map.can_place_tower(SEAL_CELL, Bolt.footprint), "anti-block rejects sealing the lane exit gap")
 	map.queue_free()
 
@@ -731,15 +732,23 @@ func _test_battlefield_camera_controls() -> void:
 	world.add_child(camera)
 	root.add_child(world)
 	var world_rect := map.get_world_rect()
-	_check(is_equal_approx(camera.zoom_level, BattlefieldCamera.MIN_ZOOM), "battlefield camera starts fully zoomed out")
-	var screen_rect := camera.get_viewport().get_visible_rect()
-	var corners_on_screen := true
-	for corner in [world_rect.position, Vector2(world_rect.end.x, world_rect.position.y), Vector2(world_rect.position.x, world_rect.end.y), world_rect.end]:
-		corners_on_screen = corners_on_screen and screen_rect.has_point(camera.plane_to_screen(corner))
-	_check(corners_on_screen and camera.get_visible_plane_rect().encloses(world_rect), "whole-map framing keeps the entire battlefield on screen")
+	var viewport_size := camera.get_viewport().get_visible_rect().size
+	var center_screen := viewport_size * 0.5
+	_check(is_equal_approx(camera.zoom_level, BattlefieldCamera.DEFAULT_ZOOM), "battlefield camera starts at the WC3 default distance")
+	_check(camera.projection == Camera3D.PROJECTION_PERSPECTIVE, "battlefield camera uses a WC3-style perspective projection")
 	_check(camera.rotation.y == 0.0 and camera.rotation.z == 0.0 and camera.rotation.x < 0.0, "battlefield camera is a fixed downward tilt without yaw")
-	var center_screen := camera.get_viewport().get_visible_rect().size * 0.5
-	_check(is_equal_approx(camera.screen_to_plane(center_screen).x, world_rect.get_center().x), "startup framing centres the map horizontally")
+	_check(not camera.get_visible_plane_rect().encloses(world_rect), "the default view shows part of the map, not all of it")
+	camera.set_zoom_level(-100.0)
+	_check(is_equal_approx(camera.zoom_level, BattlefieldCamera.MIN_ZOOM) and not camera.get_visible_plane_rect().encloses(world_rect), "even fully zoomed out the camera never frames the whole map")
+	var far_distance := camera.position.distance_to(MapProjection.to_3d(camera.get_focus()))
+	camera.set_zoom_level(100.0)
+	var close_distance := camera.position.distance_to(MapProjection.to_3d(camera.get_focus()))
+	var default_distance := camera.get_default_distance()
+	_check(absf(far_distance - default_distance * BattlefieldCamera.FAR_FACTOR) < 0.01 and absf(close_distance - default_distance * BattlefieldCamera.CLOSE_FACTOR) < 0.01, "zoom dollies between the far cap and the close view")
+	camera.set_zoom_level(BattlefieldCamera.DEFAULT_ZOOM)
+	var target := world_rect.get_center()
+	camera.focus_on(target)
+	_check(camera.screen_to_plane(center_screen).distance_to(target) < 0.5, "focus_on centres the view on a map point")
 	var probe := map.grid_to_world(P4_OPEN)
 	var round_trip := camera.screen_to_plane(camera.plane_to_screen(probe))
 	_check(round_trip.distance_to(probe) < 0.5, "plane/screen projection round-trips")
@@ -751,25 +760,15 @@ func _test_battlefield_camera_controls() -> void:
 	_check(camera.get_edge_direction(Vector2(101, 81), edge_area).is_equal_approx(Vector2(-1, -1).normalized()), "battlefield corner pan is normalized")
 	_check(camera.get_edge_direction(Vector2(500, 380), edge_area) == Vector2.ZERO, "battlefield center does not edge-pan")
 	_check(camera.get_edge_direction(Vector2(950, 380), edge_area) == Vector2.ZERO, "cursor outside battlefield does not edge-pan")
-	_check(camera.projection == Camera3D.PROJECTION_PERSPECTIVE, "battlefield camera uses a WC3-style perspective projection")
-	var fit_rect := camera.get_visible_plane_rect()
-	camera._move_camera(Vector2(1, 1), 1000.0)
-	_check(camera.get_visible_plane_rect().is_equal_approx(fit_rect), "panning is inert while the whole map is visible")
-	var far_distance := camera.position.distance_to(MapProjection.to_3d(world_rect.get_center()))
-	camera.set_zoom_level(BattlefieldCamera.MAX_ZOOM)
-	var close_distance := camera.position.distance_to(MapProjection.to_3d(camera.screen_to_plane(center_screen)))
-	_check(is_equal_approx(camera.zoom_level, BattlefieldCamera.MAX_ZOOM) and world_rect.encloses(camera.get_visible_plane_rect()), "maximum zoom stays inside the battlefield")
-	_check(close_distance < far_distance * 0.2 and close_distance <= BattlefieldCamera.CLOSE_DISTANCE + 0.01, "zooming dollies the camera in toward a WC3-like close view")
-	var viewport_size := camera.get_viewport().get_visible_rect().size
 	camera._move_camera(Vector2(-1, -1), 1000.0)
 	var visible := camera.get_visible_plane_rect()
 	var near_left := camera.screen_to_plane(Vector2(0, viewport_size.y))
-	_check(is_equal_approx(near_left.x, world_rect.position.x) and is_equal_approx(visible.position.y, world_rect.position.y), "sustained camera movement clamps to the map corner")
+	_check(absf(near_left.x - world_rect.position.x) < 0.5 and absf(visible.position.y - world_rect.position.y) < 0.5, "sustained camera movement clamps to the map corner")
 	camera._move_camera(Vector2(1, 1), 1000.0)
 	visible = camera.get_visible_plane_rect()
 	var near_right := camera.screen_to_plane(viewport_size)
-	_check(is_equal_approx(near_right.x, world_rect.end.x) and is_equal_approx(visible.end.y, world_rect.end.y), "camera movement reaches but does not cross the opposite map bounds")
-	camera.set_zoom_level(3.0)
+	_check(absf(near_right.x - world_rect.end.x) < 0.5 and absf(visible.end.y - world_rect.end.y) < 0.5, "camera movement reaches but does not cross the opposite map bounds")
+	camera.focus_on(target)
 	var anchor_screen := center_screen + Vector2(180, -120)
 	var anchor_plane := camera.screen_to_plane(anchor_screen)
 	var zoom_event := InputEventMouseButton.new()
@@ -777,9 +776,8 @@ func _test_battlefield_camera_controls() -> void:
 	zoom_event.pressed = true
 	zoom_event.position = anchor_screen
 	camera._unhandled_input(zoom_event)
-	_check(camera.zoom_level > 3.0, "battlefield camera responds to wheel zoom")
+	_check(camera.zoom_level > BattlefieldCamera.DEFAULT_ZOOM, "battlefield camera responds to wheel zoom")
 	_check(camera.screen_to_plane(anchor_screen).distance_to(anchor_plane) < 1.0, "wheel zoom keeps the ground under the cursor fixed")
-	camera.set_zoom_level(BattlefieldCamera.MAX_ZOOM)
 	var initial_center := camera.get_visible_plane_rect().get_center()
 	var drag_start := InputEventMouseButton.new()
 	drag_start.button_index = MOUSE_BUTTON_RIGHT
@@ -801,8 +799,13 @@ func _test_solo_camera_startup_focus() -> void:
 	root.add_child(game)
 	var camera := game.get_node(CAMERA_PATH) as BattlefieldCamera
 	var map := game.get_node(MAP_PATH) as WintermaulMap
-	_check(is_equal_approx(camera.zoom_level, BattlefieldCamera.MIN_ZOOM), "solo game starts at the whole-map zoom")
-	_check(camera.get_visible_plane_rect().encloses(map.get_world_rect()), "solo game frames the entire battlefield")
+	_check(is_equal_approx(camera.zoom_level, BattlefieldCamera.DEFAULT_ZOOM), "solo game starts at the WC3 default distance")
+	var view_size := camera.get_viewport().get_visible_rect().size
+	var focus := camera.screen_to_plane(view_size * 0.5)
+	_check(map.get_position_world_rect(8).grow(WintermaulMap.TILE_SIZE * 2.0).has_point(focus), "solo game starts on Position 9, where every lane meets the gate")
+	var across := camera.screen_to_plane(Vector2(0, view_size.y * 0.5)).distance_to(camera.screen_to_plane(Vector2(view_size.x, view_size.y * 0.5)))
+	var towers_across := across / (WintermaulMap.TILE_SIZE * 2.0)
+	_check(towers_across > 14.0 and towers_across < 26.0, "the default view spans about 19 towers, like WC3 (got %.1f)" % towers_across)
 	var state: RunState = game.get("run_state")
 	_check(state.position_owners == PackedInt32Array([1, 1, 1, 1, 1, 1, 1, 1, 1]), "solo host controls all nine positions")
 	steam_session.set("is_solo_session", false)
@@ -819,7 +822,10 @@ func _test_multiplayer_camera_startup_focus() -> void:
 	var game: Node = _instantiate_game()
 	root.add_child(game)
 	var camera := game.get_node(CAMERA_PATH) as BattlefieldCamera
-	_check(is_equal_approx(camera.zoom_level, BattlefieldCamera.MIN_ZOOM), "multiplayer game starts at the whole-map zoom")
+	var map := game.get_node(MAP_PATH) as WintermaulMap
+	_check(is_equal_approx(camera.zoom_level, BattlefieldCamera.DEFAULT_ZOOM), "multiplayer game starts at the WC3 default distance")
+	var focus := camera.screen_to_plane(camera.get_viewport().get_visible_rect().size * 0.5)
+	_check(map.get_position_world_rect(3).grow(WintermaulMap.TILE_SIZE * 4.0).has_point(focus), "multiplayer camera starts on the local player's position")
 	var state: RunState = game.get("run_state")
 	_check(state.position_owners[3] == 1 and state.position_owners[0] == 0, "roster ownership marks the host position and leaves others host-controlled")
 	steam_session.set("roster", [] as Array[Dictionary])
@@ -852,7 +858,7 @@ func _test_basic_tower_combat() -> void:
 func _test_targeting_priorities() -> void:
 	var map := WintermaulMapScene.instantiate() as WintermaulMap
 	root.add_child(map)
-	var origin := map.grid_to_world(Vector2i(16, 6))
+	var origin := map.grid_to_world(Vector2i(32, 12))
 	var near := map.spawn_creep(1, 0, _creep(1.0, 10))
 	var far_strong := map.spawn_creep(2, 0, _creep(1.0, 50))
 	var leader := map.spawn_creep(3, 0, _creep(1.0, 20))
@@ -876,7 +882,7 @@ func _test_targeting_priorities() -> void:
 func _test_splash_slow_and_armor() -> void:
 	var map := WintermaulMapScene.instantiate() as WintermaulMap
 	root.add_child(map)
-	var center := map.grid_to_world(Vector2i(16, 10))
+	var center := map.grid_to_world(Vector2i(32, 20))
 	var primary := map.spawn_creep(1, 0, _creep(4.0, 30))
 	var nearby := map.spawn_creep(2, 0, _creep(4.0, 30))
 	var distant := map.spawn_creep(3, 0, _creep(4.0, 30))
@@ -1143,7 +1149,7 @@ func _test_creep_reconciliation() -> void:
 	]
 	var summary := map.reconcile_creeps(records, Catalog.get_creep)
 	_check(summary["added"] == 2 and map.get_active_creeps().size() == 2, "reconciliation spawns creeps the client has not seen")
-	var far := map.grid_to_world(Vector2i(16, 20))
+	var far := map.grid_to_world(Vector2i(32, 40))
 	records[0]["health"] = 4
 	records[0]["x"] = far.x
 	records[0]["y"] = far.y

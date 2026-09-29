@@ -50,7 +50,7 @@ Reconciliation (`WintermaulMap.reconcile_towers` / `reconcile_creeps`) adds miss
 
 ### Simulation vs presentation coordinates
 
-Every gameplay value (paths, snapshots, targeting, splash) uses `Vector2` sim pixels on the orthogonal grid (`WintermaulMap.TILE_SIZE` per cell). Rendering is a 3D scene inside the battlefield `SubViewport`: `MapProjection` maps sim pixels to the XZ ground plane (one tile = one unit, height on Y), and `Tower`, `RouteRunner`, and `Projectile` expose `plane_position` as the only bridge to their `Node3D` transform. `BattlefieldCamera` (fixed WC3-style perspective: 56° pitch, 50° FOV, no yaw; zoom dollies toward the cursor, and zoom 1.0 frames the whole map) converts screen ↔ plane for picking and for the 2D canvas overlays (labels, health bars, effects) drawn on top of the 3D view. Nothing in networking, pathfinding, or combat depends on the 3D nodes.
+Every gameplay value (paths, snapshots, targeting, splash) uses `Vector2` sim pixels on the orthogonal grid (`WintermaulMap.TILE_SIZE` per cell). Rendering is a 3D scene inside the battlefield `SubViewport`: `MapProjection` maps sim pixels to the XZ ground plane (one tile = one unit, height on Y), and `Tower`, `RouteRunner`, and `Projectile` expose `plane_position` as the only bridge to their `Node3D` transform. `BattlefieldCamera` (fixed WC3-style perspective: 56° pitch, 50° FOV, no yaw; the default distance shows about 19 towers across, zoom dollies toward the cursor between 0.4× and 1.5× of it, and the whole map is never framed) converts screen ↔ plane for picking and for the 2D canvas overlays (labels, health bars, effects) drawn on top of the 3D view. Nothing in networking, pathfinding, or combat depends on the 3D nodes.
 
 ## 5. Stable IDs
 

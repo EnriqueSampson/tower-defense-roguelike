@@ -13,7 +13,7 @@ Targets are for the busiest wave (wave 9 "Full Assault" at nine-player scale, or
 | Host frame time | ≤ 12 ms total; ≤ 4 ms in GDScript `_process` | Host also runs targeting, combat, snapshots |
 | Client frame time | ≤ 10 ms total | Clients only simulate movement and render |
 | Active creeps | ≤ 300 simultaneously | Nine positions × largest group at full scale |
-| Towers | ≤ 400 | 72x80 map, roughly a sixth of build tiles |
+| Towers | ≤ 400 | 144x160-cell map (72x80 towers); revisit after the rescale |
 | Projectiles + effects | ≤ 250 live projectiles, ≤ 200 effects | `EffectsLayer` draws from one node |
 | Network (host upstream) | ≤ 40 KB/s per client | Creep snapshot ≈ 60 B/creep at 0.15 s; state snapshot ≤ 8 KB at 0.5 s |
 | Startup | ≤ 3 s to lobby, ≤ 2 s lobby → game | Includes procedural audio synthesis |
@@ -31,7 +31,7 @@ Targets are for the busiest wave (wave 9 "Full Assault" at nine-player scale, or
 Optimize only where profiling shows a budget breach. Current hot paths and their mitigations:
 
 - **Targeting:** each tower scans active creeps once per cooldown expiry, not every frame. If tower count × creep count exceeds budget, add a grid bucket in `WintermaulMap.get_active_creeps()`.
-- **Terrain:** the static 72x80 terrain is baked into one mipmapped texture (ground, pads, ownership tint) on an unshaded ground quad and only rebakes when ownership changes. Hedge walls are one baked `ArrayMesh`, route hints are one line mesh, and the hover preview moves two decal quads instead of repainting.
+- **Terrain:** the static 144x160 terrain is baked (8 px per cell) into one mipmapped texture (ground, pads, ownership tint) on a lit ground quad and only rebakes when ownership changes. Hedge walls are one baked `ArrayMesh`, route hints are one line mesh, and the hover preview moves two decal quads instead of repainting.
 - **Actors:** towers and creeps are `Node3D`s whose primitive geometry is baked per kind into cached `ArrayMesh`es (`MeshBuilder`), so each actor is one or two draw calls sharing a handful of `MeshPalette` materials. Slow/hit feedback swaps a shared `material_override` rather than rebuilding meshes.
 - **Canvas overlays:** labels redraw only when the camera view changes (`StaticCanvas`); creep health bars and the placement reason redraw every frame (`DynamicCanvas`) via `Camera3D.unproject_position`.
 - **Effects:** transient feedback is drawn by `EffectsLayer` from a single array, projected to the screen; no per-effect nodes.

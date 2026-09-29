@@ -2,28 +2,33 @@ class_name BattlefieldCamera
 extends Camera3D
 
 ## Fixed WC3-style perspective view of the battlefield. It never rotates;
-## zooming dollies the camera along its tilt toward the cursor. Zoom 1.0 frames
-## the whole map, so panning is inert until the player zooms in.
+## zooming dollies the camera along its tilt toward the cursor. Like WC3 it
+## plays close: zoom 1.0 shows about 19 towers across (one position's maze),
+## and the minimap, not the camera, gives the whole-map overview.
 
 signal view_changed
 
 ## Close to Warcraft III's default camera (angle of attack 304°, i.e. 56° down).
 const PITCH_DEGREES := 56.0
 const FOV_DEGREES := 50.0
-## Closest dolly distance in units (tiles); about WC3's default view.
-const CLOSE_DISTANCE := 12.0
+## WC3's default camera shows about 19 two-by-two towers across; the default
+## dolly distance is solved from the viewport aspect so every window shape
+## gets that width at the focus. FAR and CLOSE are multiples of it.
+const DEFAULT_TOWERS_ACROSS := 19.0
+const FAR_FACTOR := 1.5
+const CLOSE_FACTOR := 0.4
 ## Screens per second of pan at any zoom.
 const PAN_SCREENS_PER_SECOND := 0.9
 const ZOOM_FACTOR := 1.15
-const MIN_ZOOM := 1.0
-const MAX_ZOOM := 8.0
-const FRAME_INSET := 0.96
+const MIN_ZOOM := 1.0 / FAR_FACTOR
+const DEFAULT_ZOOM := 1.0
+const MAX_ZOOM := 1.0 / CLOSE_FACTOR
 
 @export var edge_pan_enabled := true
 @export_range(1.0, 64.0, 1.0) var edge_border_thickness := 15.0
 
-## 1.0 shows the whole map; larger values zoom in.
-var zoom_level := MIN_ZOOM
+## 1.0 is the WC3 default distance; larger values zoom in.
+var zoom_level := DEFAULT_ZOOM
 
 var _dragging := false
 var _map: WintermaulMap
@@ -31,9 +36,6 @@ var _edge_pan_area: Control
 var _world_rect := Rect2()
 ## Sim-pixel point on the ground plane at the screen centre.
 var _focus := Vector2.ZERO
-## Dolly distance (units) and focus that frame the whole map at zoom 1.0.
-var _fit_distance := 100.0
-var _fit_focus := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -49,9 +51,18 @@ func _ready() -> void:
 	else:
 		_world_rect = Rect2(Vector2.ZERO, Vector2(ClassicWintermaulLayout.GRID_SIZE) * WintermaulMap.TILE_SIZE)
 	get_viewport().size_changed.connect(_on_viewport_resized)
-	_compute_fit()
-	_focus = _fit_focus
+	_focus = _world_rect.get_center()
 	_apply_view()
+
+
+## Centres the view on a sim-space point (clamped to the map).
+func focus_on(plane: Vector2) -> void:
+	_focus = plane
+	_apply_view()
+
+
+func get_focus() -> Vector2:
+	return _focus
 
 
 func set_edge_pan_area(area: Control) -> void:
@@ -181,7 +192,14 @@ func _viewport_size() -> Vector2:
 
 
 func _distance() -> float:
-	return _fit_distance / zoom_level
+	return get_default_distance() / zoom_level
+
+
+## Dolly distance (units) at which the focus row spans DEFAULT_TOWERS_ACROSS.
+func get_default_distance() -> float:
+	var viewport_size := _viewport_size()
+	var half_width := tan(deg_to_rad(FOV_DEGREES) * 0.5) * viewport_size.x / viewport_size.y
+	return DEFAULT_TOWERS_ACROSS * 2.0 / (2.0 * half_width)
 
 
 ## Unit vector from the focus point toward the camera.
@@ -229,37 +247,6 @@ func _ground_corners(distance: float) -> Array[Vector2]:
 	return points
 
 
-## Finds the smallest distance at which the whole map fits inside the visible
-## ground trapezoid (with an inset), top-aligned and centred horizontally.
-func _compute_fit() -> void:
-	var margin := _world_rect.size * (1.0 / FRAME_INSET - 1.0) * 0.5
-	var target := _world_rect.grow_individual(margin.x, margin.y, margin.x, margin.y)
-	var low := 1.0
-	var high := 4000.0
-	for _step in range(40):
-		var mid := (low + high) * 0.5
-		if _fits(mid, target):
-			high = mid
-		else:
-			low = mid
-	_fit_distance = maxf(high, CLOSE_DISTANCE)
-	var offset := _visible_offset_rect(_fit_distance)
-	_fit_focus = Vector2(_world_rect.get_center().x, target.position.y - offset.position.y)
-
-
-## True when `target`, top-aligned to the view, fits inside the trapezoid.
-## The trapezoid narrows toward the camera, so the target's bottom row is
-## the binding width.
-func _fits(distance: float, target: Rect2) -> bool:
-	var corners := _ground_corners(distance)
-	var depth := corners[2].y - corners[0].y
-	if depth < target.size.y:
-		return false
-	var t := target.size.y / depth
-	var width_at_bottom := lerpf(corners[1].x - corners[0].x, corners[3].x - corners[2].x, t)
-	return width_at_bottom >= target.size.x
-
-
 func _apply_view() -> void:
 	var distance := _distance()
 	_clamp_focus_to_world(distance)
@@ -268,14 +255,11 @@ func _apply_view() -> void:
 	view_changed.emit()
 
 
-## Zoom 1.0 is locked to the whole-map framing. Zoomed in, the clamp area
-## (see _clamp_offset_rect) stays on the map; an axis that cannot fit centres
-## horizontally or top-aligns vertically, matching the zoom 1.0 framing.
+## Keeps the clamp area (see _clamp_offset_rect) on the map; an axis that
+## cannot fit (only on maps smaller than the view) centres horizontally or
+## top-aligns vertically.
 func _clamp_focus_to_world(distance: float) -> void:
 	if _world_rect.size == Vector2.ZERO:
-		return
-	if zoom_level <= MIN_ZOOM:
-		_focus = _fit_focus
 		return
 	var offset := _clamp_offset_rect(distance)
 	if offset.size.x >= _world_rect.size.x:
@@ -289,5 +273,4 @@ func _clamp_focus_to_world(distance: float) -> void:
 
 
 func _on_viewport_resized() -> void:
-	_compute_fit()
 	_apply_view()

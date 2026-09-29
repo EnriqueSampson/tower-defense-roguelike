@@ -52,6 +52,7 @@ func _ready() -> void:
 	battlefield_camera.set_edge_pan_area(battlefield_view)
 	battlefield_camera.edge_pan_enabled = GameSettings.edge_pan_enabled
 	GameSettings.changed.connect(func() -> void: battlefield_camera.edge_pan_enabled = GameSettings.edge_pan_enabled)
+	battlefield_camera.focus_on(wintermaul_map.get_position_world_rect(_home_position_index()).get_center())
 
 	wintermaul_map.creep_route_finished.connect(_on_creep_route_finished)
 	wintermaul_map.creep_killed.connect(_on_creep_killed)
@@ -86,6 +87,13 @@ func _ready() -> void:
 	if not GameSettings.controls_seen:
 		hud.show_controls_overlay()
 	AudioDirector.start_music()
+
+
+## The local player's roster position, or Position 9 (where every lane meets
+## the final gate) for solo play and unassigned players.
+func _home_position_index() -> int:
+	var position_number: int = SteamSession.get_local_position_number()
+	return position_number - 1 if position_number >= 1 else POSITION_COUNT - 1
 
 
 # --- Host run lifecycle -------------------------------------------------------
