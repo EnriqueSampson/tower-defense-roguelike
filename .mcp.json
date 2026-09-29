@@ -32,6 +32,16 @@
         "--disable-telemetry"
       ],
       "env": {}
+    },
+    "blender": {
+      "type": "stdio",
+      "command": "/Users/dogsizedrat/.local/bin/uvx",
+      "args": [
+        "mcp-for-blender==2.1.1"
+      ],
+      "env": {
+        "DISABLE_TELEMETRY": "true"
+      }
     }
   }
 }
