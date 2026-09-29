@@ -94,7 +94,8 @@ The lobby host owns the run. `RunState` (phase, gold, lives, tower records, cree
 
 ## Documentation
 
-- [docs/MVP_ROADMAP.md](docs/MVP_ROADMAP.md) — milestones and acceptance checklist
+- [docs/ROADMAP.md](docs/ROADMAP.md) — vision, current state, and phased plan to Early Access
+- [docs/archive/MVP_ROADMAP.md](docs/archive/MVP_ROADMAP.md) — completed MVP vertical-slice plan and manual multiplayer matrix
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — authoritative vs. replicated state, IDs, permissions, RPCs
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — budgets and profiling procedure
 - [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) — versioning rules and the release candidate checklist

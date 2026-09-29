@@ -23,7 +23,7 @@
 - [ ] Both builds report the same `v<VERSION> · protocol <PROTOCOL>` in the lobby identity line.
 - [ ] Both builds initialize Steam with the intended App ID (identity line shows the App ID).
 
-### Steam and multiplayer (see the manual matrix in `docs/MVP_ROADMAP.md`)
+### Steam and multiplayer (see the manual matrix in `docs/archive/MVP_ROADMAP.md`)
 - [ ] Solo, Steam closed: full run to victory or defeat, return to lobby, start again.
 - [ ] Solo, Steam open: same, with the Steam persona shown.
 - [ ] Host + one client: create, join, invite, full run; lives, gold, towers, creeps, and upgrades match on both screens.

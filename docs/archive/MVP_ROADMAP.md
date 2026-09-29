@@ -1,10 +1,12 @@
 # Wintermaul Roguelike MVP Roadmap
 
+> **Archived September 29, 2026.** Superseded by [../ROADMAP.md](../ROADMAP.md). Kept for the MVP acceptance record and the manual multiplayer matrix.
+
 **Status:** Vertical slice implemented; awaiting external Steam playtests and clean-machine export validation  
 **Updated:** September 3, 2026  
 **Target:** A complete, replayable cooperative run that becomes the foundation for content production
 
-> Checkbox legend: `[x]` implemented and covered by the headless suite or the windowed smoke run; `[ ]` requires a human/hardware step (Steam group test, clean-machine export, target-hardware profiling) and is tracked in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+> Checkbox legend: `[x]` implemented and covered by the headless suite or the windowed smoke run; `[ ]` requires a human/hardware step (Steam group test, clean-machine export, target-hardware profiling) and is tracked in [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md).
 
 ## 1. Product Direction
 
@@ -375,7 +377,7 @@ Execute the roadmap in this order:
 7. **Milestone 6:** readability, audio, onboarding, and end screen.
 8. **Milestone 7:** profiling, exports, Steam build validation, and release candidate.
 
-Do not begin permanent meta-progression until the ten-wave in-run loop has survived external playtests. All eight milestones are implemented in code; the next tasks are the human steps in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md): a 2–3 player Steam run, clean-machine exports, busiest-wave profiling on target hardware, and balance tuning from recorded playtests.
+Do not begin permanent meta-progression until the ten-wave in-run loop has survived external playtests. All eight milestones are implemented in code; the next tasks are the human steps in [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md): a 2–3 player Steam run, clean-machine exports, busiest-wave profiling on target hardware, and balance tuning from recorded playtests.
 
 ## 10. Working Cadence
 

@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Wintermaul-style cooperative tower defense roguelike in **Godot 4.7.2** (GDScript, GL Compatibility renderer — keep it; it is required for older Intel Macs). Multiplayer uses Steam lobbies through the vendored GodotSteam GDExtension in `addons/godotsteam/` (do not edit it). Without Steam the game runs solo on `OfflineMultiplayerPeer`.
 
+Current direction and phase order are in `docs/ROADMAP.md`: a commercial Early Access release that plays like classic WC3 Wintermaul, built look-and-feel first. Check it before starting feature work.
+
 ## Commands
 
 `godot` below means the Godot 4.7.2 binary (e.g. `/Applications/Godot.app/Contents/MacOS/Godot`).
