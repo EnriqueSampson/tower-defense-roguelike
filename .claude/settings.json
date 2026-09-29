@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "gdscript@claude-code-gdscript": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-code-gdscript": {
+      "source": {
+        "source": "github",
+        "repo": "twaananen/claude-code-gdscript"
+      }
+    }
+  }
+}

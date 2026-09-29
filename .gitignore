@@ -5,3 +5,9 @@
 # Local Steam development and exported builds
 steam_appid.txt
 /builds/
+
+# Godot AI self-update backups
+addons/.godot_ai_update/
+
+# Machine-specific Claude Code settings
+.claude/settings.local.json

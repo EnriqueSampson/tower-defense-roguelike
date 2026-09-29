@@ -22,7 +22,7 @@ godot --path . --editor
 # Run the game directly
 godot --path .
 
-# Headless regression suite (300 checks)
+# Headless regression suite (310 checks)
 godot --headless --path . --script res://tests/run_tests.gd
 
 # Windowed smoke run: boots a solo game, builds, launches a wave, saves /tmp/wintermaul_smoke.png

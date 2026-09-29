@@ -22,6 +22,7 @@ Steamworks="*res://scripts/autoload/steamworks.gd"
 SteamSession="*res://scripts/network/steam_session_manager.gd"
 GameSettings="*res://scripts/autoload/game_settings.gd"
 AudioDirector="*res://scripts/autoload/audio_director.gd"
+_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [debug]
 
@@ -36,12 +37,16 @@ window/size/window_height_override=800
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
+
 [physics]
 
 3d/physics_engine="Jolt Physics"
 
 [rendering]
 
+rendering_device/driver.windows="d3d12"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-rendering_device/driver.windows="d3d12"
