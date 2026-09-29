@@ -11,3 +11,6 @@ addons/.godot_ai_update/
 
 # Machine-specific Claude Code settings
 .claude/settings.local.json
+
+# Python bytecode (Blender tool scripts)
+__pycache__/

@@ -10,6 +10,9 @@ extends Resource
 @export var primary_color := Color("315f58")
 @export var accent_color := Color("e4b94f")
 @export var footprint := Vector2i.ONE
+## Optional model (.glb/.tscn) facing +Z, pivot at the footprint centre on the
+## ground, 1 unit per tile. Empty keeps the procedural placeholder mesh.
+@export var visual_scene: PackedScene
 @export_range(0, 10000, 1) var cost := 25
 @export_range(1, 10000, 1) var damage := 5
 @export_range(1.0, 1000.0, 1.0) var attack_range := 105.0
@@ -37,6 +40,15 @@ func is_valid() -> bool:
 		and sell_refund_percent >= 0
 		and sell_refund_percent <= 100
 	)
+
+
+## Model for `tier` (0 = base): the latest tier override at or below it, else
+## the base model. Null means use the procedural mesh.
+func visual_scene_for_tier(tier: int) -> PackedScene:
+	for index in range(mini(tier, upgrade_tiers.size()) - 1, -1, -1):
+		if upgrade_tiers[index].visual_scene != null:
+			return upgrade_tiers[index].visual_scene
+	return visual_scene
 
 
 func max_tier() -> int:

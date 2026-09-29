@@ -2,6 +2,8 @@ class_name TowerUpgradeTier
 extends Resource
 
 @export var tier_name := "Mk II"
+## Optional model override for this tier and above; see TowerDefinition.visual_scene.
+@export var visual_scene: PackedScene
 @export_range(0, 10000, 1) var cost := 40
 @export_range(0.1, 10.0, 0.05) var damage_multiplier := 1.5
 @export_range(-200.0, 400.0, 1.0) var range_bonus := 8.0

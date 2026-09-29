@@ -10,6 +10,7 @@ const WaveOne: WaveDefinition = preload("res://resources/waves/wave_01.tres")
 const Bolt: TowerDefinition = preload("res://resources/towers/bolt_tower.tres")
 const Cannon: TowerDefinition = preload("res://resources/towers/cannon_tower.tres")
 const Frost: TowerDefinition = preload("res://resources/towers/frost_tower.tres")
+const Grunt: CreepDefinition = preload("res://resources/creeps/grunt.tres")
 const WintermaulMapScene = preload("res://scenes/map/WintermaulMap.tscn")
 const GAME_SCENE_PATH := "res://scenes/game/Game.tscn"
 const BattlefieldCameraScript = preload("res://scripts/map/battlefield_camera.gd")
@@ -103,6 +104,7 @@ func _run_tests() -> void:
 	_test_tower_reconciliation()
 	_test_creep_reconciliation()
 	# Presentation
+	_test_actor_models()
 	_test_effects_layer()
 	_test_audio_and_settings()
 	if _failures == 0:
@@ -1148,6 +1150,38 @@ func _test_creep_reconciliation() -> void:
 
 
 # --- Presentation -------------------------------------------------------------
+
+func _test_actor_models() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	_check(Bolt.visual_scene != null and Grunt.visual_scene != null and Cannon.visual_scene == null, "bolt and grunt ship placeholder models; cannon stays procedural")
+	var tiered := Bolt.duplicate(true) as TowerDefinition
+	var override := PackedScene.new()
+	tiered.upgrade_tiers[0].visual_scene = override
+	_check(tiered.visual_scene_for_tier(0) == Bolt.visual_scene and tiered.visual_scene_for_tier(1) == override and tiered.visual_scene_for_tier(2) == override, "tier model overrides apply from their tier upward")
+	var modeled := map.spawn_tower(1, P1_OPEN, Bolt)
+	var model: Node3D = modeled.get("_model")
+	_check(model != null and model.get_parent() == modeled and modeled.get("_body") == null, "a tower with a model uses it instead of the procedural mesh")
+	var turret: Node3D = modeled.get("_model_turret")
+	modeled.face_target(modeled.plane_position + Vector2(10, 0))
+	_check(turret != null and is_equal_approx(turret.rotation.y, PI * 0.5), "the model turret yaws toward its target (+Z front)")
+	modeled.play_fire_animation()
+	var player := ActorModel.animation_player(model)
+	_check(player != null and player.current_animation == "attack", "firing plays the model's attack animation")
+	var procedural := map.spawn_tower(2, P2_OPEN, Cannon)
+	_check(procedural.get("_model") == null and procedural.get("_body") != null, "towers without a model keep the procedural mesh")
+	var runner := map.spawn_creep(7, 0, Grunt)
+	var creep_model: Node3D = runner.get("_model")
+	_check(creep_model != null and runner.get("_body") == null, "a creep with a model uses it instead of the procedural mesh")
+	_check(ActorModel.animation_player(creep_model).current_animation == "walk", "creep models loop their walk animation")
+	runner.call("_face_direction", Vector2(0, -3))
+	_check(is_equal_approx(absf(creep_model.rotation.y), PI), "creep models face their movement direction")
+	_check(runner.get_visual_height() > ActorModel.height(creep_model), "health bars sit above the creep model")
+	runner.take_damage(1)
+	var meshes := creep_model.find_children("*", "MeshInstance3D", true, false)
+	_check(not meshes.is_empty() and (meshes[0] as MeshInstance3D).material_overlay != null, "hit flashes tint creep models")
+	map.queue_free()
+
 
 func _test_effects_layer() -> void:
 	var effects := EffectsLayer.new()

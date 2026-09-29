@@ -33,6 +33,10 @@ var _body: MeshInstance3D
 var _turret: MeshInstance3D
 var _range_ring: MeshInstance3D
 var _turret_rest_height := 0.0
+## Authored model (definition.visual_scene); replaces _body/_turret when set.
+var _model: Node3D
+var _model_scene: PackedScene
+var _model_turret: Node3D
 
 
 func _ready() -> void:
@@ -74,6 +78,9 @@ func damage() -> int:
 
 
 func play_fire_animation() -> void:
+	if _model != null:
+		ActorModel.play(_model, &"attack", false, &"idle")
+		return
 	_recoil = 0.12
 	_update_turret_height()
 
@@ -91,8 +98,20 @@ func _process(delta: float) -> void:
 	if target == null:
 		return
 	_cooldown_remaining = float(stats.get("cooldown", 1.0))
+	face_target(target.plane_position)
 	play_fire_animation()
 	fired.emit(self, target)
+
+
+## Turns an authored model's "Turret" node toward a sim-space point.
+func face_target(target_plane: Vector2) -> void:
+	if _model_turret == null:
+		return
+	var direction := target_plane - plane_position
+	if direction.length_squared() < 0.01:
+		return
+	# Models face +Z; yaw so +Z points along the sim direction (x -> X, y -> Z).
+	_model_turret.rotation.y = atan2(direction.x, direction.y)
 
 
 func _is_authority() -> bool:
@@ -106,6 +125,9 @@ func _is_authority() -> bool:
 
 func _refresh_visual() -> void:
 	if not is_inside_tree():
+		return
+	if _refresh_model():
+		_refresh_range_ring()
 		return
 	var primary := definition.primary_color if definition else Color("315f58")
 	var accent := definition.accent_color if definition else Color("e4b94f")
@@ -124,6 +146,39 @@ func _refresh_visual() -> void:
 	_turret_rest_height = BASE_HEIGHT + body_height + MapProjection.units(4.0 * _footprint_scale())
 	_update_turret_height()
 	_refresh_range_ring()
+
+
+## Swaps in the authored model for the current tier. Returns false (and
+## removes any model) when the procedural mesh should be used instead.
+func _refresh_model() -> bool:
+	var scene := definition.visual_scene_for_tier(tier) if definition else null
+	if scene == null:
+		if _model != null:
+			_model.queue_free()
+			_model = null
+			_model_scene = null
+			_model_turret = null
+		return false
+	if scene != _model_scene:
+		var previous_yaw := _model_turret.rotation.y if _model_turret != null else 0.0
+		if _model != null:
+			_model.queue_free()
+		_model = ActorModel.instantiate(scene)
+		if _model == null:
+			_model_scene = null
+			return false
+		_model_scene = scene
+		add_child(_model)
+		_model_turret = _model.find_child("Turret", true, false) as Node3D
+		if _model_turret != null:
+			_model_turret.rotation.y = previous_yaw
+		ActorModel.play(_model, &"idle", true)
+	for procedural in [_body, _turret]:
+		if procedural != null:
+			procedural.queue_free()
+	_body = null
+	_turret = null
+	return true
 
 
 func _update_turret_height() -> void:

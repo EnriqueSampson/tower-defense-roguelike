@@ -165,6 +165,7 @@ func spawn_creep(creep_id: int, lane_id: int, definition: CreepDefinition, healt
 			"is_boss": definition.is_boss,
 			"radius": definition.radius,
 			"speed_multiplier": speed_multiplier,
+			"visual_scene": definition.visual_scene,
 		}
 	)
 	runner.finished.connect(_on_runner_finished)

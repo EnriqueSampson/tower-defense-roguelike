@@ -67,10 +67,10 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 **Goal:** Know what the current game actually feels like, and make it possible to drop in real models.
 
 - [ ] Play 3+ full solo runs of the current build and record what feels wrong (use [PLAYTEST_FEEDBACK_TEMPLATE.md](PLAYTEST_FEEDBACK_TEMPLATE.md)). This is the baseline for every later change.
-- [ ] Set up the Blender MCP for placeholder models.
-- [ ] Add a model hook: `visual_scene: PackedScene` on `TowerDefinition` and `CreepDefinition`, falling back to today's procedural meshes when it is empty.
-- [ ] Write an asset spec for the modeler (§7): format, scale, pivot, orientation, polygon and texture budgets, animation names, and file naming.
-- [ ] Put one placeholder tower and one creep through the whole pipeline (Blender → `.glb` → resource → in game).
+- [x] Set up the Blender MCP for placeholder models (Blender 4.5 LTS, the last release for Intel Macs).
+- [x] Add a model hook: `visual_scene` on `TowerDefinition`, `TowerUpgradeTier` and `CreepDefinition`, falling back to today's procedural meshes when it is empty (`ActorModel` helpers).
+- [ ] Write an asset spec for the modeler (§7). Conventions are settled; polygon and texture budgets wait for the Phase 1 performance check.
+- [x] Put one placeholder tower and one creep through the whole pipeline: `tools/blender/human_swordsman.py` and `grunt.py` → `assets/models/*.glb` → Bolt and Grunt resources → in game.
 
 **Exit:** One tower and one creep render from `.glb` files, the other content still renders procedurally, and nothing else changes.
 
@@ -81,7 +81,7 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 - [ ] Camera: switch to perspective at a fixed WC3-like angle and field of view, with zoom and pan. Rework screen-to-ground picking, overlays, and the startup framing for the whole map.
 - [ ] Placeholder models for the three towers, five creeps and the terrain props, with idle, walk, attack and death animations where they apply.
 - [ ] Terrain: replace flat tiles with height, cliffs and lane borders in WC3 style, and add lighting and shadows within Iris 550 budgets.
-- [ ] Unit readability: selection circles, health bars, damage numbers, and projectile and impact effects sized for a perspective camera.
+- [ ] Unit readability: selection circles, health bars, damage numbers, and projectile and impact effects sized for a perspective camera. Model creeps no longer show the procedural lane-color band, so bring back a lane or position signal (for example a colored ground ring).
 - [ ] Performance check: the busiest current wave on the Iris 550, with the camera fully zoomed out.
 
 **Exit:** Every tower and creep uses a model file. The camera and picking work at 1280×800 and 1920×1080. The busiest wave meets the target frame rate on the Iris 550.
@@ -183,15 +183,19 @@ Race 4 keeps its ninja, samurai and AI chip maker towers, but its name and frami
 - **Map scale after 2×2 towers:** towers now cover 4× the area on the same 72×80 map, so mazes are coarser and lanes feel narrower. Review this in the Phase 0 baseline runs. If it feels wrong, base the fix on how the actual WC3 Wintermaul map is built, not on guesswork: its lane widths and position sizes measured in tower widths, and how its build grid relates to creep pathing. Then rescale the layout to match.
 - **Final game name.**
 
-## 7. Asset spec for the modeler (to finalize in Phase 0)
+## 7. Asset spec for the modeler
 
-Draft conventions so placeholder and final models are interchangeable:
+These conventions keep placeholder and final models interchangeable. The placeholder scripts in `tools/blender/` follow them and are working examples.
 
-- Format: `.glb` (glTF binary), one file per tower tier, creep or builder.
-- Scale: 1 unit = 1 map tile. Towers are 2×2 tiles, so a tower model fits a 2×2-unit square. Pivot at the center of the base, on the ground.
-- Orientation: facing −Z. Turrets that rotate are a separate named node (`Turret`).
-- Animations, named: `idle`, `walk`, `attack`, `death`, `build` (for builders and construction).
-- Budget: to be set by the Phase 1 performance check. Start around 1–3k triangles per tower and 0.5–1.5k per creep, with one texture atlas per race.
+- **Format:** `.glb` (glTF binary) exported from Blender with +Y up (the exporter default). One file per tower, creep or builder. A tower tier can have its own file (`TowerUpgradeTier.visual_scene`); otherwise it reuses the base model.
+- **Where:** `assets/models/towers/`, `assets/models/creeps/` and, later, `assets/models/builders/`. File names use the content ID in snake_case (for example `human_swordsman.glb`).
+- **Scale:** 1 Blender unit = 1 map tile. Towers are 2×2 tiles, so a tower fits a 2×2-unit square, base included. Creeps are about half a tile across. The game does not rescale models, so author them at size.
+- **Pivot:** the object origin is at the center of the footprint, on the ground (z = 0).
+- **Facing:** the model's front faces −Y in Blender (the side Blender's Front view shows). After export that becomes +Z, which the game treats as forward.
+- **Turning:** on towers, everything that should turn toward the target sits under an empty named `Turret`. Creeps turn as a whole to face where they're walking.
+- **Animations:** action names become the in-game animation names. Towers use `idle` (looping) and `attack` (plays once per shot, then returns to `idle`). Creeps use `walk` (looping). Planned: `death`, and `build` for builders and construction. Keep each animation on as few objects as possible; the placeholders animate one pivot empty per animation.
+- **Materials:** use a Principled BSDF with base color, roughness and optionally one texture. Avoid Blender-only shader nodes, which glTF can't export.
+- **Budget:** to be set by the Phase 1 performance check. Start around 1–3k triangles per tower and 0.5–1.5k per creep, with one texture atlas per race.
 
 ## 8. Explicitly deferred
 

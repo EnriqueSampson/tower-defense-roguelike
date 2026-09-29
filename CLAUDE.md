@@ -17,6 +17,7 @@ godot --path .                                               # run the game
 godot --headless --path . --script res://tests/run_tests.gd  # full regression suite; exit code = failure count
 godot --path . --script res://tests/visual_smoke.gd          # windowed smoke run, writes /tmp/wintermaul_smoke.png
 godot --headless --path . --import                           # refresh class cache after adding a class_name script
+blender -b --python tools/blender/<model>.py                  # regenerate a placeholder .glb into assets/models/, then --import
 ```
 
 - The test suite is a single `SceneTree` script. `_run_tests()` calls each `_test_*` function in turn, and each one records assertions through `_check(condition, description)`. There is no per-test filter: to run one test, temporarily comment out the other calls in `_run_tests()`. New tests must be added to that call list.
@@ -34,6 +35,7 @@ The full contract is in `docs/ARCHITECTURE.md`. Read it before changing networki
 - **Data-driven content.** Towers, creeps, waves and run upgrades are `.tres` resources (script classes in `scripts/data/`) registered in `resources/content_catalog.tres`. `ContentCatalog.validate()` runs in the tests and rejects duplicate IDs, unordered or empty waves, and upgrades that target unknown towers. Definition `id` strings are wire-level identifiers: never rename a shipped one.
 - **Roguelike layer.** `UpgradeOffer.roll(pool, modifiers, seed, wave_index)` is deterministic for a given run seed, and offers appear after waves flagged `offers_upgrade_after`. `RunModifiers` never mutates resources. It layers multipliers on `TowerDefinition.stats_for_tier()` and is rebuilt from the applied-upgrade ID list on every peer, so clients show host-equivalent numbers.
 - **Scene flow.** `MainMenu.tscn` (entry) → `Main.tscn` (Steam lobby, `scripts/main.gd`) → `game/Game.tscn` (`game_controller.gd`, which hosts `map/WintermaulMap.tscn` and the HUD). Autoloads: `Steamworks`, `SteamSession` (`scripts/network/steam_session_manager.gd`), `GameSettings`, `AudioDirector`.
+- **Models.** `visual_scene` on `TowerDefinition` / `TowerUpgradeTier` / `CreepDefinition` points at a `.glb` under `assets/models/`; when empty, `Tower` / `RouteRunner` fall back to procedural meshes. `ActorModel` handles instancing, animations (`idle`/`attack`/`walk`), tint overlays and height. Models face +Z (−Y in Blender) with a `Turret` node for aiming; see the asset spec in `docs/ROADMAP.md` §7. `blender` means `/Applications/Blender.app/Contents/MacOS/Blender` (4.5 LTS).
 - `tools/generate_waves.py` and `tools/generate_upgrades.py` are one-off generators that write `.tres` files. Rerunning them overwrites hand edits in `resources/waves/` or `resources/upgrades/`.
 
 ## Versioning rules (enforced by tests and lobby matching)

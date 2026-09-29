@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="TowerDefinition" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
 [ext_resource type="Script" path="res://scripts/data/tower_upgrade_tier.gd" id="2_tier"]
+[ext_resource type="PackedScene" uid="uid://736sj1vhlc1v" path="res://assets/models/towers/human_swordsman.glb" id="3_model"]
 
 [sub_resource type="Resource" id="tier_1"]
 script = ExtResource("2_tier")
@@ -36,6 +37,7 @@ description = "Reliable single-target damage with a fast fire rate. Good against
 primary_color = Color(0.192, 0.373, 0.345, 1)
 accent_color = Color(0.894, 0.725, 0.31, 1)
 footprint = Vector2i(2, 2)
+visual_scene = ExtResource("3_model")
 cost = 25
 damage = 5
 attack_range = 105.0

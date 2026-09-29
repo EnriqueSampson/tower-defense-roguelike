@@ -7,6 +7,9 @@ extends Resource
 @export var role := "Standard"
 @export_multiline var description := "Steady ground creep."
 @export var color := Color("c96b4a")
+## Optional model (.glb/.tscn) facing +Z, pivot at the feet, 1 unit per tile.
+## A "walk" animation loops while moving. Empty keeps the procedural mesh.
+@export var visual_scene: PackedScene
 @export_range(3.0, 20.0, 0.5) var radius := 6.0
 @export_range(1, 1000000, 1) var health := 10
 @export_range(0.1, 20.0, 0.1) var speed := 4.0

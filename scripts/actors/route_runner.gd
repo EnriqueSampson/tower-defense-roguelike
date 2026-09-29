@@ -46,6 +46,10 @@ var _finished := false
 var _body: MeshInstance3D
 var _shadow: MeshInstance3D
 var _visual_state := -1
+## Authored model (CreepDefinition.visual_scene); replaces _body when set.
+var _visual_scene: PackedScene
+var _model: Node3D
+var _model_height := 0.0
 
 
 func _ready() -> void:
@@ -79,6 +83,7 @@ func setup(
 	is_boss = bool(options.get("is_boss", false))
 	radius = float(options.get("radius", 6.0))
 	speed_multiplier = float(options.get("speed_multiplier", 1.0))
+	_visual_scene = options.get("visual_scene") as PackedScene
 	_map = path_map
 	_path_revision = _map.get_grid_revision()
 	plane_position = _map.grid_to_world(start_cell)
@@ -180,6 +185,7 @@ func _process(delta: float) -> void:
 	var before := plane_position
 	var after := before.move_toward(target, current_speed() * delta)
 	plane_position = after
+	_face_direction(after - before)
 	_distance_travelled += before.distance_to(after)
 	if after.is_equal_approx(target):
 		_segment_index += 1
@@ -249,25 +255,43 @@ func _load_current_stage(from_cell: Vector2i) -> void:
 
 ## Height above the ground where the health bar should be anchored.
 func get_visual_height() -> float:
+	if _model != null:
+		return _model_height + MapProjection.units(4.0)
 	return MapProjection.units(radius * 2.0 + (6.0 if is_boss else 2.0))
+
+
+## Models face +Z; yaw toward the sim-space movement direction.
+func _face_direction(step: Vector2) -> void:
+	if _model != null and step.length_squared() > 0.0001:
+		_model.rotation.y = atan2(step.x, step.y)
 
 
 func _refresh_visual() -> void:
 	if not is_inside_tree():
 		return
-	if _body == null:
-		_body = MeshInstance3D.new()
-		add_child(_body)
+	if _shadow == null:
 		_shadow = MeshInstance3D.new()
 		_shadow.mesh = MeshPalette.unit_quad()
 		_shadow.material_override = MeshPalette.disc_material(Color(0, 0, 0, 0.35))
 		_shadow.position.y = 0.01
 		add_child(_shadow)
+		var shadow_radius := MapProjection.units(radius * 1.15)
+		_shadow.scale = Vector3(shadow_radius, 1.0, shadow_radius)
+	if _visual_scene != null and _model == null:
+		_model = ActorModel.instantiate(_visual_scene)
+		if _model != null:
+			add_child(_model)
+			_model_height = ActorModel.height(_model)
+			ActorModel.play(_model, &"walk", true)
+	if _model != null:
+		_refresh_model_tint()
+		return
+	if _body == null:
+		_body = MeshInstance3D.new()
+		add_child(_body)
 	var key := "creep:%s:%s:%s:%s:%s" % [definition_id, body_color.to_html(false), lane_color.to_html(false), armor > 0, is_boss]
 	if _body.mesh == null or _body.mesh.resource_name != key:
 		_body.mesh = _body_mesh(key)
-		var shadow_radius := MapProjection.units(radius * 1.15)
-		_shadow.scale = Vector3(shadow_radius, 1.0, shadow_radius)
 	var state := (1 if is_slowed() else 0) + (2 if _flash_remaining > 0.0 else 0)
 	if state == _visual_state:
 		return
@@ -281,6 +305,20 @@ func _refresh_visual() -> void:
 			_body.material_override = MeshPalette.tinted_vertex_material(Color.WHITE, 1.6)
 		_:
 			_body.material_override = MeshPalette.tinted_vertex_material(SLOW_TINT, 1.6)
+
+
+func _refresh_model_tint() -> void:
+	var state := (1 if is_slowed() else 0) + (2 if _flash_remaining > 0.0 else 0)
+	if state == _visual_state:
+		return
+	_visual_state = state
+	match state:
+		0:
+			ActorModel.set_tint(_model, Color(0, 0, 0, 0))
+		1:
+			ActorModel.set_tint(_model, Color(SLOW_TINT.r * 0.5, SLOW_TINT.g * 0.5, SLOW_TINT.b * 0.6, 0.5))
+		_:
+			ActorModel.set_tint(_model, Color(1.0, 1.0, 1.0, 0.6))
 
 
 func _body_mesh(key: String) -> ArrayMesh:
