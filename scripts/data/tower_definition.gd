@@ -32,7 +32,8 @@ func is_valid() -> bool:
 		and damage >= 1
 		and attack_range > 0.0
 		and attack_cooldown > 0.0
-		and footprint == Vector2i.ONE
+		and footprint.x >= 1
+		and footprint.y >= 1
 		and sell_refund_percent >= 0
 		and sell_refund_percent <= 100
 	)

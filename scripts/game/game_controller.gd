@@ -437,7 +437,7 @@ func _try_place_tower(definition_id: String, cell: Vector2i, peer_id := HOST_PEE
 	var definition := CATALOG.get_tower(definition_id)
 	if definition == null:
 		return WintermaulMap.Placement.NO_TOWER_SELECTED
-	var geometry := wintermaul_map.evaluate_placement(cell)
+	var geometry := wintermaul_map.evaluate_placement(cell, definition.footprint)
 	if geometry != WintermaulMap.Placement.OK:
 		return geometry
 	var position_index := wintermaul_map.get_cell_position_index(cell)

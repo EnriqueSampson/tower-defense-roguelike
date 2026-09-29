@@ -30,9 +30,10 @@ const P4_OPEN := Vector2i(58, 36)
 const P9_OPEN := Vector2i(40, 70)
 const VOID_CELL := Vector2i(3, 10)
 const PORTAL_CELL := Vector2i(17, 3)
-## Lane 1 exits through a five-wide gap at y 29; sealing its last cell blocks the route.
-const SEAL_CELL := Vector2i(17, 29)
-const SEAL_NEIGHBOURS: Array[Vector2i] = [Vector2i(15, 29), Vector2i(16, 29), Vector2i(18, 29), Vector2i(19, 29)]
+## Lane 1 exits through a five-wide, two-deep gap (x 15-19, y 29-30). Two 2x2
+## towers leave only column 17 open; a 2x2 anchored at SEAL_CELL caps it from above.
+const SEAL_CELL := Vector2i(16, 27)
+const SEAL_NEIGHBOURS: Array[Vector2i] = [Vector2i(15, 29), Vector2i(18, 29)]
 
 var _failures := 0
 var _checks := 0
@@ -81,6 +82,7 @@ func _run_tests() -> void:
 	_test_active_creep_collision()
 	_test_stable_placement_preview()
 	_test_placement_reasons()
+	_test_two_by_two_footprints()
 	# Camera
 	_test_battlefield_camera_controls()
 	_test_solo_camera_startup_focus()
@@ -585,8 +587,8 @@ func _test_tower_collision_pathing() -> void:
 	_check(map.get_grid_revision() == 1, "accepted tower collision increments the path revision")
 	_check(not obstacle_cell in path_after and path_after != path_before, "tower collision forces a new shortest path")
 	_seal_lane_one_except(map, SEAL_CELL)
-	_check(map.can_place_tower(Vector2i(17, 27)), "a tower two rows above the gap still leaves the route open")
-	_check(not map.can_place_tower(SEAL_CELL), "anti-block rejects sealing the lane exit gap")
+	_check(map.can_place_tower(Vector2i(19, 27), Bolt.footprint), "a tower beside the gap still leaves the route open")
+	_check(not map.can_place_tower(SEAL_CELL, Bolt.footprint), "anti-block rejects sealing the lane exit gap")
 	map.queue_free()
 
 
@@ -910,6 +912,50 @@ func _test_mid_wave_tower_placement() -> void:
 	_check(state.team_gold == BalanceConfig.STARTING_GOLD - Bolt.cost, "mid-wave tower placement charges authoritative gold")
 	_check(state.towers.size() == 1 and state.tower_records()[0]["cell"] == P1_OPEN, "authoritative tower records mirror placed towers")
 	game.queue_free()
+
+
+func _test_two_by_two_footprints() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	_check(Bolt.footprint == Vector2i(2, 2) and Cannon.footprint == Vector2i(2, 2) and Frost.footprint == Vector2i(2, 2), "shipped towers use 2x2 footprints")
+	var anchor := P1_OPEN
+	var cells := WintermaulMap.footprint_cells(anchor, Bolt.footprint)
+	_check(cells.size() == 4 and cells.has(anchor + Vector2i(1, 1)), "a 2x2 footprint covers four cells from its top-left anchor")
+	var corner := (Vector2(anchor) + Vector2.ONE) * WintermaulMap.TILE_SIZE
+	_check(map.anchor_for_world(corner + Vector2(3, 3), Bolt.footprint) == anchor and map.anchor_for_world(corner - Vector2(3, 3), Bolt.footprint) == anchor, "the cursor snaps a 2x2 preview to the nearest grid intersection")
+	_check(map.anchor_for_world(corner + Vector2(3, 3), Vector2i.ONE) == anchor + Vector2i.ONE, "1x1 previews still use the hovered cell")
+	var tower := map.spawn_tower(1, anchor, Bolt)
+	_check(tower != null and tower.plane_position.is_equal_approx(corner), "a 2x2 tower is centered on its footprint")
+	var covered := true
+	for cell in cells:
+		covered = covered and map.get_tower_at(cell) == tower
+	_check(covered, "every footprint cell resolves to the tower for picking")
+	_check(map.evaluate_placement(anchor + Vector2i(1, 0), Bolt.footprint) == WintermaulMap.Placement.OCCUPIED, "an overlapping 2x2 placement is rejected")
+	_check(map.can_place_tower(anchor + Vector2i(2, 0), Bolt.footprint), "an adjacent 2x2 placement is accepted")
+	_check(map.remove_tower(1), "a 2x2 tower can be sold")
+	var freed := true
+	for cell in cells:
+		freed = freed and map.get_tower_at(cell) == null
+	_check(freed and map.can_place_tower(anchor, Bolt.footprint), "selling a 2x2 tower frees all four cells")
+	var straddles := false
+	for y in range(WintermaulMap.GRID_SIZE.y - 1):
+		for x in range(WintermaulMap.GRID_SIZE.x - 1):
+			var cell := Vector2i(x, y)
+			var a := map.get_cell_position_index(cell)
+			var b := map.get_cell_position_index(cell + Vector2i(1, 0))
+			if a >= 0 and b >= 0 and a != b and map.get_cell_position_index(cell + Vector2i(0, 1)) == a and map.get_cell_position_index(cell + Vector2i(1, 1)) == b:
+				straddles = true
+				_check(map.evaluate_placement(cell, Bolt.footprint) == WintermaulMap.Placement.NOT_BUILDABLE, "a 2x2 footprint cannot straddle two positions")
+				break
+		if straddles:
+			break
+	if not straddles:
+		_check(true, "no two positions share a buildable border to straddle")
+	var grid := PathGridModel.new(Vector2i(3, 3), {Vector2i(0, 0): true, Vector2i(1, 0): true, Vector2i(2, 0): true, Vector2i(0, 1): true, Vector2i(2, 1): true, Vector2i(0, 2): true, Vector2i(1, 2): true, Vector2i(2, 2): true}, [Vector2i(0, 0)] as Array[Vector2i], Vector2i(2, 2))
+	_check(not grid.commit_block_cells([Vector2i(1, 0), Vector2i(1, 1)] as Array[Vector2i]) and not grid.is_blocked(Vector2i(1, 0)), "footprint commits are all-or-nothing when any cell is not traversable")
+	_check(not grid.can_block_cells([Vector2i(1, 0), Vector2i(0, 1)] as Array[Vector2i]), "a footprint probe rejects sealing the start as a whole")
+	_check(grid.can_block_cells([Vector2i(1, 0)] as Array[Vector2i]) and grid.can_block_cells([Vector2i(0, 1)] as Array[Vector2i]), "each cell alone still leaves the route open")
+	map.queue_free()
 
 
 func _test_blocked_placement_preserves_gold() -> void:

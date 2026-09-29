@@ -14,7 +14,9 @@ var plane_position: Vector2:
 		position = MapProjection.to_3d(value)
 
 var tower_id := 0
+## Footprint anchor (top-left cell); the tower is centered on its footprint.
 var grid_cell := Vector2i.ZERO
+var footprint := Vector2i.ONE
 var definition: TowerDefinition
 var tier := 0
 var targeting := TowerTargeting.Mode.FIRST
@@ -42,6 +44,7 @@ func setup(id: int, cell: Vector2i, tower_definition: TowerDefinition, tower_tie
 	tower_id = id
 	grid_cell = cell
 	definition = tower_definition
+	footprint = tower_definition.footprint if tower_definition != null else Vector2i.ONE
 	position_index = owner_position
 	_map = get_parent().get_parent() as WintermaulMap
 	apply_stats(tower_tier, targeting_mode, tower_stats)
@@ -107,7 +110,7 @@ func _refresh_visual() -> void:
 	var primary := definition.primary_color if definition else Color("315f58")
 	var accent := definition.accent_color if definition else Color("e4b94f")
 	var definition_id := definition.id if definition else "default"
-	var body_height := MapProjection.units(12.0 + tier * 3.0)
+	var body_height := MapProjection.units((12.0 + tier * 3.0) * _footprint_scale())
 	if _body == null:
 		_body = MeshInstance3D.new()
 		add_child(_body)
@@ -118,7 +121,7 @@ func _refresh_visual() -> void:
 	var splash := definition != null and definition.splash_radius > 0.0
 	var slow := definition != null and definition.slow_factor > 0.0
 	_turret.mesh = _turret_mesh(definition_id, accent, splash, slow)
-	_turret_rest_height = BASE_HEIGHT + body_height + MapProjection.units(4.0)
+	_turret_rest_height = BASE_HEIGHT + body_height + MapProjection.units(4.0 * _footprint_scale())
 	_update_turret_height()
 	_refresh_range_ring()
 
@@ -150,32 +153,39 @@ func _refresh_range_ring() -> void:
 
 ## Raised stone base, colored body, and golden tier pips baked into one mesh.
 func _body_mesh(definition_id: String, primary: Color, body_height: float) -> ArrayMesh:
-	var key := "tower:%s:%d" % [definition_id, tier]
+	var size := _footprint_scale()
+	var key := "tower:%s:%d:%d" % [definition_id, tier, size]
 	var mesh := MeshBuilder.cached(key)
 	if mesh:
 		return mesh
 	var builder := MeshBuilder.new()
-	var base_size := MapProjection.units(WintermaulMap.TILE_SIZE * 0.84)
+	var base_size := MapProjection.units(WintermaulMap.TILE_SIZE * (size - 0.16))
 	builder.add_box(Vector3(base_size, BASE_HEIGHT, base_size), Vector3(0.0, BASE_HEIGHT * 0.5, 0.0), Color(0.32, 0.36, 0.33), Color(0.12, 0.14, 0.13))
-	var body_width := MapProjection.units(14.0)
+	var body_width := MapProjection.units(14.0 * size)
 	builder.add_box(Vector3(body_width, body_height, body_width), Vector3(0.0, BASE_HEIGHT + body_height * 0.5, 0.0), primary.lightened(0.2), primary)
 	var pip_radius := MapProjection.units(1.6)
 	for pip in range(tier):
-		var pip_x := MapProjection.units(-5.0 + pip * 5.0)
+		var pip_x := MapProjection.units((-5.0 + pip * 5.0) * size)
 		builder.add_sphere(pip_radius, Vector3(pip_x, BASE_HEIGHT + pip_radius, base_size * 0.5 - pip_radius), Color("fff0ae"), 6)
 	return MeshBuilder.store(key, builder.commit())
 
 
 func _turret_mesh(definition_id: String, accent: Color, splash: bool, slow: bool) -> ArrayMesh:
-	var key := "turret:%s" % definition_id
+	var size := _footprint_scale()
+	var key := "turret:%s:%d" % [definition_id, size]
 	var mesh := MeshBuilder.cached(key)
 	if mesh:
 		return mesh
 	var builder := MeshBuilder.new()
-	var turret_radius := MapProjection.units(5.5)
+	var turret_radius := MapProjection.units(5.5 * size)
 	builder.add_sphere(turret_radius, Vector3.ZERO, accent, 12)
 	if splash:
-		builder.add_box(Vector3(MapProjection.units(4.0), MapProjection.units(6.0), MapProjection.units(4.0)), Vector3(0.0, turret_radius + MapProjection.units(2.0), 0.0), accent.darkened(0.2))
+		builder.add_box(Vector3(MapProjection.units(4.0 * size), MapProjection.units(6.0 * size), MapProjection.units(4.0 * size)), Vector3(0.0, turret_radius + MapProjection.units(2.0 * size), 0.0), accent.darkened(0.2))
 	if slow:
-		builder.add_cylinder(MapProjection.units(7.5), MapProjection.units(1.0), Vector3.ZERO, accent.lightened(0.2), 12)
+		builder.add_cylinder(MapProjection.units(7.5 * size), MapProjection.units(1.0 * size), Vector3.ZERO, accent.lightened(0.2), 12)
 	return MeshBuilder.store(key, builder.commit())
+
+
+## Procedural meshes scale with the smaller footprint side (1 for 1x1, 2 for 2x2).
+func _footprint_scale() -> int:
+	return maxi(mini(footprint.x, footprint.y), 1)

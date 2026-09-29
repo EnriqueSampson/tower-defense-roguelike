@@ -20,7 +20,7 @@ This document freezes the invariants that the MVP depends on. Change them delibe
 | `shared_lives`, `team_gold` | Shared economy and defense |
 | `lane_queued`, `lane_spawned` | Per-position spawn bookkeeping |
 | `active_creeps` | `creep_id -> {position, definition_id, health_multiplier}` |
-| `towers` | `tower_id -> {id, definition_id, cell, tier, position, targeting}` |
+| `towers` | `tower_id -> {id, definition_id, cell, tier, position, targeting}`; `cell` is the footprint anchor (top-left cell of the tower's `TowerDefinition.footprint`, 2×2 for shipped towers) |
 | `position_owners` | `position_index -> peer_id` (0 = unfilled, host controls) |
 | `run_seed` | Host-generated seed for deterministic upgrade offers |
 | `applied_upgrades`, `pending_offer` | Ordered upgrade IDs; offers pause the build timer |
@@ -79,7 +79,7 @@ Every client intent carries the sender peer ID (`multiplayer.get_remote_sender_i
 
 | Request | Checks |
 | --- | --- |
-| Place tower | phase allows building; definition ID exists; cell in bounds, buildable, unoccupied, no creep on it, does not seal any required route or active creep segment; requester controls the position; team gold covers the modified cost |
+| Place tower | phase allows building; definition ID exists; every footprint cell in bounds, buildable, inside one position, unoccupied, and free of creeps; the footprint as a whole does not seal any required route or active creep segment; requester controls the position; team gold covers the modified cost |
 | Upgrade tower | phase; tower exists; requester controls its position; a next tier exists; gold covers the modified cost |
 | Sell tower | phase; tower exists; requester controls its position; exactly-once (second sell finds no record) |
 | Set targeting | tower exists; mode is valid; requester controls its position |

@@ -60,6 +60,10 @@ var _controllable_positions: Array[int] = []
 var _owners := PackedInt32Array()
 var _local_peer_id := 1
 var _owner_names: Dictionary = {}
+## Cell under the cursor (tower picking) and the build anchor derived from it
+## (top-left cell of the selected tower's footprint, centered on the cursor).
+var _hover_plane := Vector2.ZERO
+var _hover_cell := Vector2i.ZERO
 var _preview_cell := Vector2i.ZERO
 var _preview_visible := false
 var _selected_tower_id := 0
@@ -266,18 +270,25 @@ func reconcile_creeps(records: Array, creep_lookup: Callable, speed_multiplier :
 
 func spawn_tower(tower_id: int, cell: Vector2i, definition: TowerDefinition, tier := 0, targeting := -1, stats := {}, position_index := -1) -> Tower:
 	_ensure_map_data()
-	if definition == null or _occupied_cells.has(cell) or not _path_grid.commit_block(cell):
+	if definition == null:
 		return null
-	_occupied_cells[cell] = tower_id
+	var cells := footprint_cells(cell, definition.footprint)
+	for footprint_cell in cells:
+		if _occupied_cells.has(footprint_cell):
+			return null
+	if not _path_grid.commit_block_cells(cells):
+		return null
+	for footprint_cell in cells:
+		_occupied_cells[footprint_cell] = tower_id
 	var tower := TowerScene.new() as Tower
 	%Towers.add_child(tower)
-	tower.plane_position = grid_to_world(cell)
+	tower.plane_position = footprint_center(cell, definition.footprint)
 	var resolved_targeting := targeting if TowerTargeting.is_valid_mode(targeting) else definition.default_targeting
 	var resolved_stats := stats if not stats.is_empty() else definition.stats_for_tier(tier)
 	var resolved_position := position_index if position_index >= 0 else get_cell_position_index(cell)
 	tower.setup(tower_id, cell, definition, tier, resolved_targeting, resolved_stats, resolved_position)
 	tower.fired.connect(_on_tower_fired)
-	effects.ring(tower.plane_position, definition.accent_color, TILE_SIZE * 0.7)
+	effects.ring(tower.plane_position, definition.accent_color, TILE_SIZE * 0.7 * definition.footprint.x)
 	_refresh_preview()
 	return tower
 
@@ -286,9 +297,11 @@ func remove_tower(tower_id: int) -> bool:
 	var tower := get_tower(tower_id)
 	if tower == null:
 		return false
-	_occupied_cells.erase(tower.grid_cell)
-	_path_grid.unblock(tower.grid_cell)
-	effects.ring(tower.plane_position, Color("f0d868"), TILE_SIZE * 0.7)
+	var cells := footprint_cells(tower.grid_cell, tower.footprint)
+	for footprint_cell in cells:
+		_occupied_cells.erase(footprint_cell)
+	_path_grid.unblock_cells(cells)
+	effects.ring(tower.plane_position, Color("f0d868"), TILE_SIZE * 0.7 * tower.footprint.x)
 	if _selected_tower_id == tower_id:
 		_selected_tower_id = 0
 	tower.queue_free()
@@ -453,6 +466,8 @@ func set_build_context(enabled: bool, definition: TowerDefinition, cost: int, go
 	if not enabled:
 		_preview_visible = false
 	if changed:
+		if enabled and is_node_ready():
+			_set_hover_plane(_hover_plane)
 		_refresh_preview()
 
 
@@ -475,17 +490,26 @@ func get_cell_position_index(cell: Vector2i) -> int:
 
 
 ## Geometry-only placement check shared by host validation and previews.
-func evaluate_placement(cell: Vector2i) -> int:
+## `cell` is the footprint anchor (top-left cell); every covered cell must be
+## buildable, free, and inside one position.
+func evaluate_placement(cell: Vector2i, footprint := Vector2i.ONE) -> int:
 	_ensure_map_data()
-	if not _is_cell_in_bounds(cell):
-		return Placement.OUT_OF_BOUNDS
-	if not _build_cells.has(cell):
-		return Placement.NOT_BUILDABLE
-	if _occupied_cells.has(cell):
-		return Placement.OCCUPIED
-	if cell in _get_active_creep_cells():
-		return Placement.CREEP_ON_CELL
-	if not _path_grid.can_block(cell, [], _required_segments + _get_active_creep_segments()):
+	var cells := footprint_cells(cell, footprint)
+	for footprint_cell in cells:
+		if not _is_cell_in_bounds(footprint_cell):
+			return Placement.OUT_OF_BOUNDS
+	var position_index := get_cell_position_index(cell)
+	for footprint_cell in cells:
+		if not _build_cells.has(footprint_cell) or int(_build_cells[footprint_cell]) != position_index:
+			return Placement.NOT_BUILDABLE
+	for footprint_cell in cells:
+		if _occupied_cells.has(footprint_cell):
+			return Placement.OCCUPIED
+	var creep_cells := _get_active_creep_cells()
+	for footprint_cell in cells:
+		if footprint_cell in creep_cells:
+			return Placement.CREEP_ON_CELL
+	if not _path_grid.can_block_cells(cells, [], _required_segments + _get_active_creep_segments()):
 		return Placement.BLOCKS_ROUTE
 	return Placement.OK
 
@@ -496,7 +520,7 @@ func evaluate_build(cell: Vector2i) -> int:
 		return Placement.LOCKED
 	if _build_definition == null:
 		return Placement.NO_TOWER_SELECTED
-	var geometry := evaluate_placement(cell)
+	var geometry := evaluate_placement(cell, _build_definition.footprint)
 	if geometry != Placement.OK:
 		return geometry
 	if not get_cell_position_index(cell) in _controllable_positions:
@@ -506,8 +530,8 @@ func evaluate_build(cell: Vector2i) -> int:
 	return Placement.OK
 
 
-func can_place_tower(cell: Vector2i) -> bool:
-	return evaluate_placement(cell) == Placement.OK
+func can_place_tower(cell: Vector2i, footprint := Vector2i.ONE) -> bool:
+	return evaluate_placement(cell, footprint) == Placement.OK
 
 
 static func placement_text(result: int) -> String:
@@ -593,6 +617,29 @@ func grid_to_world(cell: Vector2i) -> Vector2:
 
 func world_to_grid(world_position: Vector2) -> Vector2i:
 	return Vector2i(floori(world_position.x / TILE_SIZE), floori(world_position.y / TILE_SIZE))
+
+
+## Cells covered by a footprint anchored at its top-left cell.
+static func footprint_cells(anchor: Vector2i, footprint: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for y in range(maxi(footprint.y, 1)):
+		for x in range(maxi(footprint.x, 1)):
+			cells.append(anchor + Vector2i(x, y))
+	return cells
+
+
+func footprint_center(anchor: Vector2i, footprint: Vector2i) -> Vector2:
+	return (Vector2(anchor) + Vector2(footprint) * 0.5) * TILE_SIZE
+
+
+## Footprint anchor whose center is nearest to `world_position`: the hovered
+## cell for 1x1, the nearest grid intersection for 2x2.
+func anchor_for_world(world_position: Vector2, footprint: Vector2i) -> Vector2i:
+	var offset := (Vector2(footprint) - Vector2.ONE) * 0.5
+	return Vector2i(
+		floori(world_position.x / TILE_SIZE - offset.x),
+		floori(world_position.y / TILE_SIZE - offset.y)
+	)
 
 
 func get_world_rect() -> Rect2:
@@ -703,7 +750,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_preview_from_viewport(event.position)
 		if not _preview_visible:
 			return
-		var tower := get_tower_at(_preview_cell)
+		var tower := get_tower_at(_hover_cell)
 		if tower != null:
 			tower_clicked.emit(tower.tower_id)
 			get_viewport().set_input_as_handled()
@@ -724,13 +771,24 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _update_preview_from_viewport(viewport_position: Vector2) -> void:
 	var plane := _camera.screen_to_plane(viewport_position) if is_instance_valid(_camera) else viewport_position
+	_set_hover_plane(plane)
+
+
+func _set_hover_plane(plane: Vector2) -> void:
+	_hover_plane = plane
 	var hovered_cell := world_to_grid(plane)
+	var anchor := anchor_for_world(plane, _preview_footprint())
 	var visible := _is_cell_in_bounds(hovered_cell)
-	if hovered_cell == _preview_cell and visible == _preview_visible:
+	if hovered_cell == _hover_cell and anchor == _preview_cell and visible == _preview_visible:
 		return
-	_preview_cell = hovered_cell
+	_hover_cell = hovered_cell
+	_preview_cell = anchor
 	_preview_visible = visible
 	_refresh_preview()
+
+
+func _preview_footprint() -> Vector2i:
+	return _build_definition.footprint if _build_definition != null else Vector2i.ONE
 
 
 # --- 3D battlefield -----------------------------------------------------------
@@ -852,15 +910,17 @@ func _refresh_preview() -> void:
 		_hover_decal.visible = false
 		_preview_ring.visible = false
 		return
-	var center := grid_to_world(_preview_cell)
-	_hover_decal.position = MapProjection.to_3d(center, DECAL_HEIGHT)
-	_hover_decal.visible = true
-	var hovered_tower := get_tower_at(_preview_cell)
+	var hovered_tower := get_tower_at(_hover_cell)
 	if hovered_tower != null or _build_definition == null:
+		var hover_footprint := hovered_tower.footprint if hovered_tower != null else Vector2i.ONE
+		var hover_center := hovered_tower.plane_position if hovered_tower != null else grid_to_world(_hover_cell)
+		_place_hover_decal(hover_center, hover_footprint)
 		_hover_material.set_shader_parameter("color", Color(0.9, 0.95, 1.0, 0.8))
 		_hover_material.set_shader_parameter("fill_alpha", 0.22)
 		_preview_ring.visible = false
 		return
+	var center := footprint_center(_preview_cell, _build_definition.footprint)
+	_place_hover_decal(center, _build_definition.footprint)
 	var preview_color := _preview_color(evaluate_build(_preview_cell))
 	_hover_material.set_shader_parameter("color", Color(preview_color.r, preview_color.g, preview_color.b, 0.9))
 	_hover_material.set_shader_parameter("fill_alpha", preview_color.a)
@@ -870,6 +930,12 @@ func _refresh_preview() -> void:
 	_preview_ring_material.set_shader_parameter("color", Color(preview_color.r, preview_color.g, preview_color.b, 0.6))
 	_preview_ring_material.set_shader_parameter("inner", 1.0 - MapProjection.units(1.5) / maxf(radius, 0.01))
 	_preview_ring.visible = true
+
+
+func _place_hover_decal(center: Vector2, footprint: Vector2i) -> void:
+	_hover_decal.position = MapProjection.to_3d(center, DECAL_HEIGHT)
+	_hover_decal.scale = Vector3(0.5 * footprint.x, 1.0, 0.5 * footprint.y)
+	_hover_decal.visible = true
 
 
 # --- Canvas overlays ----------------------------------------------------------
@@ -912,13 +978,13 @@ func _paint_dynamic_canvas(canvas: CanvasItem) -> void:
 		var bar_color := Color("65d685") if health_ratio > 0.5 else (Color("e0cf45") if health_ratio > 0.25 else Color("ef5753"))
 		bar_rect.size.x *= health_ratio
 		canvas.draw_rect(bar_rect, bar_color)
-	if not _build_enabled or not _preview_visible or _build_definition == null or get_tower_at(_preview_cell) != null:
+	if not _build_enabled or not _preview_visible or _build_definition == null or get_tower_at(_hover_cell) != null:
 		return
 	var result := evaluate_build(_preview_cell)
 	if result == Placement.OK:
 		return
 	var preview_color := _preview_color(result)
-	var center := project_to_screen(grid_to_world(_preview_cell))
+	var center := project_to_screen(footprint_center(_preview_cell, _build_definition.footprint))
 	canvas.draw_string(ThemeDB.fallback_font, center + Vector2(-40, -TILE_SIZE * unit_scale), placement_text(result), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, preview_color.lightened(0.4))
 
 

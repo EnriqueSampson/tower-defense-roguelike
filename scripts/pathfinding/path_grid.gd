@@ -33,22 +33,38 @@ func can_block(
 	additional_starts: Array[Vector2i] = [],
 	required_segments: Array[Dictionary] = []
 ) -> bool:
-	if not _traversable_cells.has(cell) or _astar.is_point_solid(cell):
+	return can_block_cells([cell], additional_starts, required_segments)
+
+
+## Probes blocking every cell of a footprint at once; all or nothing.
+func can_block_cells(
+	cells: Array[Vector2i],
+	additional_starts: Array[Vector2i] = [],
+	required_segments: Array[Dictionary] = []
+) -> bool:
+	if not _are_all_open(cells):
 		return false
-	_astar.set_point_solid(cell, true)
+	for cell in cells:
+		_astar.set_point_solid(cell, true)
 	var routes_remain_open := _all_can_reach_goal(_route_starts)
 	if routes_remain_open:
 		routes_remain_open = _all_can_reach_goal(additional_starts)
 	if routes_remain_open:
 		routes_remain_open = _all_segments_remain_open(required_segments)
-	_astar.set_point_solid(cell, false)
+	for cell in cells:
+		_astar.set_point_solid(cell, false)
 	return routes_remain_open
 
 
 func commit_block(cell: Vector2i) -> bool:
-	if not _traversable_cells.has(cell) or _astar.is_point_solid(cell):
+	return commit_block_cells([cell])
+
+
+func commit_block_cells(cells: Array[Vector2i]) -> bool:
+	if not _are_all_open(cells):
 		return false
-	_astar.set_point_solid(cell, true)
+	for cell in cells:
+		_astar.set_point_solid(cell, true)
 	revision += 1
 	return true
 
@@ -56,9 +72,17 @@ func commit_block(cell: Vector2i) -> bool:
 ## Reopens a previously blocked traversable cell (tower sold). Opening a cell
 ## can never seal a route, so no probe is required.
 func unblock(cell: Vector2i) -> bool:
-	if not _traversable_cells.has(cell) or not _astar.is_point_solid(cell):
+	return unblock_cells([cell])
+
+
+func unblock_cells(cells: Array[Vector2i]) -> bool:
+	if cells.is_empty():
 		return false
-	_astar.set_point_solid(cell, false)
+	for cell in cells:
+		if not _traversable_cells.has(cell) or not _astar.is_point_solid(cell):
+			return false
+	for cell in cells:
+		_astar.set_point_solid(cell, false)
 	revision += 1
 	return true
 
@@ -74,6 +98,15 @@ func get_path(from_cell: Vector2i, target_cell := Vector2i(-1, -1)) -> Array[Vec
 
 func is_blocked(cell: Vector2i) -> bool:
 	return not _traversable_cells.has(cell) or _astar.is_point_solid(cell)
+
+
+func _are_all_open(cells: Array[Vector2i]) -> bool:
+	if cells.is_empty():
+		return false
+	for cell in cells:
+		if not _traversable_cells.has(cell) or _astar.is_point_solid(cell):
+			return false
+	return true
 
 
 func _all_can_reach_goal(starts: Array[Vector2i]) -> bool:
