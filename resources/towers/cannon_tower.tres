@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="TowerDefinition" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
 [ext_resource type="Script" path="res://scripts/data/tower_upgrade_tier.gd" id="2_tier"]
+[ext_resource type="PackedScene" uid="uid://cf6ixwql6nbmf" path="res://assets/models/towers/orc_junk_cannon.glb" id="model_glb"]
 
 [sub_resource type="Resource" id="tier_1"]
 script = ExtResource("2_tier")
@@ -36,6 +37,7 @@ description = "Slow, heavy shells that splash nearby creeps. Excels against pack
 primary_color = Color(0.36, 0.3, 0.24, 1)
 accent_color = Color(0.94, 0.53, 0.29, 1)
 footprint = Vector2i(2, 2)
+visual_scene = ExtResource("model_glb")
 cost = 45
 damage = 12
 attack_range = 120.0

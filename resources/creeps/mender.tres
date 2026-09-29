@@ -1,6 +1,7 @@
-[gd_resource type="Resource" script_class="CreepDefinition" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://clq03ima22j75" path="res://assets/models/creeps/mender.glb" id="model_glb"]
 
 [resource]
 script = ExtResource("1_creep")
@@ -9,6 +10,7 @@ display_name = "Mender"
 role = "Regenerating"
 description = "Regenerates health; must be burst down."
 color = Color(0.42, 0.78, 0.5, 1)
+visual_scene = ExtResource("model_glb")
 radius = 6.5
 health = 18
 speed = 3.5

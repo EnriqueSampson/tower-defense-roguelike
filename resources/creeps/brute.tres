@@ -1,6 +1,7 @@
-[gd_resource type="Resource" script_class="CreepDefinition" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://dp076h7iuk1di" path="res://assets/models/creeps/brute.glb" id="model_glb"]
 
 [resource]
 script = ExtResource("1_creep")
@@ -9,6 +10,7 @@ display_name = "Brute"
 role = "Armored"
 description = "Slow and armored; shrugs off weak hits."
 color = Color(0.45, 0.5, 0.62, 1)
+visual_scene = ExtResource("model_glb")
 radius = 8.0
 health = 40
 speed = 2.2

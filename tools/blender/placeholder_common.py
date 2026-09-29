@@ -28,13 +28,27 @@ def reset_scene():
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
-def material(name, rgb, roughness=0.8):
+def srgb_to_linear(channel):
+    if channel <= 0.04045:
+        return channel / 12.92
+    return ((channel + 0.055) / 1.055) ** 2.4
+
+
+def material(name, rgb, roughness=0.8, emission=0.0):
+    """Principled material from an on-screen (sRGB) colour, e.g. a hex picker
+    value / 255. Blender and glTF store linear colour, so it is converted.
+    `emission` > 0 adds a glow in the same colour; keep it below ~1.
+    """
+    linear = tuple(srgb_to_linear(c) for c in rgb)
     mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
     mat.use_nodes = True
     bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
-    bsdf.inputs["Base Color"].default_value = (*rgb, 1.0)
+    bsdf.inputs["Base Color"].default_value = (*linear, 1.0)
     bsdf.inputs["Roughness"].default_value = roughness
-    mat.diffuse_color = (*rgb, 1.0)
+    if emission > 0.0:
+        bsdf.inputs["Emission Color"].default_value = (*linear, 1.0)
+        bsdf.inputs["Emission Strength"].default_value = emission
+    mat.diffuse_color = (*linear, 1.0)
     return mat
 
 

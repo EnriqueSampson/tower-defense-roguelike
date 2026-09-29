@@ -1,6 +1,7 @@
-[gd_resource type="Resource" script_class="CreepDefinition" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://c1b3lj56vgjra" path="res://assets/models/creeps/runner.glb" id="model_glb"]
 
 [resource]
 script = ExtResource("1_creep")
@@ -9,6 +10,7 @@ display_name = "Runner"
 role = "Fast"
 description = "Fragile but quick; punishes short mazes."
 color = Color(0.98, 0.83, 0.35, 1)
+visual_scene = ExtResource("model_glb")
 radius = 5.0
 health = 6
 speed = 7.0

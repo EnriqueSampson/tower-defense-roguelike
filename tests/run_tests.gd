@@ -1167,7 +1167,13 @@ func _test_creep_reconciliation() -> void:
 func _test_actor_models() -> void:
 	var map := WintermaulMapScene.instantiate() as WintermaulMap
 	root.add_child(map)
-	_check(Bolt.visual_scene != null and Grunt.visual_scene != null and Cannon.visual_scene == null, "bolt and grunt ship placeholder models; cannon stays procedural")
+	var all_modeled := true
+	for tower_definition in Catalog.towers:
+		all_modeled = all_modeled and tower_definition.visual_scene != null
+	for wave in Catalog.waves:
+		for group in wave.spawn_groups:
+			all_modeled = all_modeled and group.creep != null and group.creep.visual_scene != null
+	_check(all_modeled, "every shipped tower and creep has a placeholder model")
 	var tiered := Bolt.duplicate(true) as TowerDefinition
 	var override := PackedScene.new()
 	tiered.upgrade_tiers[0].visual_scene = override
@@ -1181,7 +1187,9 @@ func _test_actor_models() -> void:
 	modeled.play_fire_animation()
 	var player := ActorModel.animation_player(model)
 	_check(player != null and player.current_animation == "attack", "firing plays the model's attack animation")
-	var procedural := map.spawn_tower(2, P2_OPEN, Cannon)
+	var unmodeled := Cannon.duplicate() as TowerDefinition
+	unmodeled.visual_scene = null
+	var procedural := map.spawn_tower(2, P2_OPEN, unmodeled)
 	_check(procedural.get("_model") == null and procedural.get("_body") != null, "towers without a model keep the procedural mesh")
 	var runner := map.spawn_creep(7, 0, Grunt)
 	var creep_model: Node3D = runner.get("_model")

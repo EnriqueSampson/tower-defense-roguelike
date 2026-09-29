@@ -1,6 +1,7 @@
-[gd_resource type="Resource" script_class="CreepDefinition" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://bbtpng1f03ojo" path="res://assets/models/creeps/warlord.glb" id="model_glb"]
 
 [resource]
 script = ExtResource("1_creep")
@@ -9,6 +10,7 @@ display_name = "Frost Warlord"
 role = "Boss"
 description = "The final commander. Armored, relentless, and worth a fortune."
 color = Color(0.62, 0.23, 0.32, 1)
+visual_scene = ExtResource("model_glb")
 radius = 12.0
 health = 900
 speed = 2.0

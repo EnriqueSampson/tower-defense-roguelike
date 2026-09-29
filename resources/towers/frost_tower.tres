@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="TowerDefinition" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
 [ext_resource type="Script" path="res://scripts/data/tower_upgrade_tier.gd" id="2_tier"]
+[ext_resource type="PackedScene" uid="uid://cyvo2vmfneo2u" path="res://assets/models/towers/elf_water_spirit.glb" id="model_glb"]
 
 [sub_resource type="Resource" id="tier_1"]
 script = ExtResource("2_tier")
@@ -36,6 +37,7 @@ description = "Low damage, but chills targets so they crawl through your maze. P
 primary_color = Color(0.22, 0.36, 0.5, 1)
 accent_color = Color(0.62, 0.9, 1, 1)
 footprint = Vector2i(2, 2)
+visual_scene = ExtResource("model_glb")
 cost = 35
 damage = 2
 attack_range = 98.0
