@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+
+[resource]
+script = ExtResource("1_creep")
+id = "brute"
+display_name = "Brute"
+role = "Armored"
+description = "Slow and armored; shrugs off weak hits."
+color = Color(0.45, 0.5, 0.62, 1)
+radius = 8.0
+health = 40
+speed = 2.2
+armor = 2
+bounty = 12
+regen_per_second = 0.0
+slow_immune = false
+is_boss = false
+tags = PackedStringArray("ground", "armored")

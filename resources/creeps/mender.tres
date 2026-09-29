@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+
+[resource]
+script = ExtResource("1_creep")
+id = "mender"
+display_name = "Mender"
+role = "Regenerating"
+description = "Regenerates health; must be burst down."
+color = Color(0.42, 0.78, 0.5, 1)
+radius = 6.5
+health = 18
+speed = 3.5
+armor = 0
+bounty = 9
+regen_per_second = 1.5
+slow_immune = false
+is_boss = false
+tags = PackedStringArray("ground", "support")

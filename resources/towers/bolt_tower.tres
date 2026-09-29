@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="Script" path="res://scripts/data/tower_upgrade_tier.gd" id="2_tier"]
+
+[sub_resource type="Resource" id="tier_1"]
+script = ExtResource("2_tier")
+tier_name = "Mk II"
+cost = 40
+damage_multiplier = 1.6
+range_bonus = 8.0
+cooldown_multiplier = 0.92
+splash_radius_bonus = 0.0
+slow_factor_bonus = 0.0
+slow_duration_bonus = 0.0
+armor_pierce_bonus = 0
+
+[sub_resource type="Resource" id="tier_2"]
+script = ExtResource("2_tier")
+tier_name = "Mk III"
+cost = 80
+damage_multiplier = 1.6
+range_bonus = 10.0
+cooldown_multiplier = 0.9
+splash_radius_bonus = 0.0
+slow_factor_bonus = 0.0
+slow_duration_bonus = 0.0
+armor_pierce_bonus = 1
+
+[resource]
+script = ExtResource("1_tower")
+id = "bolt"
+display_name = "Bolt Tower"
+role = "Generalist"
+description = "Reliable single-target damage with a fast fire rate. Good against runners and menders."
+primary_color = Color(0.192, 0.373, 0.345, 1)
+accent_color = Color(0.894, 0.725, 0.31, 1)
+footprint = Vector2i(1, 1)
+cost = 25
+damage = 5
+attack_range = 105.0
+attack_cooldown = 0.65
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+default_targeting = 0
+upgrade_tiers = Array[ExtResource("2_tier")]([SubResource("tier_1"), SubResource("tier_2")])
+sell_refund_percent = 70

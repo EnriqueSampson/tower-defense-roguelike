@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="RunUpgradeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/run_upgrade_definition.gd" id="1_upgrade"]
+
+[resource]
+script = ExtResource("1_upgrade")
+id = "better_refunds"
+display_name = "Salvage Crews"
+description = "Selling refunds 20% more of the invested gold."
+category = 1
+tags = PackedStringArray("economy")
+tower_id = ""
+damage_multiplier = 1.0
+range_bonus = 0.0
+cooldown_multiplier = 1.0
+splash_radius_bonus = 0.0
+slow_factor_bonus = 0.0
+bounty_multiplier = 1.0
+build_cost_multiplier = 1.0
+upgrade_cost_multiplier = 1.0
+sell_refund_bonus = 20
+extra_lives = 0
+immediate_gold = 0
+final_position_damage_multiplier = 1.0
+creep_speed_multiplier = 1.0
+requires_tags = PackedStringArray()
+excludes_tags = PackedStringArray()

@@ -1,0 +1,676 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/game_controller.gd" id="1_game"]
+[ext_resource type="PackedScene" path="res://scenes/map/WintermaulMap.tscn" id="2_map"]
+[ext_resource type="Script" path="res://scripts/map/battlefield_camera.gd" id="3_camera"]
+[ext_resource type="Script" path="res://scripts/ui/game_hud.gd" id="4_hud"]
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 1
+background_color = Color(0.035, 0.059, 0.056, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.72, 0.78, 0.8, 1)
+ambient_light_energy = 0.45
+tonemap_mode = 0
+
+[node name="Game" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_game")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.027, 0.043, 0.041, 1)
+mouse_filter = 2
+
+[node name="WorldClip" type="Control" parent="."]
+clip_contents = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 76.0
+offset_right = -340.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="MapBackdrop" type="ColorRect" parent="WorldClip"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.035, 0.059, 0.056, 1)
+mouse_filter = 2
+
+[node name="BattlefieldView" type="SubViewportContainer" parent="WorldClip"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch = true
+
+[node name="BattlefieldViewport" type="SubViewport" parent="WorldClip/BattlefieldView"]
+own_world_3d = true
+handle_input_locally = true
+msaa_3d = 0
+size = Vector2i(1100, 824)
+render_target_update_mode = 4
+
+[node name="World" type="Node3D" parent="WorldClip/BattlefieldView/BattlefieldViewport"]
+
+[node name="Environment" type="WorldEnvironment" parent="WorldClip/BattlefieldView/BattlefieldViewport/World"]
+environment = SubResource("Environment_world")
+
+[node name="Sun" type="DirectionalLight3D" parent="WorldClip/BattlefieldView/BattlefieldViewport/World"]
+rotation_degrees = Vector3(-55, -30, 0)
+light_energy = 1.3
+shadow_enabled = false
+
+[node name="WintermaulMap" parent="WorldClip/BattlefieldView/BattlefieldViewport/World" instance=ExtResource("2_map")]
+unique_name_in_owner = true
+
+[node name="BattlefieldCamera" type="Camera3D" parent="WorldClip/BattlefieldView/BattlefieldViewport/World"]
+unique_name_in_owner = true
+script = ExtResource("3_camera")
+
+[node name="MapCaption" type="Label" parent="WorldClip"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -34.0
+offset_right = -24.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.408, 0.565, 0.526, 1)
+theme_override_font_sizes/font_size = 12
+text = "WINTERMAUL BATTLEFIELD  •  NINE POSITIONS  •  ONE FINAL GATE  •  WASD / EDGE / RIGHT-DRAG PAN  •  WHEEL ZOOM  •  ESC DESELECT"
+mouse_filter = 2
+
+[node name="Hud" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("4_hud")
+
+[node name="TopBar" type="ColorRect" parent="Hud"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 76.0
+grow_horizontal = 2
+color = Color(0.055, 0.09, 0.084, 1)
+
+[node name="Header" type="HBoxContainer" parent="Hud/TopBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_right = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 20
+
+[node name="PhaseLabel" type="Label" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
+theme_override_font_sizes/font_size = 20
+text = "BUILD PHASE"
+vertical_alignment = 1
+
+[node name="WaveLabel" type="Label" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.557, 0.808, 0.741, 1)
+theme_override_font_sizes/font_size = 15
+text = "WAVE  1 / 10"
+vertical_alignment = 1
+
+[node name="LivesLabel" type="Label" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.608, 0.51, 1)
+theme_override_font_sizes/font_size = 15
+text = "SHARED LIVES  20"
+vertical_alignment = 1
+
+[node name="GoldLabel" type="Label" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.914, 0.8, 0.373, 1)
+theme_override_font_sizes/font_size = 15
+text = "TEAM GOLD  120"
+vertical_alignment = 1
+
+[node name="ActiveLabel" type="Label" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(170, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
+theme_override_font_sizes/font_size = 14
+text = "ACTIVE  0    TOWERS  0"
+vertical_alignment = 1
+
+[node name="Spacer" type="Control" parent="Hud/TopBar/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="CountdownLabel" type="Label" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
+theme_override_font_sizes/font_size = 14
+text = "Next wave in 40.0s"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="LaunchButton" type="Button" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(128, 42)
+layout_mode = 2
+text = "Launch Wave"
+
+[node name="ReadyButton" type="Button" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(128, 42)
+layout_mode = 2
+text = "Ready Up"
+
+[node name="SettingsButton" type="Button" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(90, 42)
+layout_mode = 2
+text = "Settings"
+
+[node name="ToastLabel" type="Label" parent="Hud"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 88.0
+offset_right = -364.0
+offset_bottom = 118.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 0.698, 0.478, 1)
+theme_override_font_sizes/font_size = 16
+text = "Notice"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="Sidebar" type="ColorRect" parent="Hud"]
+layout_mode = 1
+anchors_preset = 9
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -340.0
+offset_top = 76.0
+grow_horizontal = 0
+grow_vertical = 2
+color = Color(0.047, 0.074, 0.07, 1)
+
+[node name="Scroll" type="ScrollContainer" parent="Hud/Sidebar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -8.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+
+[node name="Layout" type="VBoxContainer" parent="Hud/Sidebar/Scroll"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="PositionLabel" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
+theme_override_font_sizes/font_size = 15
+text = "YOU CONTROL ALL NINE POSITIONS"
+autowrap_mode = 2
+
+[node name="BuildHeading" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.478, 0.62, 0.584, 1)
+theme_override_font_sizes/font_size = 12
+text = "BUILD PALETTE  ·  COSTS USE TEAM GOLD"
+
+[node name="Palette" type="HBoxContainer" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PaletteDescription" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
+theme_override_font_sizes/font_size = 12
+text = "Pick a tower, then click an open tile in your position."
+autowrap_mode = 2
+
+[node name="PlacementHint" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.553, 0.447, 1)
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 2
+
+[node name="Divider1" type="HSeparator" parent="Hud/Sidebar/Scroll/Layout"]
+layout_mode = 2
+modulate = Color(0.271, 0.424, 0.388, 1)
+
+[node name="TowerPanel" type="VBoxContainer" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="TowerName" type="Label" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
+theme_override_font_sizes/font_size = 15
+text = "Bolt Tower  ·  Mk I"
+autowrap_mode = 2
+
+[node name="TowerStats" type="Label" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
+theme_override_font_sizes/font_size = 12
+text = "Damage 5   Range 105   Cooldown 0.65s"
+autowrap_mode = 2
+
+[node name="TargetingRow" type="HBoxContainer" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TargetingLabel" type="Label" parent="Hud/Sidebar/Scroll/Layout/TowerPanel/TargetingRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.478, 0.62, 0.584, 1)
+theme_override_font_sizes/font_size = 12
+text = "TARGET"
+
+[node name="TargetingOptions" type="OptionButton" parent="Hud/Sidebar/Scroll/Layout/TowerPanel/TargetingRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="UpgradeButton" type="Button" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "Upgrade"
+
+[node name="SellButton" type="Button" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+text = "Sell"
+
+[node name="Divider2" type="HSeparator" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
+layout_mode = 2
+modulate = Color(0.271, 0.424, 0.388, 1)
+
+[node name="WaveHeading" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.557, 0.808, 0.741, 1)
+theme_override_font_sizes/font_size = 13
+text = "NEXT WAVE 1  ·  SCOUTS"
+autowrap_mode = 2
+
+[node name="WavePreview" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
+theme_override_font_sizes/font_size = 12
+text = "5x Grunt"
+autowrap_mode = 2
+
+[node name="Divider3" type="HSeparator" parent="Hud/Sidebar/Scroll/Layout"]
+layout_mode = 2
+modulate = Color(0.271, 0.424, 0.388, 1)
+
+[node name="PositionsHeading" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.478, 0.62, 0.584, 1)
+theme_override_font_sizes/font_size = 12
+text = "POSITIONS  ·  OWNER  ·  SPAWNS"
+
+[node name="PositionsList" type="VBoxContainer" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Divider4" type="HSeparator" parent="Hud/Sidebar/Scroll/Layout"]
+layout_mode = 2
+modulate = Color(0.271, 0.424, 0.388, 1)
+
+[node name="ModifiersHeading" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.478, 0.62, 0.584, 1)
+theme_override_font_sizes/font_size = 12
+text = "RUN MODIFIERS"
+
+[node name="ModifiersList" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
+theme_override_font_sizes/font_size = 12
+text = "None yet."
+autowrap_mode = 2
+
+[node name="SeedLabel" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.478, 0.62, 0.584, 1)
+theme_override_font_sizes/font_size = 11
+text = "SEED  0"
+
+[node name="ReturnButton" type="Button" parent="Hud/Sidebar/Scroll/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+text = "Return to Lobby"
+
+[node name="OfferOverlay" type="ColorRect" parent="Hud"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.01, 0.02, 0.02, 0.78)
+
+[node name="Center" type="CenterContainer" parent="Hud/OfferOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Hud/OfferOverlay/Center"]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Hud/OfferOverlay/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 24
+
+[node name="VBox" type="VBoxContainer" parent="Hud/OfferOverlay/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="OfferTitle" type="Label" parent="Hud/OfferOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
+theme_override_font_sizes/font_size = 22
+text = "TEAM UPGRADE"
+horizontal_alignment = 1
+
+[node name="OfferSubtitle" type="Label" parent="Hud/OfferOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
+theme_override_font_sizes/font_size = 13
+text = "Pick one team upgrade."
+horizontal_alignment = 1
+
+[node name="OfferCards" type="HBoxContainer" parent="Hud/OfferOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="EndOverlay" type="ColorRect" parent="Hud"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.01, 0.02, 0.02, 0.82)
+
+[node name="Center" type="CenterContainer" parent="Hud/EndOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Hud/EndOverlay/Center"]
+custom_minimum_size = Vector2(460, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Hud/EndOverlay/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 28
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 28
+
+[node name="VBox" type="VBoxContainer" parent="Hud/EndOverlay/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="EndTitle" type="Label" parent="Hud/EndOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
+theme_override_font_sizes/font_size = 30
+text = "VICTORY"
+horizontal_alignment = 1
+
+[node name="EndSummary" type="Label" parent="Hud/EndOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
+theme_override_font_sizes/font_size = 14
+text = "Summary"
+autowrap_mode = 2
+
+[node name="EndReturnButton" type="Button" parent="Hud/EndOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Return to Lobby"
+
+[node name="SettingsOverlay" type="ColorRect" parent="Hud"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.01, 0.02, 0.02, 0.7)
+
+[node name="Center" type="CenterContainer" parent="Hud/SettingsOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Hud/SettingsOverlay/Center"]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Hud/SettingsOverlay/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 24
+
+[node name="VBox" type="VBoxContainer" parent="Hud/SettingsOverlay/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SettingsTitle" type="Label" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
+theme_override_font_sizes/font_size = 22
+text = "SETTINGS"
+horizontal_alignment = 1
+
+[node name="MasterLabel" type="Label" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Master volume"
+
+[node name="MasterSlider" type="HSlider" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+value = 0.8
+
+[node name="MusicLabel" type="Label" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Music volume"
+
+[node name="MusicSlider" type="HSlider" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+value = 0.5
+
+[node name="EffectsLabel" type="Label" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Effects volume"
+
+[node name="EffectsSlider" type="HSlider" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+value = 0.8
+
+[node name="EdgePanCheck" type="CheckButton" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Edge-of-screen camera panning"
+
+[node name="ShowControlsButton" type="Button" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "Show Controls"
+
+[node name="CloseSettingsButton" type="Button" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Close"
+
+[node name="ControlsOverlay" type="ColorRect" parent="Hud"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.01, 0.02, 0.02, 0.82)
+
+[node name="Center" type="CenterContainer" parent="Hud/ControlsOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Hud/ControlsOverlay/Center"]
+custom_minimum_size = Vector2(520, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Hud/ControlsOverlay/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 28
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 28
+
+[node name="VBox" type="VBoxContainer" parent="Hud/ControlsOverlay/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="ControlsTitle" type="Label" parent="Hud/ControlsOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
+theme_override_font_sizes/font_size = 24
+text = "HOW TO DEFEND"
+horizontal_alignment = 1
+
+[node name="ControlsText" type="Label" parent="Hud/ControlsOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.78, 0.86, 0.83, 1)
+theme_override_font_sizes/font_size = 14
+text = "BUILD      Pick a tower in the palette, then left-click an open tile inside your highlighted position.
+             The preview turns green when valid, orange if it would seal a route, purple outside your position, yellow if unaffordable.
+SELECT     Left-click a placed tower to upgrade it, sell it, or change its target priority.
+PAN        WASD / arrow keys, right-drag, or move the cursor to the edge of the battlefield.
+ZOOM       Mouse wheel.
+DESELECT   Escape.
+GOAL       Creeps leaving Positions 1-8 relay into Position 9. Only creeps crossing the final gate cost shared lives.
+UPGRADES   After selected waves the team picks one run upgrade; the wave timer pauses until the host chooses."
+autowrap_mode = 2
+
+[node name="DismissControlsButton" type="Button" parent="Hud/ControlsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Got it"

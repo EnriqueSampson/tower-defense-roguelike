@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="WaveDefinition" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/wave_definition.gd" id="1_wave"]
+[ext_resource type="Script" path="res://scripts/data/wave_spawn_group.gd" id="2_group"]
+[ext_resource type="Resource" path="res://resources/creeps/runner.tres" id="creep_runner"]
+[ext_resource type="Resource" path="res://resources/creeps/grunt.tres" id="creep_grunt"]
+
+[sub_resource type="Resource" id="group_1"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_runner")
+count = 8
+spawn_interval = 0.45
+health_multiplier = 1.0
+delay_before = 0.0
+
+[sub_resource type="Resource" id="group_2"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_grunt")
+count = 4
+spawn_interval = 0.8
+health_multiplier = 1.5
+delay_before = 2.0
+
+[resource]
+script = ExtResource("1_wave")
+id = "wave_03"
+number = 3
+title = "Runners"
+spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1"), SubResource("group_2")])
+is_boss_wave = false
+offers_upgrade_after = false

@@ -1,0 +1,7 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Local Steam development and exported builds
+steam_appid.txt
+/builds/

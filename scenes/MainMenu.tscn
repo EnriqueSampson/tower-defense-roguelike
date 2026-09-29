@@ -1,0 +1,162 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/menu/main_menu.gd" id="1_menu"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_menu")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.043, 0.059, 0.058, 1)
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Layout" type="VBoxContainer" parent="Center"]
+layout_mode = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="Title" type="Label" parent="Center/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.851, 0.941, 0.918, 1)
+theme_override_font_sizes/font_size = 42
+text = "WINTERMAUL"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Center/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.647, 0.61, 1)
+theme_override_font_sizes/font_size = 15
+text = "Nine positions. One shared life pool."
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="Center/Layout"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+
+[node name="PlayButton" type="Button" parent="Center/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 52)
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Play"
+
+[node name="OptionsButton" type="Button" parent="Center/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 46)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Options"
+
+[node name="QuitButton" type="Button" parent="Center/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 46)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Quit"
+
+[node name="OptionsOverlay" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.01, 0.02, 0.02, 0.7)
+
+[node name="Center" type="CenterContainer" parent="OptionsOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="OptionsOverlay/Center"]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="OptionsOverlay/Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 24
+
+[node name="VBox" type="VBoxContainer" parent="OptionsOverlay/Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="OptionsTitle" type="Label" parent="OptionsOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
+theme_override_font_sizes/font_size = 22
+text = "OPTIONS"
+horizontal_alignment = 1
+
+[node name="MasterLabel" type="Label" parent="OptionsOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Master volume"
+
+[node name="MasterSlider" type="HSlider" parent="OptionsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+value = 0.8
+
+[node name="MusicLabel" type="Label" parent="OptionsOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Music volume"
+
+[node name="MusicSlider" type="HSlider" parent="OptionsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+value = 0.5
+
+[node name="EffectsLabel" type="Label" parent="OptionsOverlay/Center/Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Effects volume"
+
+[node name="EffectsSlider" type="HSlider" parent="OptionsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+value = 0.8
+
+[node name="EdgePanCheck" type="CheckButton" parent="OptionsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Edge-of-screen camera panning"
+
+[node name="CloseOptionsButton" type="Button" parent="OptionsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Close"
