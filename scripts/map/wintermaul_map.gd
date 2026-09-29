@@ -35,7 +35,7 @@ const GRID_SIZE := Layout.GRID_SIZE
 const TILE_SIZE := MapProjection.TILE_SIZE
 const GOAL_CELL := Layout.FINAL_GATE
 const LANE_COLORS: Array[Color] = Layout.PLAYER_COLORS
-const WALL_HEIGHT := 0.7
+const GROUND_DETAIL_TILES := 12.0
 const DECAL_HEIGHT := 0.015
 const LANDMARK_HEIGHT := 0.03
 
@@ -803,16 +803,44 @@ func _build_ground() -> void:
 	])
 	arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
 	arrays[Mesh.ARRAY_TEX_UV] = PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)])
+	# UV2 tiles a noise detail layer every GROUND_DETAIL_TILES cells.
+	var detail_scale := size / GROUND_DETAIL_TILES
+	arrays[Mesh.ARRAY_TEX_UV2] = PackedVector2Array([Vector2.ZERO, Vector2(detail_scale.x, 0), detail_scale, Vector2(0, detail_scale.y)])
 	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2, 0, 2, 3])
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	# Default back-face culling: with culling disabled the Compatibility renderer
+	# flips this quad's normal and the sun stops lighting the ground.
 	_ground_material = StandardMaterial3D.new()
-	_ground_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_ground_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_ground_material.roughness = 1.0
 	_ground_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_ground_material.detail_enabled = true
+	_ground_material.detail_uv_layer = BaseMaterial3D.DETAIL_UV_2
+	_ground_material.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL
+	_ground_material.detail_albedo = _ground_detail_texture()
 	mesh.surface_set_material(0, _ground_material)
 	_ground.mesh = mesh
 	_refresh_ground_texture()
+
+
+## Soft tiling noise multiplied over the ground so it reads as snow and
+## frozen earth rather than flat colour.
+func _ground_detail_texture() -> NoiseTexture2D:
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.045
+	noise.fractal_octaves = 4
+	var texture := NoiseTexture2D.new()
+	texture.width = 256
+	texture.height = 256
+	texture.seamless = true
+	texture.noise = noise
+	# Map noise into a narrow bright band: a multiply between ~0.86 and 1.0.
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.86, 0.88, 0.92))
+	ramp.set_color(1, Color(1, 1, 1))
+	texture.color_ramp = ramp
+	return texture
 
 
 func _refresh_ground_texture() -> void:
@@ -821,18 +849,15 @@ func _refresh_ground_texture() -> void:
 	_ground_material.albedo_texture = _terrain_texture
 
 
-## Every hedge cell becomes a raised block; the whole maze is one mesh.
+## Wall cells become snowy rock cliffs (one mesh) with instanced pines.
 func _build_walls() -> void:
-	var hedge := Color("4b7a2c")
-	var builder := MeshBuilder.new()
-	for y in range(GRID_SIZE.y):
-		for x in range(GRID_SIZE.x):
-			var cell := Vector2i(x, y)
-			if int(_terrain_cells[cell]) != Layout.Terrain.WALL:
-				continue
-			var color := hedge.lightened(0.12) if (x + y) % 2 == 0 else hedge
-			builder.add_box(Vector3(1.0, WALL_HEIGHT, 1.0), Vector3(x + 0.5, WALL_HEIGHT * 0.5, y + 0.5), color, hedge.darkened(0.42))
-	_walls.mesh = builder.commit()
+	_walls.mesh = TerrainBuilder.build_cliffs(_terrain_cells, GRID_SIZE, Layout.Terrain.WALL)
+	var pines := _walls.get_node_or_null("Pines") as MultiMeshInstance3D
+	if pines == null:
+		pines = MultiMeshInstance3D.new()
+		pines.name = "Pines"
+		_walls.add_child(pines)
+	pines.multimesh = TerrainBuilder.build_pines(_terrain_cells, GRID_SIZE, Layout.Terrain.WALL)
 
 
 func _build_landmarks() -> void:
@@ -998,12 +1023,12 @@ func _bake_terrain_texture() -> ImageTexture:
 	for position_index in range(_owners.size()):
 		if _owners[position_index] == _local_peer_id and _local_peer_id != 0:
 			controlled[position_index] = true
-	var void_color := Color("2b3542")
-	var hedge := Color("4b7a2c")
-	var ground_a := Color("6f7d55")
-	var ground_b := Color("66754e")
-	var pad := Color("1d3522")
-	var exit := Color("22303a")
+	var void_color := Color("0e131a")
+	var rock := Color("3a3e46")
+	var ground_a := Color("a9b8c1")
+	var ground_b := Color("9eaeb8")
+	var pad := Color("3a4552")
+	var exit := Color("2c3542")
 	for y in range(GRID_SIZE.y):
 		for x in range(GRID_SIZE.x):
 			var cell := Vector2i(x, y)
@@ -1011,29 +1036,23 @@ func _bake_terrain_texture() -> ImageTexture:
 			var terrain: int = _terrain_cells[cell]
 			match terrain:
 				Layout.Terrain.VOID:
-					image.fill_rect(rect, void_color if (x * 7 + y * 13) % 5 != 0 else void_color.lightened(0.04))
+					image.fill_rect(rect, void_color)
 				Layout.Terrain.WALL:
-					image.fill_rect(rect, hedge if (x + y) % 2 == 0 else hedge.darkened(0.08))
-					if int(_terrain_cells.get(cell + Vector2i.UP, Layout.Terrain.WALL)) != Layout.Terrain.WALL:
-						image.fill_rect(Rect2i(rect.position, Vector2i(tile, 4)), hedge.lightened(0.35))
-					if int(_terrain_cells.get(cell + Vector2i.DOWN, Layout.Terrain.WALL)) != Layout.Terrain.WALL:
-						image.fill_rect(Rect2i(rect.position + Vector2i(0, tile - 5), Vector2i(tile, 5)), hedge.darkened(0.45))
-					if int(_terrain_cells.get(cell + Vector2i.LEFT, Layout.Terrain.WALL)) != Layout.Terrain.WALL:
-						image.fill_rect(Rect2i(rect.position, Vector2i(2, tile)), hedge.lightened(0.15))
-					if int(_terrain_cells.get(cell + Vector2i.RIGHT, Layout.Terrain.WALL)) != Layout.Terrain.WALL:
-						image.fill_rect(Rect2i(rect.position + Vector2i(tile - 2, 0), Vector2i(2, tile)), hedge.darkened(0.3))
+					# Hidden under the cliffs; only the cliff foot shows.
+					image.fill_rect(rect, rock)
 				Layout.Terrain.SPAWN_PAD:
 					image.fill_rect(rect, pad if (x + y) % 2 == 0 else pad.lightened(0.05))
 				Layout.Terrain.EXIT_PAD:
 					image.fill_rect(rect, exit if (x + y) % 2 == 0 else exit.lightened(0.05))
 				_:
-					var fill := ground_a if (x + y) % 2 == 0 else ground_b
+					var fill := ground_a.lerp(ground_b, TerrainBuilder.hash_2d(x, y))
 					if _build_cells.has(cell):
 						var owner: int = _build_cells[cell]
-						fill = fill.lerp(LANE_COLORS[owner], 0.12 if controlled.has(owner) else 0.05)
+						fill = fill.lerp(LANE_COLORS[owner], 0.14 if controlled.has(owner) else 0.05)
 					image.fill_rect(rect, fill)
-					image.fill_rect(Rect2i(rect.position, Vector2i(tile, 1)), fill.darkened(0.18))
-					image.fill_rect(Rect2i(rect.position, Vector2i(1, tile)), fill.darkened(0.18))
+					# Faint build grid, like WC3's placement grid.
+					image.fill_rect(Rect2i(rect.position, Vector2i(tile, 1)), fill.darkened(0.08))
+					image.fill_rect(Rect2i(rect.position, Vector2i(1, tile)), fill.darkened(0.08))
 	image.generate_mipmaps()
 	return ImageTexture.create_from_image(image)
 
