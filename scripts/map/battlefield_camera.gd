@@ -134,13 +134,14 @@ func get_edge_direction(mouse_position: Vector2, area_rect: Rect2) -> Vector2:
 
 func _process(delta: float) -> void:
 	var direction := Vector2.ZERO
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+	# Arrow keys only, as in WC3: letter keys belong to the command card.
+	if Input.is_key_pressed(KEY_LEFT):
 		direction.x -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+	if Input.is_key_pressed(KEY_RIGHT):
 		direction.x += 1.0
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+	if Input.is_key_pressed(KEY_UP):
 		direction.y -= 1.0
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+	if Input.is_key_pressed(KEY_DOWN):
 		direction.y += 1.0
 	if _can_edge_pan():
 		direction += get_edge_direction(get_window().get_mouse_position(), _edge_pan_area.get_global_rect())

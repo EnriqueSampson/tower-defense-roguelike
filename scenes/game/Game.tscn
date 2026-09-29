@@ -1,9 +1,10 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/game_controller.gd" id="1_game"]
 [ext_resource type="PackedScene" path="res://scenes/map/WintermaulMap.tscn" id="2_map"]
 [ext_resource type="Script" path="res://scripts/map/battlefield_camera.gd" id="3_camera"]
 [ext_resource type="Script" path="res://scripts/ui/game_hud.gd" id="4_hud"]
+[ext_resource type="Script" path="res://scripts/ui/minimap.gd" id="5_minimap"]
 
 [sub_resource type="Environment" id="Environment_world"]
 background_mode = 1
@@ -38,8 +39,6 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = 76.0
-offset_right = -340.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -92,23 +91,6 @@ unique_name_in_owner = true
 unique_name_in_owner = true
 script = ExtResource("3_camera")
 
-[node name="MapCaption" type="Label" parent="WorldClip"]
-layout_mode = 1
-anchors_preset = 12
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 24.0
-offset_top = -34.0
-offset_right = -24.0
-offset_bottom = -10.0
-grow_horizontal = 2
-grow_vertical = 0
-theme_override_colors/font_color = Color(0.408, 0.565, 0.526, 1)
-theme_override_font_sizes/font_size = 12
-text = "WINTERMAUL BATTLEFIELD  •  NINE POSITIONS  •  ONE FINAL GATE  •  WASD / EDGE / RIGHT-DRAG PAN  •  WHEEL ZOOM  •  ESC DESELECT"
-mouse_filter = 2
-
 [node name="Hud" type="Control" parent="."]
 unique_name_in_owner = true
 layout_mode = 1
@@ -120,68 +102,30 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("4_hud")
 
-[node name="TopBar" type="ColorRect" parent="Hud"]
+[node name="TopBar" type="PanelContainer" parent="Hud"]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 76.0
+offset_bottom = 34.0
 grow_horizontal = 2
-color = Color(0.055, 0.09, 0.084, 1)
 
 [node name="Header" type="HBoxContainer" parent="Hud/TopBar"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 20.0
-offset_right = -20.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/separation = 20
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="SettingsButton" type="Button" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 26)
+layout_mode = 2
+text = "Menu (F10)"
 
 [node name="PhaseLabel" type="Label" parent="Hud/TopBar/Header"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(150, 0)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
-theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.886, 0.749, 0.384, 1)
+theme_override_font_sizes/font_size = 15
 text = "BUILD PHASE"
-vertical_alignment = 1
-
-[node name="WaveLabel" type="Label" parent="Hud/TopBar/Header"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(110, 0)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.557, 0.808, 0.741, 1)
-theme_override_font_sizes/font_size = 15
-text = "WAVE  1 / 10"
-vertical_alignment = 1
-
-[node name="LivesLabel" type="Label" parent="Hud/TopBar/Header"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(140, 0)
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.608, 0.51, 1)
-theme_override_font_sizes/font_size = 15
-text = "SHARED LIVES  20"
-vertical_alignment = 1
-
-[node name="GoldLabel" type="Label" parent="Hud/TopBar/Header"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(140, 0)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.914, 0.8, 0.373, 1)
-theme_override_font_sizes/font_size = 15
-text = "TEAM GOLD  120"
-vertical_alignment = 1
-
-[node name="ActiveLabel" type="Label" parent="Hud/TopBar/Header"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(170, 0)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
-theme_override_font_sizes/font_size = 14
-text = "ACTIVE  0    TOWERS  0"
 vertical_alignment = 1
 
 [node name="Spacer" type="Control" parent="Hud/TopBar/Header"]
@@ -189,43 +133,59 @@ layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
 
+[node name="WaveLabel" type="Label" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "WAVE  1 / 10"
+vertical_alignment = 1
+
 [node name="CountdownLabel" type="Label" parent="Hud/TopBar/Header"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
-theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.616, 0.584, 0.51, 1)
 text = "Next wave in 40.0s"
-horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="LivesLabel" type="Label" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.608, 0.51, 1)
+text = "LIVES  20"
+vertical_alignment = 1
+
+[node name="GoldLabel" type="Label" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.886, 0.749, 0.384, 1)
+text = "GOLD  120"
+vertical_alignment = 1
+
+[node name="ActiveLabel" type="Label" parent="Hud/TopBar/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.616, 0.584, 0.51, 1)
+text = "CREEPS  0    TOWERS  0"
 vertical_alignment = 1
 
 [node name="LaunchButton" type="Button" parent="Hud/TopBar/Header"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(128, 42)
+custom_minimum_size = Vector2(118, 26)
 layout_mode = 2
 text = "Launch Wave"
 
 [node name="ReadyButton" type="Button" parent="Hud/TopBar/Header"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(128, 42)
+custom_minimum_size = Vector2(104, 26)
 layout_mode = 2
 text = "Ready Up"
-
-[node name="SettingsButton" type="Button" parent="Hud/TopBar/Header"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(90, 42)
-layout_mode = 2
-text = "Settings"
 
 [node name="ToastLabel" type="Label" parent="Hud"]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_left = 24.0
-offset_top = 88.0
-offset_right = -364.0
-offset_bottom = 118.0
+offset_top = 44.0
+offset_bottom = 74.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(1, 0.698, 0.478, 1)
 theme_override_font_sizes/font_size = 16
@@ -234,189 +194,183 @@ horizontal_alignment = 1
 vertical_alignment = 1
 mouse_filter = 2
 
-[node name="Sidebar" type="ColorRect" parent="Hud"]
+[node name="Multiboard" type="PanelContainer" parent="Hud"]
+unique_name_in_owner = true
 layout_mode = 1
-anchors_preset = 9
+anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -340.0
-offset_top = 76.0
+offset_left = -292.0
+offset_top = 40.0
+offset_right = -8.0
 grow_horizontal = 0
-grow_vertical = 2
-color = Color(0.047, 0.074, 0.07, 1)
 
-[node name="Scroll" type="ScrollContainer" parent="Hud/Sidebar"]
+[node name="MultiboardLayout" type="VBoxContainer" parent="Hud/Multiboard"]
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="PositionLabel" type="Label" parent="Hud/Multiboard/MultiboardLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.886, 0.749, 0.384, 1)
+theme_override_font_sizes/font_size = 12
+text = "YOU CONTROL ALL NINE POSITIONS"
+autowrap_mode = 2
+
+[node name="PositionsList" type="VBoxContainer" parent="Hud/Multiboard/MultiboardLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 1
+
+[node name="ModifiersHeading" type="Label" parent="Hud/Multiboard/MultiboardLayout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.616, 0.584, 0.51, 1)
+theme_override_font_sizes/font_size = 11
+text = "RUN MODIFIERS"
+
+[node name="ModifiersList" type="Label" parent="Hud/Multiboard/MultiboardLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "None yet."
+autowrap_mode = 2
+
+[node name="SeedLabel" type="Label" parent="Hud/Multiboard/MultiboardLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.616, 0.584, 0.51, 1)
+theme_override_font_sizes/font_size = 10
+text = "SEED  0"
+
+[node name="ReturnButton" type="Button" parent="Hud/Multiboard/MultiboardLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+text = "Return to Lobby"
+
+[node name="Console" type="PanelContainer" parent="Hud"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -176.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="ConsoleRow" type="HBoxContainer" parent="Hud/Console"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="MinimapFrame" type="PanelContainer" parent="Hud/Console/ConsoleRow"]
+layout_mode = 2
+
+[node name="Minimap" type="Control" parent="Hud/Console/ConsoleRow/MinimapFrame"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 150)
+layout_mode = 2
+script = ExtResource("5_minimap")
+
+[node name="InfoFrame" type="PanelContainer" parent="Hud/Console/ConsoleRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="InfoRow" type="HBoxContainer" parent="Hud/Console/ConsoleRow/InfoFrame"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PortraitFrame" type="PanelContainer" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow"]
+layout_mode = 2
+
+[node name="Portrait" type="ColorRect" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow/PortraitFrame"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 0)
+layout_mode = 2
+color = Color(0.086, 0.098, 0.118, 1)
+
+[node name="PortraitGlyph" type="Label" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow/PortraitFrame/Portrait"]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 16.0
-offset_top = 16.0
-offset_right = -8.0
-offset_bottom = -16.0
 grow_horizontal = 2
 grow_vertical = 2
-horizontal_scroll_mode = 0
+theme_override_font_sizes/font_size = 44
+text = "?"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="Layout" type="VBoxContainer" parent="Hud/Sidebar/Scroll"]
-custom_minimum_size = Vector2(300, 0)
+[node name="InfoText" type="VBoxContainer" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow"]
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 10
+theme_override_constants/separation = 4
 
-[node name="PositionLabel" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+[node name="TowerPanel" type="VBoxContainer" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow/InfoText"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
+theme_override_constants/separation = 4
+
+[node name="TowerName" type="Label" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow/InfoText/TowerPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.886, 0.749, 0.384, 1)
 theme_override_font_sizes/font_size = 15
-text = "YOU CONTROL ALL NINE POSITIONS"
+text = "Bolt Tower  ·  Mk I"
 autowrap_mode = 2
 
-[node name="BuildHeading" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.478, 0.62, 0.584, 1)
-theme_override_font_sizes/font_size = 12
-text = "BUILD PALETTE  ·  COSTS USE TEAM GOLD"
-
-[node name="Palette" type="HBoxContainer" parent="Hud/Sidebar/Scroll/Layout"]
+[node name="TowerStats" type="Label" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow/InfoText/TowerPanel"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="PaletteDescription" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
 theme_override_font_sizes/font_size = 12
-text = "Pick a tower, then click an open tile in your position."
+text = "Damage 5   Range 105   Cooldown 0.65s"
 autowrap_mode = 2
 
-[node name="PlacementHint" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
+[node name="IdleInfo" type="VBoxContainer" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow/InfoText"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+theme_override_constants/separation = 3
+
+[node name="WaveHeading" type="Label" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow/InfoText/IdleInfo"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "NEXT WAVE 1  ·  SCOUTS"
+autowrap_mode = 2
+
+[node name="WavePreview" type="Label" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow/InfoText/IdleInfo"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "5x Grunt"
+autowrap_mode = 2
+
+[node name="PaletteDescription" type="Label" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow/InfoText/IdleInfo"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.616, 0.584, 0.51, 1)
+theme_override_font_sizes/font_size = 12
+text = "Pick a tower from the command card."
+autowrap_mode = 2
+
+[node name="PlacementHint" type="Label" parent="Hud/Console/ConsoleRow/InfoFrame/InfoRow/InfoText"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 18)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.553, 0.447, 1)
 theme_override_font_sizes/font_size = 13
 autowrap_mode = 2
 
-[node name="Divider1" type="HSeparator" parent="Hud/Sidebar/Scroll/Layout"]
+[node name="CardFrame" type="PanelContainer" parent="Hud/Console/ConsoleRow"]
 layout_mode = 2
-modulate = Color(0.271, 0.424, 0.388, 1)
 
-[node name="TowerPanel" type="VBoxContainer" parent="Hud/Sidebar/Scroll/Layout"]
+[node name="CommandCard" type="GridContainer" parent="Hud/Console/ConsoleRow/CardFrame"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 6
-
-[node name="TowerName" type="Label" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.831, 0.952, 0.917, 1)
-theme_override_font_sizes/font_size = 15
-text = "Bolt Tower  ·  Mk I"
-autowrap_mode = 2
-
-[node name="TowerStats" type="Label" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
-theme_override_font_sizes/font_size = 12
-text = "Damage 5   Range 105   Cooldown 0.65s"
-autowrap_mode = 2
-
-[node name="TargetingRow" type="HBoxContainer" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="TargetingLabel" type="Label" parent="Hud/Sidebar/Scroll/Layout/TowerPanel/TargetingRow"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.478, 0.62, 0.584, 1)
-theme_override_font_sizes/font_size = 12
-text = "TARGET"
-
-[node name="TargetingOptions" type="OptionButton" parent="Hud/Sidebar/Scroll/Layout/TowerPanel/TargetingRow"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="UpgradeButton" type="Button" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-text = "Upgrade"
-
-[node name="SellButton" type="Button" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 32)
-layout_mode = 2
-text = "Sell"
-
-[node name="Divider2" type="HSeparator" parent="Hud/Sidebar/Scroll/Layout/TowerPanel"]
-layout_mode = 2
-modulate = Color(0.271, 0.424, 0.388, 1)
-
-[node name="WaveHeading" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.557, 0.808, 0.741, 1)
-theme_override_font_sizes/font_size = 13
-text = "NEXT WAVE 1  ·  SCOUTS"
-autowrap_mode = 2
-
-[node name="WavePreview" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
-theme_override_font_sizes/font_size = 12
-text = "5x Grunt"
-autowrap_mode = 2
-
-[node name="Divider3" type="HSeparator" parent="Hud/Sidebar/Scroll/Layout"]
-layout_mode = 2
-modulate = Color(0.271, 0.424, 0.388, 1)
-
-[node name="PositionsHeading" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.478, 0.62, 0.584, 1)
-theme_override_font_sizes/font_size = 12
-text = "POSITIONS  ·  OWNER  ·  SPAWNS"
-
-[node name="PositionsList" type="VBoxContainer" parent="Hud/Sidebar/Scroll/Layout"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_constants/separation = 2
-
-[node name="Divider4" type="HSeparator" parent="Hud/Sidebar/Scroll/Layout"]
-layout_mode = 2
-modulate = Color(0.271, 0.424, 0.388, 1)
-
-[node name="ModifiersHeading" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.478, 0.62, 0.584, 1)
-theme_override_font_sizes/font_size = 12
-text = "RUN MODIFIERS"
-
-[node name="ModifiersList" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.706, 0.78, 0.761, 1)
-theme_override_font_sizes/font_size = 12
-text = "None yet."
-autowrap_mode = 2
-
-[node name="SeedLabel" type="Label" parent="Hud/Sidebar/Scroll/Layout"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.478, 0.62, 0.584, 1)
-theme_override_font_sizes/font_size = 11
-text = "SEED  0"
-
-[node name="ReturnButton" type="Button" parent="Hud/Sidebar/Scroll/Layout"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 42)
-layout_mode = 2
-text = "Return to Lobby"
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+columns = 4
 
 [node name="OfferOverlay" type="ColorRect" parent="Hud"]
 unique_name_in_owner = true
@@ -663,12 +617,12 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_colors/font_color = Color(0.78, 0.86, 0.83, 1)
 theme_override_font_sizes/font_size = 14
-text = "BUILD      Pick a tower in the palette, then left-click an open tile inside your highlighted position.
+text = "BUILD      Pick a tower on the command card (bottom right, hotkeys Q W E), then left-click inside your position.
              The preview turns green when valid, orange if it would seal a route, purple outside your position, yellow if unaffordable.
-SELECT     Left-click a placed tower to upgrade it, sell it, or change its target priority.
-PAN        WASD / arrow keys, right-drag, or move the cursor to the edge of the battlefield.
+SELECT     Left-click a tower: Q upgrades, A S D F set its target (first / last / strongest / nearest), C sells, V or Esc cancels.
+PAN        Arrow keys, right-drag, the screen edge, or click and drag on the minimap (bottom left).
 ZOOM       Mouse wheel.
-DESELECT   Escape.
+MENU       F10 opens the menu.
 GOAL       Creeps leaving Positions 1-8 relay into Position 9. Only creeps crossing the final gate cost shared lives.
 UPGRADES   After selected waves the team picks one run upgrade; the wave timer pauses until the host chooses."
 autowrap_mode = 2

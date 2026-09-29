@@ -21,11 +21,30 @@ const COLOR_ERROR := Color("ff8d72")
 const COLOR_MUTED := Color("92a09d")
 const TOAST_DURATION := 3.5
 const MESSAGE_DURATION := 2.5
+## WC3 command-card grid hotkeys, row by row (QWER / ASDF / ZXCV).
+const CARD_KEYS: Array[Key] = [KEY_Q, KEY_W, KEY_E, KEY_R, KEY_A, KEY_S, KEY_D, KEY_F, KEY_Z, KEY_X, KEY_C, KEY_V]
+const CARD_SLOT_SIZE := Vector2(58, 46)
+const SLOT_UPGRADE := 0
+const SLOT_FIRST_TARGETING := 4
+const SLOT_SELL := 10
+const SLOT_CANCEL := 11
+## Card-sized names for TowerTargeting.Mode (FIRST, LAST, STRONGEST, NEAREST).
+const TARGETING_SHORT_NAMES: Array[String] = ["First", "Last", "Strong", "Near"]
 
 var _catalog: ContentCatalog
-var _palette_buttons: Dictionary = {}
+var _card_slots: Array[Button] = []
+var _card_actions: Array[Callable] = []
 var _selected_definition_id := ""
 var _shown_tower_id := 0
+var _gold := 0
+var _modifiers: RunModifiers
+## Selected-tower state shown on the command card.
+var _tower_definition: TowerDefinition
+var _tower_tier := 0
+var _tower_targeting := 0
+var _tower_can_control := false
+var _upgrade_cost := -1
+var _sell_value := 0
 var _toast_timer := 0.0
 var _message_timer := 0.0
 var _end_screen_shown := false
@@ -41,15 +60,18 @@ var _offer_ids: Array[String] = []
 @onready var ready_button: Button = %ReadyButton
 @onready var settings_button: Button = %SettingsButton
 @onready var position_label: Label = %PositionLabel
-@onready var palette: HBoxContainer = %Palette
+@onready var top_bar: PanelContainer = %TopBar
+@onready var console: PanelContainer = %Console
+@onready var command_card: GridContainer = %CommandCard
+@onready var minimap: Minimap = %Minimap
+@onready var portrait: ColorRect = %Portrait
+@onready var portrait_glyph: Label = %PortraitGlyph
+@onready var idle_info: VBoxContainer = %IdleInfo
 @onready var palette_description: Label = %PaletteDescription
 @onready var placement_hint: Label = %PlacementHint
 @onready var tower_panel: VBoxContainer = %TowerPanel
 @onready var tower_name: Label = %TowerName
 @onready var tower_stats: Label = %TowerStats
-@onready var targeting_options: OptionButton = %TargetingOptions
-@onready var upgrade_button: Button = %UpgradeButton
-@onready var sell_button: Button = %SellButton
 @onready var wave_heading: Label = %WaveHeading
 @onready var wave_preview: Label = %WavePreview
 @onready var positions_list: VBoxContainer = %PositionsList
@@ -76,12 +98,13 @@ var _offer_ids: Array[String] = []
 
 
 func _ready() -> void:
+	theme = WC3Theme.build()
+	top_bar.add_theme_stylebox_override("panel", WC3Theme.bar_style())
+	console.add_theme_stylebox_override("panel", WC3Theme.bar_style())
+	_build_command_card()
 	launch_button.pressed.connect(func() -> void: launch_requested.emit())
 	ready_button.pressed.connect(func() -> void: ready_requested.emit())
 	settings_button.pressed.connect(toggle_settings)
-	upgrade_button.pressed.connect(func() -> void: upgrade_requested.emit(_shown_tower_id))
-	sell_button.pressed.connect(func() -> void: sell_requested.emit(_shown_tower_id))
-	targeting_options.item_selected.connect(func(index: int) -> void: targeting_requested.emit(_shown_tower_id, targeting_options.get_item_id(index)))
 	return_button.pressed.connect(func() -> void: return_requested.emit())
 	end_return_button.pressed.connect(func() -> void: return_requested.emit())
 	close_settings_button.pressed.connect(func() -> void: settings_overlay.visible = false)
@@ -95,8 +118,6 @@ func _ready() -> void:
 	music_slider.value_changed.connect(func(value: float) -> void: GameSettings.set_volume("music", value))
 	effects_slider.value_changed.connect(func(value: float) -> void: GameSettings.set_volume("effects", value))
 	edge_pan_check.toggled.connect(func(pressed: bool) -> void: GameSettings.set_edge_pan(pressed))
-	for mode in range(TowerTargeting.Mode.size()):
-		targeting_options.add_item(TowerTargeting.mode_name(mode), mode)
 	tower_panel.visible = false
 	offer_overlay.visible = false
 	end_overlay.visible = false
@@ -109,20 +130,12 @@ func _ready() -> void:
 
 func setup(catalog: ContentCatalog) -> void:
 	_catalog = catalog
-	for child in palette.get_children():
-		child.queue_free()
-	_palette_buttons.clear()
-	for definition in catalog.towers:
-		var button := Button.new()
-		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(88, 64)
-		button.text = "%s\n%d g" % [definition.display_name.replace(" Tower", ""), definition.cost]
-		button.tooltip_text = "%s\n%s\nDamage %d  Range %.0f  Cooldown %.2fs" % [definition.role, definition.description, definition.damage, definition.attack_range, definition.attack_cooldown]
-		button.add_theme_color_override("font_color", definition.accent_color.lightened(0.2))
-		button.pressed.connect(_on_palette_button_pressed.bind(definition.id))
-		palette.add_child(button)
-		_palette_buttons[definition.id] = button
-	palette_description.text = "Pick a tower, then click an open tile in your position."
+	_refresh_card()
+	palette_description.text = "Pick a tower from the command card, then click inside your position."
+
+
+func attach_minimap(map: WintermaulMap, camera: BattlefieldCamera) -> void:
+	minimap.attach(map, camera)
 
 
 func _process(delta: float) -> void:
@@ -150,9 +163,9 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 
 	phase_label.text = _phase_name(phase)
 	wave_label.text = "WAVE  %s / %s" % [snapshot["wave_index"] + 1, snapshot["wave_count"]]
-	lives_label.text = "SHARED LIVES  %s" % snapshot["lives"]
-	gold_label.text = "TEAM GOLD  %s" % snapshot["gold"]
-	active_label.text = "ACTIVE  %s    TOWERS  %s" % [snapshot["active_count"], snapshot.get("tower_count", 0)]
+	lives_label.text = "LIVES  %s" % snapshot["lives"]
+	gold_label.text = "GOLD  %s" % snapshot["gold"]
+	active_label.text = "CREEPS  %s    TOWERS  %s" % [snapshot["active_count"], snapshot.get("tower_count", 0)]
 	if phase == RunStateModel.Phase.BUILD:
 		if waiting_for > 0:
 			countdown_label.text = "Waiting for %d player(s) to load" % waiting_for
@@ -178,14 +191,9 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 	position_label.text = _position_summary(controllable, owners, is_host)
 
 	_selected_definition_id = str(context.get("selected_definition", ""))
-	var gold: int = snapshot["gold"]
-	for definition_id in _palette_buttons:
-		var button: Button = _palette_buttons[definition_id]
-		var definition := _catalog.get_tower(definition_id)
-		var cost := modifiers.build_cost(definition.cost)
-		button.text = "%s\n%d g" % [definition.display_name.replace(" Tower", ""), cost]
-		button.set_pressed_no_signal(definition_id == _selected_definition_id)
-		button.modulate = Color.WHITE if gold >= cost else Color(1, 1, 1, 0.55)
+	_gold = snapshot["gold"]
+	_modifiers = modifiers
+	_refresh_card()
 	if not _selected_definition_id.is_empty():
 		var selected := _catalog.get_tower(_selected_definition_id)
 		var stats := modifiers.modify_stats(selected.stats_for_tier(0), selected.id)
@@ -200,7 +208,7 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 			"   Slow %d%%" % roundi(float(stats["slow_factor"]) * 100.0) if float(stats["slow_factor"]) > 0.0 else "",
 		]
 	else:
-		palette_description.text = "Pick a tower, then click an open tile in your position. Click a placed tower to inspect it."
+		palette_description.text = "Pick a tower from the command card, then click inside your position. Click a placed tower to inspect it."
 
 	_update_wave_preview(phase, wave, snapshot)
 	_update_position_rows(snapshot, owners, context)
@@ -293,9 +301,17 @@ func _on_palette_button_pressed(definition_id: String) -> void:
 
 func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictionary, upgrade_cost: int, sell_value: int, can_control: bool, gold: int) -> void:
 	_shown_tower_id = int(record["id"])
+	_tower_definition = definition
+	_tower_tier = int(record["tier"])
+	_tower_targeting = int(record["targeting"])
+	_tower_can_control = can_control
+	_upgrade_cost = upgrade_cost
+	_sell_value = sell_value
+	_gold = gold
 	tower_panel.visible = true
-	var tier := int(record["tier"])
-	tower_name.text = "%s  ·  %s  ·  P%d" % [definition.display_name, definition.tier_name(tier), int(record["position"]) + 1]
+	idle_info.visible = false
+	_set_portrait(definition.display_name, definition.primary_color, definition.accent_color)
+	tower_name.text = "%s  ·  %s  ·  P%d" % [definition.display_name, definition.tier_name(_tower_tier), int(record["position"]) + 1]
 	var lines := PackedStringArray([
 		"Damage %d    Range %.0f    Cooldown %.2fs" % [stats["damage"], stats["range"], stats["cooldown"]],
 	])
@@ -305,21 +321,9 @@ func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictiona
 		lines.append("Slow %d%% for %.1fs" % [roundi(float(stats["slow_factor"]) * 100.0), stats["slow_duration"]])
 	if int(stats.get("armor_pierce", 0)) > 0:
 		lines.append("Armor pierce %d" % stats["armor_pierce"])
-	lines.append("Invested %d g" % definition.total_invested(tier))
+	lines.append("Target: %s    Invested %d g" % [TowerTargeting.mode_name(_tower_targeting), definition.total_invested(_tower_tier)])
 	tower_stats.text = "\n".join(lines)
-	var targeting := int(record["targeting"])
-	for index in range(targeting_options.item_count):
-		if targeting_options.get_item_id(index) == targeting:
-			targeting_options.select(index)
-	targeting_options.disabled = not can_control
-	if upgrade_cost < 0:
-		upgrade_button.text = "Max tier"
-		upgrade_button.disabled = true
-	else:
-		upgrade_button.text = "Upgrade to %s  ·  %d g" % [definition.tier_name(tier + 1), upgrade_cost]
-		upgrade_button.disabled = not can_control or gold < upgrade_cost
-	sell_button.text = "Sell  ·  refund %d g (%d%%)" % [sell_value, definition.sell_refund_percent]
-	sell_button.disabled = not can_control
+	_refresh_card()
 	if not can_control:
 		placement_hint.text = "This tower belongs to another position."
 		placement_hint.add_theme_color_override("font_color", COLOR_WARN)
@@ -328,7 +332,110 @@ func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictiona
 
 func hide_tower() -> void:
 	_shown_tower_id = 0
+	_tower_definition = null
 	tower_panel.visible = false
+	idle_info.visible = true
+	_set_portrait("", WC3Theme.STONE, WC3Theme.MUTED)
+	_refresh_card()
+
+
+func _set_portrait(title: String, primary: Color, accent: Color) -> void:
+	portrait.color = primary.darkened(0.55)
+	portrait_glyph.text = title.substr(0, 1).to_upper() if not title.is_empty() else "?"
+	portrait_glyph.add_theme_color_override("font_color", accent)
+
+
+# --- Command card ---------------------------------------------------------------
+
+func _build_command_card() -> void:
+	for index in range(CARD_KEYS.size()):
+		var button := Button.new()
+		button.custom_minimum_size = CARD_SLOT_SIZE
+		button.clip_text = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.pressed.connect(_on_card_slot_pressed.bind(index))
+		command_card.add_child(button)
+		_card_slots.append(button)
+		_card_actions.append(Callable())
+
+
+func _clear_card() -> void:
+	for index in range(_card_slots.size()):
+		var button := _card_slots[index]
+		button.text = ""
+		button.tooltip_text = ""
+		button.disabled = true
+		button.toggle_mode = false
+		button.set_pressed_no_signal(false)
+		button.remove_theme_color_override("font_color")
+		_card_actions[index] = Callable()
+
+
+## Fills one slot; the grid position gives it its WC3 hotkey.
+func _set_card_slot(index: int, label: String, tooltip: String, action: Callable, enabled := true, pressed := false, color := Color(0, 0, 0, 0)) -> void:
+	var button := _card_slots[index]
+	button.text = "%s\n%s" % [OS.get_keycode_string(CARD_KEYS[index]), label]
+	button.tooltip_text = "%s  [%s]" % [tooltip, OS.get_keycode_string(CARD_KEYS[index])]
+	button.disabled = not enabled
+	button.toggle_mode = pressed
+	button.set_pressed_no_signal(pressed)
+	if color.a > 0.0:
+		button.add_theme_color_override("font_color", color)
+	_card_actions[index] = action
+
+
+func _refresh_card() -> void:
+	if _card_slots.is_empty():
+		return
+	_clear_card()
+	if _shown_tower_id != 0 and _tower_definition != null:
+		_fill_tower_card()
+	elif _catalog != null:
+		_fill_build_card()
+
+
+func _fill_build_card() -> void:
+	for index in range(mini(_catalog.towers.size(), SLOT_FIRST_TARGETING)):
+		var definition: TowerDefinition = _catalog.towers[index]
+		var cost := _modifiers.build_cost(definition.cost) if _modifiers else definition.cost
+		var label := "%s\n%dg" % [definition.display_name.replace(" Tower", ""), cost]
+		var tooltip := "%s  ·  %d gold\n%s\n%s" % [definition.display_name, cost, definition.role, definition.description]
+		_set_card_slot(index, label, tooltip, _on_palette_button_pressed.bind(definition.id), _gold >= cost, definition.id == _selected_definition_id, definition.accent_color.lightened(0.25))
+	if not _selected_definition_id.is_empty():
+		_set_card_slot(SLOT_CANCEL, "Cancel", "Stop placing", _on_palette_button_pressed.bind(_selected_definition_id))
+
+
+func _fill_tower_card() -> void:
+	if _upgrade_cost >= 0:
+		_set_card_slot(SLOT_UPGRADE, "Upgrade\n%dg" % _upgrade_cost, "Upgrade to %s for %d gold" % [_tower_definition.tier_name(_tower_tier + 1), _upgrade_cost],
+			func() -> void: upgrade_requested.emit(_shown_tower_id), _tower_can_control and _gold >= _upgrade_cost)
+	else:
+		_set_card_slot(SLOT_UPGRADE, "Max\ntier", "This tower is fully upgraded", Callable(), false)
+	for mode in range(mini(TowerTargeting.Mode.size(), 4)):
+		_set_card_slot(SLOT_FIRST_TARGETING + mode, TARGETING_SHORT_NAMES[mode], "Target the %s creep in range" % TowerTargeting.mode_name(mode).to_lower(),
+			func() -> void: targeting_requested.emit(_shown_tower_id, mode), _tower_can_control, mode == _tower_targeting)
+	_set_card_slot(SLOT_SELL, "Sell\n%dg" % _sell_value, "Sell for %d gold (%d%% refund)" % [_sell_value, _tower_definition.sell_refund_percent],
+		func() -> void: sell_requested.emit(_shown_tower_id), _tower_can_control)
+	_set_card_slot(SLOT_CANCEL, "Cancel", "Deselect", func() -> void: selection_cleared.emit())
+
+
+func _on_card_slot_pressed(index: int) -> void:
+	var action := _card_actions[index]
+	if action.is_valid():
+		action.call()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	if event.keycode == KEY_F10:
+		toggle_settings()
+		get_viewport().set_input_as_handled()
+		return
+	var index := CARD_KEYS.find(event.keycode)
+	if index >= 0 and not _card_slots[index].disabled and _card_actions[index].is_valid():
+		_card_actions[index].call()
+		get_viewport().set_input_as_handled()
 
 
 func show_placement_message(text: String, is_error: bool) -> void:

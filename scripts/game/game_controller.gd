@@ -64,6 +64,7 @@ func _ready() -> void:
 	wintermaul_map.impact_resolved.connect(func(_tower_id: int, _hits: int, _killed: int) -> void: AudioDirector.play("impact"))
 
 	hud.setup(CATALOG)
+	hud.attach_minimap(wintermaul_map, battlefield_camera)
 	hud.tower_palette_selected.connect(_on_palette_selected)
 	hud.launch_requested.connect(_on_launch_pressed)
 	hud.upgrade_requested.connect(_on_upgrade_requested)

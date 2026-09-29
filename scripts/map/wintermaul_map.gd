@@ -1059,6 +1059,30 @@ func _bake_terrain_texture() -> ImageTexture:
 	return ImageTexture.create_from_image(image)
 
 
+## One pixel per cell for the HUD minimap: cliffs, ground tinted by position
+## owner colour, pads, and the abyss.
+func build_minimap_image() -> Image:
+	_ensure_map_data()
+	var image := Image.create(GRID_SIZE.x, GRID_SIZE.y, false, Image.FORMAT_RGBA8)
+	for y in range(GRID_SIZE.y):
+		for x in range(GRID_SIZE.x):
+			var cell := Vector2i(x, y)
+			var color := Color("06080b")
+			match int(_terrain_cells[cell]):
+				Layout.Terrain.WALL:
+					color = Color("9aa3ad")
+				Layout.Terrain.SPAWN_PAD:
+					color = Color("2b3440")
+				Layout.Terrain.EXIT_PAD:
+					color = Color("7a2a2a")
+				Layout.Terrain.OPEN:
+					color = Color("4a5a66")
+					if _build_cells.has(cell):
+						color = color.lerp(LANE_COLORS[int(_build_cells[cell])], 0.35)
+			image.set_pixel(x, y, color)
+	return image
+
+
 func _paint_ownership(canvas: CanvasItem, font: Font) -> void:
 	if _owners.is_empty():
 		return
