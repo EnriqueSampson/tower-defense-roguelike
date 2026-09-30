@@ -22,20 +22,20 @@ const MAP := BuildInfo.MAP_ID
 const MAP_PATH := "WorldClip/BattlefieldView/BattlefieldViewport/World/WintermaulMap"
 const CAMERA_PATH := "WorldClip/BattlefieldView/BattlefieldViewport/World/BattlefieldCamera"
 const ALL_POSITIONS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8]
-## Stylized layout reference cells.
-## Reference cells on the 144x160 grid (design grid x2).
-const P1_OPEN := Vector2i(34, 20)
-const P1_OPEN_B := Vector2i(36, 20)
-const P1_CREEP := Vector2i(34, 22)
-const P2_OPEN := Vector2i(72, 24)
-const P4_OPEN := Vector2i(116, 72)
-const P9_OPEN := Vector2i(80, 140)
+## Reference cells on the 164x168 grid (DESIGN_MAP x2).
+const P1_OPEN := Vector2i(20, 30)
+const P1_OPEN_B := Vector2i(22, 30)
+const P1_CREEP := Vector2i(20, 32)
+const P2_OPEN := Vector2i(76, 40)
+const P4_OPEN := Vector2i(140, 82)
+const P9_OPEN := Vector2i(80, 126)
 const VOID_CELL := Vector2i(6, 20)
-const PORTAL_CELL := Vector2i(35, 7)
-## Lane 1 exits through a ten-wide, four-deep gap (x 30-39, y 58-61). Four 2x2
-## towers across rows 58-59 leave only x 36-37 open; a 2x2 at SEAL_CELL closes it.
-const SEAL_CELL := Vector2i(36, 58)
-const SEAL_NEIGHBOURS: Array[Vector2i] = [Vector2i(30, 58), Vector2i(32, 58), Vector2i(34, 58), Vector2i(38, 58)]
+const PORTAL_CELL := Vector2i(22, 7)
+## Lane 1 narrows to a twelve-cell gap (x 16-27, y 62-63) above its no-build
+## choke. Five 2x2 towers across it leave only x 24-25 open; a 2x2 at SEAL_CELL
+## closes it.
+const SEAL_CELL := Vector2i(24, 62)
+const SEAL_NEIGHBOURS: Array[Vector2i] = [Vector2i(16, 62), Vector2i(18, 62), Vector2i(20, 62), Vector2i(22, 62), Vector2i(26, 62)]
 
 var _failures := 0
 var _checks := 0
@@ -208,7 +208,7 @@ func _test_host_disconnect_cleanup() -> void:
 func _test_classic_layout_coordinates() -> void:
 	var positions := ClassicWintermaulLayout.setup_map_coordinates()
 	_check(positions.size() == 9, "classic layout defines nine player positions")
-	_check(ClassicWintermaulLayout.GRID_SIZE == Vector2i(144, 160), "layout scales the 72 by 80 design grid to 144 by 160 cells (72 by 80 towers)")
+	_check(ClassicWintermaulLayout.GRID_SIZE == Vector2i(164, 168), "layout scales the 82 by 84 design map to 164 by 168 cells (82 by 84 towers)")
 	_check(ClassicWintermaulLayout.SPATIAL_PLAYER_ORDER == [1, 2, 3, 6, 5, 4, 7, 9, 8], "classic layout preserves Warcraft color order")
 	var spawn_cells: Dictionary = {}
 	var all_bounds_valid := true
@@ -217,20 +217,36 @@ func _test_classic_layout_coordinates() -> void:
 		all_bounds_valid = all_bounds_valid and grid.encloses(position_data["macro_bounds"])
 		for spawn in position_data["spawns"]:
 			spawn_cells[spawn] = true
-			all_bounds_valid = all_bounds_valid and ClassicWintermaulLayout.terrain_at(spawn, positions) == ClassicWintermaulLayout.Terrain.SPAWN_PAD
-		all_bounds_valid = all_bounds_valid and ClassicWintermaulLayout.is_traversable(ClassicWintermaulLayout.terrain_at(position_data["checkpoint"], positions))
-	_check(spawn_cells.size() == 10, "layout defines ten spawn portals across nine positions")
-	_check(positions[4]["spawns"].size() == 2 and positions[8]["spawns"].size() == 1, "position five spawns from two pads and position nine from one")
+			all_bounds_valid = all_bounds_valid and ClassicWintermaulLayout.terrain_at(spawn) == ClassicWintermaulLayout.Terrain.SPAWN_PAD
+		all_bounds_valid = all_bounds_valid and ClassicWintermaulLayout.is_traversable(ClassicWintermaulLayout.terrain_at(position_data["checkpoint"]))
+	_check(spawn_cells.size() == 11, "layout defines eleven spawn portals across nine positions")
+	_check(positions[1]["spawns"].size() == 2 and positions[4]["spawns"].size() == 2 and positions[8]["spawns"].size() == 1, "positions two and five spawn from twin portals and position nine from one")
+	var sides_mirror := true
+	for twin in [1, 4]:
+		var via: Array = positions[twin]["via"]
+		sides_mirror = sides_mirror and via == [[ClassicWintermaulLayout.LEFT_NECK], [ClassicWintermaulLayout.RIGHT_NECK]]
+		sides_mirror = sides_mirror and positions[twin]["spawns"][0].x < ClassicWintermaulLayout.GRID_SIZE.x / 2 and positions[twin]["spawns"][1].x > ClassicWintermaulLayout.GRID_SIZE.x / 2
+	_check(sides_mirror, "the centre positions' twin spawns each take their own side's neck")
+	var mirrored := true
+	var swapped := {"1": "3", "3": "1", "4": "6", "6": "4", "7": "8", "8": "7", "a": "c", "c": "a", "d": "f", "f": "d", "g": "h", "h": "g"}
+	for y in range(ClassicWintermaulLayout.DESIGN_GRID_SIZE.y):
+		var row: String = ClassicWintermaulLayout.DESIGN_MAP[y]
+		mirrored = mirrored and row.length() == ClassicWintermaulLayout.DESIGN_GRID_SIZE.x
+		for x in range(row.length()):
+			var tile := row[x]
+			var opposite := row[row.length() - 1 - x]
+			mirrored = mirrored and swapped.get(tile, tile) == opposite
+	_check(mirrored, "the design map is left-right symmetric apart from position ownership")
 	var p9_spawn: Vector2i = positions[8]["spawns"][0]
 	_check(p9_spawn.x == ClassicWintermaulLayout.FINAL_GATE.x and p9_spawn.y > positions[6]["spawns"][0].y and p9_spawn.y < ClassicWintermaulLayout.FINAL_CHECKPOINT.y, "position nine spawns centred, below the brow spawns and above the relay")
 	_check(all_bounds_valid, "macro bounds fit the grid and every spawn sits on a pad with a reachable checkpoint")
 	var p9: Dictionary = positions[8]
-	_check(p9["macro_bounds"] == Rect2i(54, 90, 40, 66), "position nine owns the bottom-center final defense")
-	_check(p9["checkpoint"] == ClassicWintermaulLayout.FINAL_CHECKPOINT and ClassicWintermaulLayout.FINAL_GATE == Vector2i(71, 155), "position nine exits through the relay checkpoint and final gate")
+	_check(p9["macro_bounds"] == Rect2i(44, 108, 76, 50), "position nine owns the bottom-center final defense")
+	_check(p9["checkpoint"] == ClassicWintermaulLayout.FINAL_CHECKPOINT and ClassicWintermaulLayout.FINAL_GATE == Vector2i(81, 163), "position nine exits through the relay checkpoint and final gate")
 	_check(ClassicWintermaulLayout.terrain_at(ClassicWintermaulLayout.FINAL_GATE) == ClassicWintermaulLayout.Terrain.EXIT_PAD, "the final gate sits on the exit pad")
-	_check(ClassicWintermaulLayout.terrain_at(Vector2i(0, 0)) == ClassicWintermaulLayout.Terrain.VOID and ClassicWintermaulLayout.terrain_at(Vector2i(16, 0)) == ClassicWintermaulLayout.Terrain.WALL, "void surrounds the outer hedge")
+	_check(ClassicWintermaulLayout.terrain_at(Vector2i(0, 0)) == ClassicWintermaulLayout.Terrain.VOID and ClassicWintermaulLayout.terrain_at(Vector2i(10, 0)) == ClassicWintermaulLayout.Terrain.WALL, "void surrounds the outer hedge")
 	_check(ClassicWintermaulLayout.terrain_at(P1_OPEN) == ClassicWintermaulLayout.Terrain.OPEN and ClassicWintermaulLayout.position_index_at(P1_OPEN) == 0, "lane one ground below the spawn pad belongs to position one")
-	_check(ClassicWintermaulLayout.terrain_at(Vector2i(16, 72)) == ClassicWintermaulLayout.Terrain.OPEN, "side entrances carve gaps through the outer hedge")
+	_check(ClassicWintermaulLayout.terrain_at(Vector2i(8, 86)) == ClassicWintermaulLayout.Terrain.OPEN and ClassicWintermaulLayout.position_index_at(Vector2i(8, 86)) == -1, "side entrances carve no-build gaps through the cliffs")
 
 
 func _test_content_catalog_validation() -> void:
@@ -605,8 +621,18 @@ func _test_grid_projection_and_placement() -> void:
 		routes_share_goal = routes_share_goal and map.get_route_start(lane_id) != map.get_route_goal(lane_id)
 		routes_share_goal = routes_share_goal and map.get_route_goal(lane_id) == WintermaulMap.GOAL_CELL
 	_check(routes_share_goal, "all nine positions converge on the final gate")
-	_check(map.get_route_targets(0) == [Vector2i(35, 61), ClassicWintermaulLayout.FINAL_CHECKPOINT, Vector2i(71, 155)], "P1 relays through its checkpoint and the shared relay checkpoint")
-	_check(map.get_route_targets(8) == [ClassicWintermaulLayout.FINAL_CHECKPOINT, Vector2i(71, 155)], "P9 defends the relay checkpoint before the final gate")
+	_check(map.get_route_targets(0) == [Vector2i(21, 67), ClassicWintermaulLayout.FINAL_CHECKPOINT, Vector2i(81, 163)], "P1 relays through its checkpoint and the shared relay checkpoint")
+	_check(map.get_route_targets(8) == [ClassicWintermaulLayout.FINAL_CHECKPOINT, Vector2i(81, 163)], "P9 defends the relay checkpoint before the final gate")
+	var left_route := map.get_grid_path(map.get_route_targets(1, 0)[0], map.get_route_targets(1, 0)[1])
+	var right_route := map.get_grid_path(map.get_route_targets(1, 1)[0], map.get_route_targets(1, 1)[1])
+	_check(map.get_route_targets(1, 0)[1] == ClassicWintermaulLayout.LEFT_NECK and map.get_route_targets(1, 1)[1] == ClassicWintermaulLayout.RIGHT_NECK and absi(left_route.size() - right_route.size()) <= 2, "P2's twin spawns split evenly down the left and right necks (the even-width grid has no centre cell)")
+	var grunt := Catalog.get_creep("grunt")
+	var right_child := map.spawn_creep(9102, 4, grunt, -1, 1.0, {"spawner": 1, "start_position": map.grid_to_world(ClassicWintermaulLayout.RIGHT_NECK), "start_stage": 1})
+	_check(right_child.spawner_index == 1 and right_child.get_current_target() == ClassicWintermaulLayout.RIGHT_NECK, "a split child keeps its parent's side even when its own id would pick the other spawner")
+	var fallen_spawner := [-1]
+	map.creep_killed.connect(func(creep_id: int) -> void: fallen_spawner[0] = int(map.last_creep_route(creep_id).get("spawner", -1)), CONNECT_ONE_SHOT)
+	right_child.take_damage(right_child.health + 100, 100)
+	_check(fallen_spawner[0] == 1, "a fallen creep hands its spawner to its split children")
 	_check(map.get_spawner_cells(4).size() == 2 and map.get_spawner_cells(8).size() == 1 and map.get_spawner_cells(0).size() == 1, "position five exposes two spawners; position nine one central spawner")
 	var first := map.spawn_creep(1, 4, _creep(1.0, 10))
 	var second := map.spawn_creep(2, 4, _creep(1.0, 10))
@@ -618,7 +644,7 @@ func _test_grid_projection_and_placement() -> void:
 	_check(all_routes_open, "every spawner reaches its position checkpoint through the hedges")
 	_check(not map.can_place_tower(PORTAL_CELL), "tower placement rejects spawn pad cells")
 	_check(not map.can_place_tower(VOID_CELL), "tower placement rejects terrain outside the hedges")
-	_check(not map.can_place_tower(Vector2i(16, 0)) and not map.can_place_tower(WintermaulMap.GOAL_CELL), "tower placement rejects hedge walls and the exit pad")
+	_check(not map.can_place_tower(Vector2i(10, 0)) and not map.can_place_tower(WintermaulMap.GOAL_CELL), "tower placement rejects hedge walls and the exit pad")
 	_check(map.can_place_tower(open_cell), "tower placement accepts an open cell")
 	_check(map.get_cell_position_index(open_cell) == 0 and map.get_cell_position_index(P9_OPEN) == 8, "build cells resolve to their owning position")
 	var tower := map.spawn_tower(1, open_cell, Bolt)
@@ -659,7 +685,7 @@ func _test_tower_collision_pathing() -> void:
 	_check(map.get_grid_revision() == 1, "accepted tower collision increments the path revision")
 	_check(not obstacle_cell in path_after and path_after != path_before, "tower collision forces a new shortest path")
 	_seal_lane_one_except(map, SEAL_CELL)
-	_check(map.can_place_tower(Vector2i(42, 54), Bolt.footprint), "a tower beside the gap still leaves the route open")
+	_check(map.can_place_tower(Vector2i(12, 54), Bolt.footprint), "a tower beside the gap still leaves the route open")
 	_check(not map.can_place_tower(SEAL_CELL, Bolt.footprint), "anti-block rejects sealing the lane exit gap")
 	map.queue_free()
 
@@ -1173,31 +1199,36 @@ func _test_air_creeps_follow_every_checkpoint() -> void:
 	map.spawn_tower(8150, P1_CREEP - Vector2i(1, 1), Bolt)
 	var all_lanes_ok := true
 	for lane in range(ClassicWintermaulLayout.PLAYER_COUNT):
-		var flyer := map.spawn_creep(8160 + lane, lane, gargoyle)
-		var targets := map.get_route_targets(lane)
-		var closest: Array[float] = []
-		for target in targets:
-			closest.append(INF)
-		var off_route := 0
-		var steps := 0
-		while not flyer.has_finished() and steps < 6000:
-			flyer._process(0.05)
-			for index in range(targets.size()):
-				closest[index] = minf(closest[index], flyer.plane_position.distance_to(map.grid_to_world(targets[index])))
-			if not ClassicWintermaulLayout.is_traversable(map.get_terrain(map.world_to_grid(flyer.plane_position))):
-				off_route += 1
-			steps += 1
-		var visited := flyer.has_finished()
-		for distance in closest:
-			visited = visited and distance < WintermaulMap.TILE_SIZE * 0.5
-		all_lanes_ok = all_lanes_ok and visited and off_route == 0
-		if not (visited and off_route == 0):
-			printerr("lane %d: closest %s, %d steps over walls or void" % [lane, closest, off_route])
-	_check(all_lanes_ok, "flyers from every position pass through each checkpoint and stay over their lanes")
+		for spawner in range(map.get_spawner_cells(lane).size()):
+			all_lanes_ok = _flyer_visits_route(map, gargoyle, lane, spawner) and all_lanes_ok
+	_check(all_lanes_ok, "flyers from every spawner pass through each checkpoint and stay over their lanes")
 	var mid := map.spawn_creep(8190, 0, gargoyle, -1, 1.0, {"start_position": map.grid_to_world(map.get_route_targets(0)[0]) + Vector2(0, 40), "start_stage": 1})
 	var mid_points: PackedVector2Array = mid.get("_points")
 	_check(mid_points[-1] == map.grid_to_world(map.get_route_targets(0)[1]) and mid_points.size() >= 2, "mid-route flyers (split children) join their stage's flight path")
 	map.queue_free()
+
+
+func _flyer_visits_route(map: WintermaulMap, gargoyle: CreepDefinition, lane: int, spawner: int) -> bool:
+	var flyer := map.spawn_creep(8160 + lane * 2 + spawner, lane, gargoyle, -1, 1.0, {"spawner": spawner})
+	var targets := map.get_route_targets(lane, spawner)
+	var closest: Array[float] = []
+	for target in targets:
+		closest.append(INF)
+	var off_route := 0
+	var steps := 0
+	while not flyer.has_finished() and steps < 6000:
+		flyer._process(0.05)
+		for index in range(targets.size()):
+			closest[index] = minf(closest[index], flyer.plane_position.distance_to(map.grid_to_world(targets[index])))
+		if not ClassicWintermaulLayout.is_traversable(map.get_terrain(map.world_to_grid(flyer.plane_position))):
+			off_route += 1
+		steps += 1
+	var visited := flyer.has_finished()
+	for distance in closest:
+		visited = visited and distance < WintermaulMap.TILE_SIZE * 0.5
+	if not (visited and off_route == 0):
+		printerr("lane %d spawner %d: closest %s, %d steps over walls or void" % [lane, spawner, closest, off_route])
+	return visited and off_route == 0
 
 
 func _test_magic_immunity() -> void:

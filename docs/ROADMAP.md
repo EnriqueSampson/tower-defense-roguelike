@@ -19,11 +19,11 @@ A faithful co-op Wintermaul for modern players:
 
 ## 2. Where we are
 
-### Built and tested (442 headless checks, a two-process sync check, and a balance harness)
+### Built and tested (502 headless checks, a two-process sync check, and a balance harness)
 
 - Host-authoritative co-op over Steam lobbies, plus solo on `OfflineMultiplayerPeer`. Nine positions, with the host controlling unfilled and disconnected positions.
 - A WC3-style builder per player: right-click to move, shift-queued build orders, Stop, construction over time, and cancel for a full refund. Solo uses one builder at double speed.
-- Mazing on a 144×160 grid (72×80 two-by-two towers, scaled to classic Wintermaul proportions): A* rerouting, anti-block placement, relay checkpoints into Position 9, and shared lives and gold.
+- Mazing on a 164×168 grid (82×84 two-by-two towers, retraced from the classic Wintermaul map): A* rerouting, anti-block placement, relay checkpoints into Position 9, and shared lives and gold.
 - Four builder races picked in the lobby (Humans, Orcs, Elves, Bugs) with 58 towers: classic Wintermaul upgrade trees (branching, up to four tiers) plus one Relic-gated ultimate per race, selling, and four target priorities.
 - A halfway choice after level 15: each player takes a Relic (their race's ultimate tower, for gold plus the Relic) or recruits a second race.
 - A classic 30-level run: 17 creeps including air, invisible, magic-immune, swarm and splitting creeps, with a boss every fifth level.
@@ -58,6 +58,17 @@ A faithful co-op Wintermaul for modern players:
 - **Run length:** classic 30+ levels only, for the MVP. Presets such as Short, Long and Endless are post-MVP.
 - **Invisible creeps are in.** Each race gets detection through a detection tower, a detection upgrade, or either one, depending on the race.
 
+### Stock-take, September 30, 2026
+
+Nobody but the developer has played a full run yet, so fun is unproven. The balance harness hints at a flat middle: bots fill their home position by levels 11–18 and then bank gold, and only boss levels cost lives. Decisions:
+
+- **Gold per player, not a team pool,** as in WC3: each player earns and spends their own gold and can send gold to teammates, including from chat. Lives stay shared. Unfilled positions' gold goes to the host, who controls them.
+- **The Dungeon Crawler Carl framing, not only funny names:** a snarky "System" announcer reacting to play (first leak, bosses, builder trips, selling sprees, near-death saves), run-upgrade offers presented as sponsor loot boxes with rarities, and achievements with sarcastic titles.
+- **Per-player end-of-run awards** from the multiboard stats ("Employee of the Month", "Most Leaks Allowed").
+- **A late-game gold sink with real choices,** since gold piles up once a position is full.
+- **Variety between runs** (wave mutators, boss variants), but only once playtests show runs feel samey.
+- **A 3v3 "Wintermaul Wars" mode before Early Access** (creep sending between teams, in the spirit of Legion TD). Not started; keep maps and modes data-driven so a Wars map is another `DESIGN_MAP`.
+
 ## 4. Phases
 
 Each phase ends with exit criteria and a short solo play session. The headless suite stays green throughout. Any change to RPCs or snapshots bumps `BuildInfo.PROTOCOL_VERSION`.
@@ -83,7 +94,8 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 - [x] Terrain props and death animations. Cliffs carry about 1,000 pines, 300 snow-capped boulders and 66 ice-crystal clusters, each type one MultiMesh draw call and never on buildable ground. Killed creeps hand their model to a presentation-only `Corpse` that plays `death` (placeholders topple sideways, which reads clearly from the WC3 camera), or falls over when there is no `death` animation, then sinks into the ground. The battlefield now renders only above the console, as WC3 does, so camera focus lands in the centre of the visible area.
 - [x] Tower ranges matched to Wintermaul's starter towers, taken from the map's unit data (1 tower = 128 WC3 units = 56 px): Bolt 5 towers (Wintermaul generalists are 4.7–5.9), Cannon 3.5 (splash towers 3.1–3.5), Frost 5 (slows 5.5–6.2). Tier and run-upgrade range bonuses were scaled to match. Splash radius is unchanged pending Phase 3 balance.
 - [x] Position 9 spawns once, centred just below the chin and close to the relay and gate, as the single "Grey spawn" does in Wintermaul v.72.2 (v.73, X10.1 and Hb use two spawns). The old mouth channel is buildable ground.
-- [x] Map scale: measured the real Wintermaul map (84×84 playable tiles = 82×84 towers, lanes about 10 towers wide and 25 long, Northrend tileset) and scaled our own layout 2× to 144×160 cells (72×80 towers). The measurements are used for proportions only; no map data is copied.
+- [x] Map scale: measured the real Wintermaul map (84×84 playable tiles = 82×84 towers, lanes about 10 towers wide and 25 long, Northrend tileset) and scaled our own layout 2× to 144×160 cells (72×80 towers).
+- [x] Map retrace: `ClassicWintermaulLayout` is now an 82×84 ASCII design map (one character per tower) hand-retraced from the classic layout: ten-wide top lanes with no-build chokes, one 6 | 5 | 4 middle band, Position 5 spawning from nooks beside its chamber, 7 and 8 spawning under the brow and walking diagonals to the side lanes, and Position 9 spawning directly under the chin (the old empty strip is gone) and holding the funnel. Positions 2 and 5 spawn from left and right twins, and each twin routes through its own side's neck (a per-spawner `via` waypoint; split children inherit their parent's side), so the centre's creeps split evenly instead of all going left. No map files are copied (see ASSET_LICENSES).
 - [x] WC3-style UI: the battlefield fills the screen behind a top resource bar (Menu/F10, phase, wave, timer, lives, gold, Launch and Ready), a top-right multiboard (positions, owners, spawns, modifiers, seed), and a bottom console. The console holds a minimap (terrain, position tints, towers, creeps and the camera trapezoid; click or drag to move the camera), a portrait with the selected tower's stats or the wave preview, and a 4×3 command card with QWER/ASDF/ZXCV hotkeys. The camera pans with the arrow keys, as in WC3. The theme is procedural (`WC3Theme`) until authored UI art exists.
 - [x] Edge panning only at the real window edges, so moving the mouse onto the console, top bar or multiboard no longer nudges the camera (playtest feedback).
 - [x] UI polish: 3D model portraits in the console (the selected tower's or creep's model in its own small viewport, playing idle or walk); click a creep to inspect it (red WC3 selection circle, live health, armor, speed, bounty, traits and home position, cleared on death); a multiboard that folds to its title; and fixed two-line command-card slots so the console keeps one height in every mode.
@@ -111,6 +123,14 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 Found while testing, for later phases:
 - The creep snapshot is a list of dictionaries with string keys and exceeds the ENet MTU with only 18 creeps (Godot warns about packet loss). Pack it into typed arrays before the 9-player test (Phase 6).
 - The host broadcasts snapshots to peers whose game scene hasn't loaded yet, which logs "node not found" RPC errors on them. It's harmless, because a client requests state on load, but it's noisy.
+
+### Before Playtest gate A (added September 30)
+
+- [ ] Main menu and lobby finder redesign with Dungeon Crawler Carl theming.
+- [ ] Gold per player: `RunState` keeps a balance per peer (bounties and income split between players, host takes unfilled positions' share), spending checks the builder owner's gold, the HUD shows your gold and the multiboard everyone's, and a Send Gold command. Protocol bump.
+- [ ] In-game chat (Enter to talk, lobby-wide), with a gold command (for example `/give 50 Name`) beside the HUD's Send Gold.
+- [ ] The System announcer: reactive, sarcastic lines for run events.
+- [ ] End-of-run awards on the end screen.
 
 ### Playtest gate A: First friends playtest
 
@@ -162,6 +182,9 @@ Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash 
 
 - [x] Halfway choice (added from playtest feedback): after level 15 every builder takes a Relic, a one-time resource that lets them build their race's unique ultimate for gold plus the Relic, or recruits a second race whose towers their builder can also build. The wave timer waits for everyone (60 s, then a Relic). See ARCHITECTURE.md §9.
 - [ ] Retune when offers appear and how large the upgrade pool is for long runs. Offers are already race-aware (Phase 4).
+- [ ] Run-upgrade offers as sponsor loot boxes with rarities, voiced by the System.
+- [ ] Achievements with sarcastic titles.
+- [ ] A late-game gold sink with real choices (for example pricier ultimates, paid run events, or rewards for banked gold).
 - [ ] Optional run events or modifiers, only if Playtest gate A or B shows runs feel samey.
 - [ ] Decide about meta-progression. It stays deferred unless playtests ask for it.
 
@@ -186,6 +209,10 @@ Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash 
 - [ ] Performance budgets met on the Iris 550 with final art and 9 players.
 - [ ] Settings polish: graphics options, key rebinding for the build grid, and accessibility basics.
 - [ ] Legal and naming review (see §5).
+
+### Phase 8: Wintermaul Wars, 3v3 (before Early Access)
+
+- [ ] A team-versus-team mode with creep sending, on its own map. Scope it after Playtest gate B.
 
 ## 5. Risks
 
@@ -217,4 +244,4 @@ These conventions keep placeholder and final models interchangeable. The placeho
 
 ## 8. Explicitly deferred
 
-Not on the critical path unless playtests change our minds: run-length presets (Short, Long, Endless), PvP or sending modes, a map editor or multiple maps, procedural maps, late join, reconnect, host migration, spectating, leaderboards, Steam Cloud, mobile or console, and in-game voice.
+Not on the critical path unless playtests change our minds: run-length presets (Short, Long, Endless), PvP modes other than the 3v3 Wars mode (Phase 8), a map editor or multiple maps, procedural maps, late join, reconnect, host migration, spectating, leaderboards, Steam Cloud, mobile or console, and in-game voice.

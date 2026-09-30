@@ -12,4 +12,4 @@ Every asset distributed with the game is listed here. Add a row before shipping 
 | `addons/godotsteam/` | GDExtension binaries and scripts | GodotSteam 4.22 | MIT — see `addons/godotsteam/license.md` |
 | Steamworks SDK redistributables (`libsteam_api.*`, `steam_api64.dll`) | Runtime library | Valve Steamworks SDK 1.65 | Steamworks SDK Access Agreement |
 
-No third-party textures, sprites, fonts, or audio files are distributed. The classic Wintermaul layout is used as structural inspiration only; no original map assets are copied.
+No third-party textures, sprites, fonts, or audio files are distributed. The battlefield (`ClassicWintermaulLayout.DESIGN_MAP`) is hand-retraced from the classic Wintermaul map's structure (lane, band and funnel proportions at one character per tower). No map files, pathing data, terrain, doodads, models, textures, text or sounds from the original are distributed. Before release, confirm with counsel that a gameplay-layout homage raises no issue.

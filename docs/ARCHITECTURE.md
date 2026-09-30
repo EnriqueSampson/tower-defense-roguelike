@@ -48,7 +48,7 @@ Host-only runtime that is *not* in `RunState`: spawn queues and timers, bounty l
 | `_apply_creep_snapshot` (creep presentation records) | unreliable ordered | every 0.15 s during waves, only when peers are connected |
 | `_apply_builder_snapshot` (`BuilderSystem.records()`: owner, position, current target, state, queued build sites) | unreliable ordered | every 0.15 s, only when peers are connected; the same records ride in the state snapshot as `builders` |
 | `_builder_started_build` | reliable event | when a builder starts construction (plays `build`) |
-| `_spawn_creep_visual` (carries a `start` dictionary: empty for pad spawns, the fall point, stage and progress for a splitter's children), `_remove_creep_visual`, `_spawn_tower_visual`, `_update_tower_visual`, `_remove_tower_visual`, `_clear_creeps_visual` | reliable events | on change |
+| `_spawn_creep_visual` (carries a `start` dictionary: empty for pad spawns, the fall point, stage, progress and spawner for a splitter's children; a pad spawn's spawner is `creep_id % spawner count` on every peer, and the spawner picks the route, since twin spawners can take different sides of a fork), `_remove_creep_visual`, `_spawn_tower_visual`, `_update_tower_visual`, `_remove_tower_visual`, `_clear_creeps_visual` | reliable events | on change |
 | `_projectile_fired` | unreliable | per shot |
 | `_play_event`, `_show_notice`, `_show_bounty`, `_placement_feedback`, `_transaction_feedback` | reliable | on change |
 
@@ -118,7 +118,7 @@ Typed RPC parameters reject malformed payloads at the transport layer before the
 
 | Trait | Rule |
 | --- | --- |
-| Air (`CreepDefinition.is_air`) | Follows its lane's fixed flight path (`WintermaulMap.get_air_route`: the corners of the empty-map route, so every corridor and checkpoint) and ignores towers: never repaths, never blocks building. Only towers with `can_target_air` target or splash it |
+| Air (`CreepDefinition.is_air`) | Follows its spawner's fixed flight path (`WintermaulMap.get_air_route`: the corners of the empty-map route, so every corridor and checkpoint) and ignores towers: never repaths, never blocks building. Only towers with `can_target_air` target or splash it |
 | Magic immune | Magic towers (`TowerDefinition.is_magic`, Frost) skip it and their impacts deal no damage or slow |
 | Invisible | Targetable only while inside some tower's `detection_range` (the Nosy Neighbor tower, or any tower with the Snitch Network upgrade). Splash still hits it, as in WC3 |
 | Splitter (`split_into` × `split_count`) | On death, children spawn where it fell on the same stage, with the parent's health and bounty multipliers. Children never split again |
@@ -128,5 +128,6 @@ Levels scale creep health by `HEALTH_GROWTH` and regular bounties by `BOUNTY_GRO
 ## 11. Known limitations (documented, not bugs)
 
 - Clients may briefly show a creep alive after the host killed it (≤ one creep snapshot interval).
+- Creep snapshots do not carry the spawner. If a client first learns of a split child from a snapshot rather than its spawn event, it derives the spawner from the creep ID, and may briefly steer toward the other side's neck until the next snapshot corrects its position.
 - Position ownership maps Steam IDs to peer IDs at run start; peers that have not finished the transport handshake resolve to host control until the next roster refresh.
 - Host migration, late join, and permanent progression are deferred (see the roadmap).

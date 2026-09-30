@@ -8,9 +8,9 @@ extends SceneTree
 
 const GAME_SCENE_PATH := "res://scenes/game/Game.tscn"
 const MAP_PATH := "WorldClip/BattlefieldView/BattlefieldViewport/World/WintermaulMap"
-const P1_OPEN := Vector2i(34, 20)
-const P2_OPEN := Vector2i(72, 24)
-const P9_OPEN := Vector2i(80, 140)
+const P1_OPEN := Vector2i(20, 30)
+const P2_OPEN := Vector2i(76, 40)
+const P9_OPEN := Vector2i(80, 126)
 const CONNECT_TIMEOUT := 10.0
 ## Host timeline (seconds after the client connects).
 const BUILD_CHECK_AT := 12.0

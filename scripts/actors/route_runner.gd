@@ -59,7 +59,8 @@ var _model: Node3D
 var _model_height := 0.0
 var _selection_circle: MeshInstance3D
 var _fly_height := 0.0
-var _spawn_cell := Vector2i.ZERO
+## Which of the lane's spawners this creep's route starts from.
+var spawner_index := 0
 
 
 func _ready() -> void:
@@ -95,7 +96,7 @@ func setup(
 	magic_immune = bool(options.get("magic_immune", false))
 	invisible = bool(options.get("invisible", false))
 	_fly_height = FLY_HEIGHT if is_air else 0.0
-	_spawn_cell = start_cell
+	spawner_index = int(options.get("spawner", 0))
 	radius = float(options.get("radius", 6.0))
 	speed_multiplier = float(options.get("speed_multiplier", 1.0))
 	_visual_scene = options.get("visual_scene") as PackedScene
@@ -288,7 +289,7 @@ func _load_current_stage(from_cell: Vector2i) -> void:
 ## checkpoint) but ignore towers. Mid-stage starts (split children, client
 ## corrections) join at the waypoint after the nearest one.
 func _air_points() -> PackedVector2Array:
-	var route := _map.get_air_route(lane_id, _stage_index, _spawn_cell)
+	var route := _map.get_air_route(lane_id, _stage_index, spawner_index)
 	var target := _map.grid_to_world(get_current_target())
 	if route.is_empty():
 		return PackedVector2Array([plane_position, target])

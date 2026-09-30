@@ -60,6 +60,7 @@ Tuning history:
 - Before races (three towers with linear tiers): growth 1.14 let the lazy wall reach level 28 and the maze bot coast; 1.17 beat the maze bot at level 28; 1.16 was chosen.
 - With races and upgrade trees the bots got stronger. First pass at 1.16: Humans 20 lives, Bugs 18, Elves 6, Orcs lost at level 29 (no air coverage once the axe line became the ground-only Lizard Rider). The Lizard line now hits air, the Minivan and Musketeer lost some damage, Elves' Ranger, Hippogryph and Owl hit harder, and the Ancient Ent now hits air. Growth rose to 1.18 (Humans 20, Orcs 22, Elves 17, Bugs 19; lazy bot lost at 28).
 - New branches and ultimates: Elves went to 25 lives with no leaks; the Thornbush (now 30 gold, weaker slow) and Moon Well (less damage and splash) were trimmed, with no change in the result.
+- Map retrace (82×84 towers, twin centre spawns split left and right), Humans, seed 42: solo Victory with 19 lives (1 leak; was 14 lives on the old map). Four players, Relics: Defeat at level 28, against level 24 on the old map in the same run. The new map leaks 7 on level 1 in four-player lobbies, because bots start at their home positions and little gold reaches the shared funnel in time. Watch the opening in playtests.
 
 ## Known gaps
 

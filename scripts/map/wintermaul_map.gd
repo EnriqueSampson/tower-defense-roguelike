@@ -46,7 +46,7 @@ const TILE_SIZE := MapProjection.TILE_SIZE
 const GOAL_CELL := Layout.FINAL_GATE
 const LANE_COLORS: Array[Color] = Layout.PLAYER_COLORS
 const GROUND_DETAIL_TILES := 12.0
-## Terrain texture resolution; 8 px per cell keeps the 144x160 map at 1152x1280.
+## Terrain texture resolution; 8 px per cell keeps the 164x168 map at 1312x1344.
 const BAKE_PIXELS_PER_CELL := 8
 const DECAL_HEIGHT := 0.015
 const LANDMARK_HEIGHT := 0.03
@@ -54,10 +54,12 @@ const LANDMARK_HEIGHT := 0.03
 var _routes: Array[PackedVector2Array] = []
 var _spawner_routes: Array[Array] = []
 var _spawner_cells: Array[Array] = []
+## lane -> spawner -> stage targets. Spawners of one lane may take different
+## sides of a fork (see ClassicWintermaulLayout "via").
 var _route_targets: Array[Array] = []
-## Flight paths, fixed at load: lane -> [stage 0 by spawn cell (Dictionary),
-## stage 1 corners, ...]. Corners of the shortest route on the empty map,
-## so flyers follow each lane's corridors and checkpoints but ignore mazes.
+## Flight paths, fixed at load: lane -> spawner -> [stage 0 corners, stage 1
+## corners, ...]. Corners of the shortest route on the empty map, so flyers
+## follow each lane's corridors and checkpoints but ignore mazes.
 var _air_routes: Array[Array] = []
 var _required_segments: Array[Dictionary] = []
 var _terrain_cells: Dictionary = {}
@@ -190,13 +192,15 @@ func _on_view_changed() -> void:
 
 ## Positions with several spawners alternate between them by creep id so every
 ## peer picks the same pad without extra replication. `start` (split children)
-## may hold start_position, start_stage and start_distance.
+## may hold start_position, start_stage, start_distance and spawner (the
+## parent's, so children keep its side of any fork).
 func spawn_creep(creep_id: int, lane_id: int, definition: CreepDefinition, health := -1, speed_multiplier := 1.0, start := {}) -> RouteRunner:
 	_ensure_map_data()
 	if lane_id < 0 or lane_id >= _routes.size() or definition == null:
 		return null
 	var spawners: Array = _spawner_cells[lane_id]
-	var spawn_cell: Vector2i = spawners[creep_id % spawners.size()]
+	var spawner_index := int(start.get("spawner", creep_id)) % spawners.size()
+	var spawn_cell: Vector2i = spawners[spawner_index]
 	var runner := RouteRunnerScene.new() as RouteRunner
 	%RouteRunners.add_child(runner)
 	_invalidate_active_creeps()
@@ -213,13 +217,15 @@ func spawn_creep(creep_id: int, lane_id: int, definition: CreepDefinition, healt
 		"radius": definition.radius,
 		"speed_multiplier": speed_multiplier,
 		"visual_scene": definition.visual_scene,
+		"spawner": spawner_index,
 	}
 	options.merge(start, true)
+	options["spawner"] = spawner_index
 	runner.setup(
 		creep_id,
 		lane_id,
 		spawn_cell,
-		get_route_targets(lane_id),
+		get_route_targets(lane_id, spawner_index),
 		definition.speed * TILE_SIZE,
 		LANE_COLORS[lane_id],
 		definition.health if health < 0 else health,
@@ -778,12 +784,12 @@ func _ensure_map_data() -> void:
 	for y in range(GRID_SIZE.y):
 		for x in range(GRID_SIZE.x):
 			var cell := Vector2i(x, y)
-			var terrain := Layout.terrain_at(cell, _positions)
+			var terrain := Layout.terrain_at(cell)
 			_terrain_cells[cell] = terrain
 			if Layout.is_traversable(terrain):
 				traversable_cells[cell] = true
 			if terrain == Layout.Terrain.OPEN:
-				var owner := Layout.position_index_at(cell, _positions)
+				var owner := Layout.position_index_at(cell)
 				if owner >= 0:
 					_build_cells[cell] = owner
 
@@ -791,40 +797,39 @@ func _ensure_map_data() -> void:
 		var position_data: Dictionary = _positions[lane_id]
 		var spawners: Array = position_data["spawns"]
 		_spawner_cells.append(spawners.duplicate())
-		for spawn_cell in spawners:
-			route_starts.append(spawn_cell)
-		var route_nodes := _build_route_nodes(position_data)
-		var targets: Array[Vector2i] = []
-		for node_index in range(1, route_nodes.size()):
-			targets.append(route_nodes[node_index])
-			_required_segments.append({"start": route_nodes[node_index - 1], "target": route_nodes[node_index]})
-		for spawner_index in range(1, spawners.size()):
-			_required_segments.append({"start": spawners[spawner_index], "target": route_nodes[1]})
-		_route_targets.append(targets)
+		var lane_targets: Array = []
+		for spawner_index in range(spawners.size()):
+			route_starts.append(spawners[spawner_index])
+			var route_nodes := _build_route_nodes(position_data, spawner_index)
+			var targets: Array[Vector2i] = []
+			for node_index in range(1, route_nodes.size()):
+				targets.append(route_nodes[node_index])
+				_required_segments.append({"start": route_nodes[node_index - 1], "target": route_nodes[node_index]})
+			lane_targets.append(targets)
+		_route_targets.append(lane_targets)
 	_path_grid = PathGridModel.new(GRID_SIZE, traversable_cells, route_starts, GOAL_CELL)
 
 	# Initial shortest routes are presentation hints; creeps repath as mazes grow.
 	# The same empty-map segments become the flight paths of air creeps.
 	for lane_id in range(_positions.size()):
 		var lane_routes: Array = []
-		var air_stages: Array = [{}]
-		for spawn_cell in _spawner_cells[lane_id]:
+		var lane_air: Array = []
+		for spawner_index in range(_spawner_cells[lane_id].size()):
+			var spawn_cell: Vector2i = _spawner_cells[lane_id][spawner_index]
 			var route := PackedVector2Array([spawn_cell])
+			var air_stages: Array[PackedVector2Array] = []
 			var cursor: Vector2i = spawn_cell
-			for stage_index in range(_route_targets[lane_id].size()):
-				var target: Vector2i = _route_targets[lane_id][stage_index]
+			for target: Vector2i in _route_targets[lane_id][spawner_index]:
 				var segment := _path_grid.get_path(cursor, target)
 				for point_index in range(1, segment.size()):
 					route.append(segment[point_index])
-				if stage_index == 0:
-					air_stages[0][spawn_cell] = _corner_points(segment)
-				elif air_stages.size() <= stage_index:
-					air_stages.append(_corner_points(segment))
+				air_stages.append(_corner_points(segment))
 				cursor = target
 			lane_routes.append(route)
+			lane_air.append(air_stages)
 		_spawner_routes.append(lane_routes)
 		_routes.append(lane_routes[0])
-		_air_routes.append(air_stages)
+		_air_routes.append(lane_air)
 
 
 ## World-space corners of a grid path (the turns plus both ends).
@@ -839,17 +844,15 @@ func _corner_points(cells: Array[Vector2i]) -> PackedVector2Array:
 	return corners
 
 
-## Flight path of an air creep for one stage of its lane: the corners of the
-## empty-map route into the stage's checkpoint. Stage 0 depends on the spawn
-## pad the creep started from.
-func get_air_route(lane_id: int, stage_index: int, spawn_cell: Vector2i) -> PackedVector2Array:
+## Flight path of an air creep for one stage of its spawner's route: the
+## corners of the empty-map route into the stage's checkpoint.
+func get_air_route(lane_id: int, stage_index: int, spawner_index := 0) -> PackedVector2Array:
 	_ensure_map_data()
-	if lane_id < 0 or lane_id >= _air_routes.size() or stage_index < 0 or stage_index >= _air_routes[lane_id].size():
+	if lane_id < 0 or lane_id >= _air_routes.size():
 		return PackedVector2Array()
-	var stage: Variant = _air_routes[lane_id][stage_index]
-	if stage is Dictionary:
-		return stage.get(spawn_cell, stage.values()[0])
-	return stage
+	var lane_air: Array = _air_routes[lane_id]
+	var stages: Array = lane_air[clampi(spawner_index, 0, lane_air.size() - 1)]
+	return stages[stage_index] if stage_index >= 0 and stage_index < stages.size() else PackedVector2Array()
 
 
 func grid_to_world(cell: Vector2i) -> Vector2:
@@ -915,11 +918,12 @@ func get_route_goal(lane_id: int) -> Vector2i:
 	return Vector2i(_routes[lane_id][-1]) if lane_id >= 0 and lane_id < _routes.size() else Vector2i(-1, -1)
 
 
-func get_route_targets(lane_id: int) -> Array[Vector2i]:
+func get_route_targets(lane_id: int, spawner_index := 0) -> Array[Vector2i]:
 	_ensure_map_data()
 	var targets: Array[Vector2i] = []
 	if lane_id >= 0 and lane_id < _route_targets.size():
-		targets.assign(_route_targets[lane_id])
+		var lane_targets: Array = _route_targets[lane_id]
+		targets.assign(lane_targets[clampi(spawner_index, 0, lane_targets.size() - 1)])
 	return targets
 
 
@@ -975,8 +979,12 @@ func _get_active_creep_segments() -> Array[Dictionary]:
 	return segments
 
 
-func _build_route_nodes(position_data: Dictionary) -> Array[Vector2i]:
-	var nodes: Array[Vector2i] = [position_data["spawn"], position_data["checkpoint"]]
+func _build_route_nodes(position_data: Dictionary, spawner_index: int) -> Array[Vector2i]:
+	var nodes: Array[Vector2i] = [position_data["spawns"][spawner_index], position_data["checkpoint"]]
+	var via: Array = position_data.get("via", [])
+	if spawner_index < via.size():
+		for waypoint: Vector2i in via[spawner_index]:
+			nodes.append(waypoint)
 	if position_data["checkpoint"] != Layout.FINAL_CHECKPOINT:
 		nodes.append(Layout.FINAL_CHECKPOINT)
 	nodes.append(GOAL_CELL)
@@ -1339,9 +1347,12 @@ func _bake_terrain_texture() -> ImageTexture:
 					image.fill_rect(rect, exit if (x + y) % 2 == 0 else exit.lightened(0.05))
 				_:
 					var fill := ground_a.lerp(ground_b, TerrainBuilder.hash_2d(x, y))
-					if _build_cells.has(cell):
-						var owner: int = _build_cells[cell]
-						fill = fill.lerp(LANE_COLORS[owner], 0.14 if controlled.has(owner) else 0.05)
+					if not _build_cells.has(cell):
+						# No-build ground (chokes, dividers, diagonals): trodden, no grid.
+						image.fill_rect(rect, fill.darkened(0.12))
+						continue
+					var owner: int = _build_cells[cell]
+					fill = fill.lerp(LANE_COLORS[owner], 0.14 if controlled.has(owner) else 0.05)
 					image.fill_rect(rect, fill)
 					# Faint build grid, like WC3's placement grid.
 					image.fill_rect(Rect2i(rect.position, Vector2i(tile, 1)), fill.darkened(0.08))
@@ -1435,6 +1446,7 @@ func _on_runner_killed(creep_id: int) -> void:
 			"start_position": runner.plane_position,
 			"start_stage": runner.get_stage_index(),
 			"start_distance": runner.get_progress() - runner.get_stage_index() * RouteRunner.STAGE_PROGRESS_WEIGHT,
+			"spawner": runner.spawner_index,
 		}
 		runner.queue_free()
 	creep_killed.emit(creep_id)
