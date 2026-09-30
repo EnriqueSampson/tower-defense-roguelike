@@ -59,6 +59,7 @@ var _model: Node3D
 var _model_height := 0.0
 var _selection_circle: MeshInstance3D
 var _fly_height := 0.0
+var _spawn_cell := Vector2i.ZERO
 
 
 func _ready() -> void:
@@ -94,6 +95,7 @@ func setup(
 	magic_immune = bool(options.get("magic_immune", false))
 	invisible = bool(options.get("invisible", false))
 	_fly_height = FLY_HEIGHT if is_air else 0.0
+	_spawn_cell = start_cell
 	radius = float(options.get("radius", 6.0))
 	speed_multiplier = float(options.get("speed_multiplier", 1.0))
 	_visual_scene = options.get("visual_scene") as PackedScene
@@ -274,13 +276,36 @@ func _advance_stage() -> void:
 
 func _load_current_stage(from_cell: Vector2i) -> void:
 	if is_air:
-		# Flyers ignore the maze: straight to the next checkpoint.
-		_points = PackedVector2Array([plane_position, _map.grid_to_world(get_current_target())])
+		_points = _air_points()
 		_segment_index = 0
 		return
 	_points = _map.get_world_path(from_cell, get_current_target())
 	_segment_index = 0
 	_path_revision = _map.get_grid_revision()
+
+
+## Flyers follow their lane's fixed flight path (every corridor corner and
+## checkpoint) but ignore towers. Mid-stage starts (split children, client
+## corrections) join at the waypoint after the nearest one.
+func _air_points() -> PackedVector2Array:
+	var route := _map.get_air_route(lane_id, _stage_index, _spawn_cell)
+	var target := _map.grid_to_world(get_current_target())
+	if route.is_empty():
+		return PackedVector2Array([plane_position, target])
+	var nearest := 0
+	for index in range(route.size()):
+		if route[index].distance_squared_to(plane_position) < route[nearest].distance_squared_to(plane_position):
+			nearest = index
+	# Past the nearest corner already (or standing on it)? Then aim beyond it.
+	var next := nearest
+	if nearest < route.size() - 1:
+		var along := (route[nearest + 1] - route[nearest]).dot(plane_position - route[nearest])
+		if along >= 0.0 or plane_position.distance_to(route[nearest]) < 1.0:
+			next = nearest + 1
+	var points := PackedVector2Array([plane_position])
+	for index in range(next, route.size()):
+		points.append(route[index])
+	return points
 
 
 # --- Visuals ------------------------------------------------------------------

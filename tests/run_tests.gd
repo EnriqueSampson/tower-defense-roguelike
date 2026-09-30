@@ -91,6 +91,7 @@ func _run_tests() -> void:
 	# Camera
 	_test_battlefield_camera_controls()
 	_test_solo_camera_startup_focus()
+	_test_edge_pan_only_at_window_edges()
 	_test_multiplayer_camera_startup_focus()
 	# Combat
 	_test_basic_tower_combat()
@@ -101,6 +102,7 @@ func _run_tests() -> void:
 	_test_upgrade_and_sell_economy()
 	# Special creeps
 	_test_air_creeps()
+	_test_air_creeps_follow_every_checkpoint()
 	_test_magic_immunity()
 	_test_invisible_creeps_and_detection()
 	_test_splitters()
@@ -852,6 +854,20 @@ func _test_battlefield_camera_controls() -> void:
 	world.queue_free()
 
 
+func _test_edge_pan_only_at_window_edges() -> void:
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var camera := game.get_node(CAMERA_PATH) as BattlefieldCamera
+	var window := (game as Control).get_global_rect()
+	var console_top := (game.get_node("WorldClip") as Control).get_global_rect().end.y
+	var area: Control = camera.get("_edge_pan_area")
+	_check(area == game, "edge panning uses the whole window, not the battlefield view")
+	_check(camera.get_edge_direction(Vector2(window.get_center().x, console_top + 2.0), window) == Vector2.ZERO, "moving onto the console does not pan the camera")
+	_check(camera.get_edge_direction(Vector2(window.get_center().x, 20.0), window) == Vector2.ZERO, "hovering the top bar does not pan the camera")
+	_check(camera.get_edge_direction(Vector2(window.get_center().x, window.end.y - 1.0), window) == Vector2.DOWN, "the bottom window edge still pans down, as in WC3")
+	game.queue_free()
+
+
 func _test_solo_camera_startup_focus() -> void:
 	var steam_session := root.get_node("SteamSession")
 	steam_session.set("is_solo_session", true)
@@ -1123,7 +1139,7 @@ func _test_air_creeps() -> void:
 	var walker := map.spawn_creep(8102, 0, Grunt)
 	_check(flyer.position.y > 1.0 and is_zero_approx(walker.position.y), "air creeps fly above the ground")
 	var points: PackedVector2Array = flyer.get("_points")
-	_check(points.size() == 2 and points[1] == map.grid_to_world(flyer.get_current_target()), "air creeps fly straight to the next checkpoint")
+	_check(points.size() >= 2 and points[-1] == map.grid_to_world(flyer.get_current_target()), "air creeps fly toward their current checkpoint")
 	var start := flyer.plane_position
 	walker.queue_free()
 	var cell := map.world_to_grid(start)
@@ -1139,6 +1155,41 @@ func _test_air_creeps() -> void:
 	ground.plane_position = Vector2(410, 400)
 	var hits := CombatResolver.resolve_impact([flyer, ground], {"damage": 5, "splash_radius": 60.0, "targets_air": false}, Vector2(405, 400), ground)
 	_check(hits.size() == 1 and hits[0]["creep"] == ground, "ground splash never reaches flyers")
+	map.queue_free()
+
+
+func _test_air_creeps_follow_every_checkpoint() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	var gargoyle := Catalog.get_creep("gargoyle")
+	# A tower on lane 1's route must not bend the flight path.
+	map.spawn_tower(8150, P1_CREEP - Vector2i(1, 1), Bolt)
+	var all_lanes_ok := true
+	for lane in range(ClassicWintermaulLayout.PLAYER_COUNT):
+		var flyer := map.spawn_creep(8160 + lane, lane, gargoyle)
+		var targets := map.get_route_targets(lane)
+		var closest: Array[float] = []
+		for target in targets:
+			closest.append(INF)
+		var off_route := 0
+		var steps := 0
+		while not flyer.has_finished() and steps < 6000:
+			flyer._process(0.05)
+			for index in range(targets.size()):
+				closest[index] = minf(closest[index], flyer.plane_position.distance_to(map.grid_to_world(targets[index])))
+			if not ClassicWintermaulLayout.is_traversable(map.get_terrain(map.world_to_grid(flyer.plane_position))):
+				off_route += 1
+			steps += 1
+		var visited := flyer.has_finished()
+		for distance in closest:
+			visited = visited and distance < WintermaulMap.TILE_SIZE * 0.5
+		all_lanes_ok = all_lanes_ok and visited and off_route == 0
+		if not (visited and off_route == 0):
+			printerr("lane %d: closest %s, %d steps over walls or void" % [lane, closest, off_route])
+	_check(all_lanes_ok, "flyers from every position pass through each checkpoint and stay over their lanes")
+	var mid := map.spawn_creep(8190, 0, gargoyle, -1, 1.0, {"start_position": map.grid_to_world(map.get_route_targets(0)[0]) + Vector2(0, 40), "start_stage": 1})
+	var mid_points: PackedVector2Array = mid.get("_points")
+	_check(mid_points[-1] == map.grid_to_world(map.get_route_targets(0)[1]) and mid_points.size() >= 2, "mid-route flyers (split children) join their stage's flight path")
 	map.queue_free()
 
 

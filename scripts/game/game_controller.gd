@@ -62,7 +62,9 @@ func _ready() -> void:
 	for position_index in range(POSITION_COUNT):
 		_spawn_queues[position_index] = []
 
-	battlefield_camera.set_edge_pan_area(battlefield_view)
+	# Pan at the window edges only: the battlefield ends above the console, so
+	# using its rect would pan whenever the mouse heads for the command card.
+	battlefield_camera.set_edge_pan_area(self)
 	GameSettings.changed.connect(_apply_settings)
 	_apply_settings()
 	battlefield_camera.focus_on(wintermaul_map.get_position_world_rect(_home_position_index()).get_center())

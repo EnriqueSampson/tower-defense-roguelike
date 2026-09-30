@@ -25,7 +25,9 @@ const DEFAULT_ZOOM := 1.0
 const MAX_ZOOM := 1.0 / CLOSE_FACTOR
 
 @export var edge_pan_enabled := true
-@export_range(1.0, 64.0, 1.0) var edge_border_thickness := 15.0
+## Edge panning only triggers this close to the window edge, as in WC3, so
+## moving the mouse onto the console, top bar or multiboard never pans.
+@export_range(1.0, 64.0, 1.0) var edge_border_thickness := 6.0
 
 ## 1.0 is the WC3 default distance; larger values zoom in.
 var zoom_level := DEFAULT_ZOOM
@@ -65,6 +67,8 @@ func get_focus() -> Vector2:
 	return _focus
 
 
+## `area` should cover the whole window (the game root), not just the
+## battlefield: its edges are where the camera pans.
 func set_edge_pan_area(area: Control) -> void:
 	_edge_pan_area = area
 
