@@ -6,12 +6,12 @@
 script = ExtResource("1_upgrade")
 id = "all_range"
 display_name = "Watchtowers"
-description = "Every tower gains 10 range."
+description = "Every tower gains half a tower of range."
 category = 0
 tags = PackedStringArray("range")
 tower_id = ""
 damage_multiplier = 1.0
-range_bonus = 10.0
+range_bonus = 28.0
 cooldown_multiplier = 1.0
 splash_radius_bonus = 0.0
 slow_factor_bonus = 0.0

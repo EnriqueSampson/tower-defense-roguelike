@@ -10,8 +10,9 @@ extends RefCounted
 ##   Top:    three hedge lanes (Positions 1, 2, 3) open to the sky.
 ##   Middle: side entrances (6 left, 4 right) and twin pockets owned by
 ##           Position 5, which spawns from both pockets.
-##   Bottom: the "face" - two brow boxes (7 left, 8 right) above a mouth that
-##           Position 9 spawns from through two spawners - then the exit.
+##   Bottom: the "face" - two brow boxes (7 left, 8 right) above an open
+##           mouth, then Position 9's box with one central spawn just above
+##           the relay checkpoint and the exit.
 ## Every spawner of a position shares that position's creep budget.
 
 enum Terrain {
@@ -118,7 +119,9 @@ static func _design_positions() -> Array[Dictionary]:
 		_position(6, Rect2i(0, 31, 20, 14), [Rect2i(1, 33, 7, 8)], [Vector2i(4, 36)], Vector2i(14, 44), Vector2i(10, 32)),
 		_position(7, Rect2i(10, 45, 17, 29), [Rect2i(24, 47, 11, 4)], [Vector2i(29, 48)], Vector2i(13, 59), Vector2i(11, 46)),
 		_position(8, Rect2i(47, 45, 15, 29), [Rect2i(37, 47, 12, 4)], [Vector2i(43, 48)], Vector2i(58, 59), Vector2i(51, 46)),
-		_position(9, Rect2i(27, 45, 20, 33), [Rect2i(22, 53, 29, 3)], [Vector2i(30, 54), Vector2i(42, 54)], Vector2i(35, 70), Vector2i(28, 59)),
+		# Position 9 spawns once, centred just below the chin and close to the
+		# relay and gate, like the single "Grey spawn" in Wintermaul v.72.2.
+		_position(9, Rect2i(27, 45, 20, 33), [Rect2i(33, 58, 5, 3)], [Vector2i(35, 59)], Vector2i(35, 70), Vector2i(28, 59)),
 	]
 
 

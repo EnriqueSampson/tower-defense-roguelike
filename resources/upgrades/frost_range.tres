@@ -6,12 +6,12 @@
 script = ExtResource("1_upgrade")
 id = "frost_range"
 display_name = "Frost Reach"
-description = "Frost Towers gain 20 range."
+description = "Frost Towers gain a full tower of range."
 category = 0
 tags = PackedStringArray("frost")
 tower_id = "frost"
 damage_multiplier = 1.0
-range_bonus = 20.0
+range_bonus = 56.0
 cooldown_multiplier = 1.0
 splash_radius_bonus = 0.0
 slow_factor_bonus = 0.0

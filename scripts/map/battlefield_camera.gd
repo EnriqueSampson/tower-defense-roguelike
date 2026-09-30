@@ -15,11 +15,11 @@ const FOV_DEGREES := 50.0
 ## dolly distance is solved from the viewport aspect so every window shape
 ## gets that width at the focus. FAR and CLOSE are multiples of it.
 const DEFAULT_TOWERS_ACROSS := 19.0
-const FAR_FACTOR := 1.5
-const CLOSE_FACTOR := 0.4
+const FAR_FACTOR := 1.8
+const CLOSE_FACTOR := 0.18
 ## Screens per second of pan at any zoom.
 const PAN_SCREENS_PER_SECOND := 0.9
-const ZOOM_FACTOR := 1.15
+const ZOOM_FACTOR := 1.2
 const MIN_ZOOM := 1.0 / FAR_FACTOR
 const DEFAULT_ZOOM := 1.0
 const MAX_ZOOM := 1.0 / CLOSE_FACTOR

@@ -201,8 +201,10 @@ func _test_classic_layout_coordinates() -> void:
 			spawn_cells[spawn] = true
 			all_bounds_valid = all_bounds_valid and ClassicWintermaulLayout.terrain_at(spawn, positions) == ClassicWintermaulLayout.Terrain.SPAWN_PAD
 		all_bounds_valid = all_bounds_valid and ClassicWintermaulLayout.is_traversable(ClassicWintermaulLayout.terrain_at(position_data["checkpoint"], positions))
-	_check(spawn_cells.size() == 11, "layout defines eleven spawn portals across nine positions")
-	_check(positions[4]["spawns"].size() == 2 and positions[8]["spawns"].size() == 2, "positions five and nine spawn from two pads each")
+	_check(spawn_cells.size() == 10, "layout defines ten spawn portals across nine positions")
+	_check(positions[4]["spawns"].size() == 2 and positions[8]["spawns"].size() == 1, "position five spawns from two pads and position nine from one")
+	var p9_spawn: Vector2i = positions[8]["spawns"][0]
+	_check(p9_spawn.x == ClassicWintermaulLayout.FINAL_GATE.x and p9_spawn.y > positions[6]["spawns"][0].y and p9_spawn.y < ClassicWintermaulLayout.FINAL_CHECKPOINT.y, "position nine spawns centred, below the brow spawns and above the relay")
 	_check(all_bounds_valid, "macro bounds fit the grid and every spawn sits on a pad with a reachable checkpoint")
 	var p9: Dictionary = positions[8]
 	_check(p9["macro_bounds"] == Rect2i(54, 90, 40, 66), "position nine owns the bottom-center final defense")
@@ -538,7 +540,7 @@ func _test_grid_projection_and_placement() -> void:
 	_check(routes_share_goal, "all nine positions converge on the final gate")
 	_check(map.get_route_targets(0) == [Vector2i(35, 61), ClassicWintermaulLayout.FINAL_CHECKPOINT, Vector2i(71, 155)], "P1 relays through its checkpoint and the shared relay checkpoint")
 	_check(map.get_route_targets(8) == [ClassicWintermaulLayout.FINAL_CHECKPOINT, Vector2i(71, 155)], "P9 defends the relay checkpoint before the final gate")
-	_check(map.get_spawner_cells(4).size() == 2 and map.get_spawner_cells(8).size() == 2 and map.get_spawner_cells(0).size() == 1, "positions five and nine expose two spawners")
+	_check(map.get_spawner_cells(4).size() == 2 and map.get_spawner_cells(8).size() == 1 and map.get_spawner_cells(0).size() == 1, "position five exposes two spawners; position nine one central spawner")
 	var first := map.spawn_creep(1, 4, _creep(1.0, 10))
 	var second := map.spawn_creep(2, 4, _creep(1.0, 10))
 	_check(first.plane_position != second.plane_position and map.world_to_grid(first.plane_position) in map.get_spawner_cells(4) and map.world_to_grid(second.plane_position) in map.get_spawner_cells(4), "twin spawners alternate creeps deterministically by id")
