@@ -9,6 +9,7 @@ signal creep_damaged(creep_id: int, amount: int)
 signal build_cell_requested(cell: Vector2i)
 signal placement_rejected(cell: Vector2i, reason: int)
 signal tower_clicked(tower_id: int)
+signal creep_clicked(creep_id: int)
 signal selection_cleared
 signal tower_fired(tower_id: int, creep_id: int)
 signal impact_resolved(tower_id: int, hit_count: int, killed_count: int)
@@ -74,6 +75,7 @@ var _hover_cell := Vector2i.ZERO
 var _preview_cell := Vector2i.ZERO
 var _preview_visible := false
 var _selected_tower_id := 0
+var _selected_creep_id := 0
 var _camera: BattlefieldCamera
 var _ground_material: StandardMaterial3D
 var _hover_material: ShaderMaterial
@@ -377,6 +379,31 @@ func set_selected_tower(tower_id: int) -> void:
 	if current:
 		current.set_selected(true)
 	_refresh_preview()
+
+
+## Nearest living creep whose on-screen body is under `screen_position`.
+func creep_at_screen(screen_position: Vector2) -> RouteRunner:
+	var unit_scale := get_screen_scale()
+	var best: RouteRunner = null
+	var best_distance := INF
+	for runner: RouteRunner in get_active_creeps():
+		var center := project_to_screen(runner.plane_position, runner.get_visual_height() * 0.5)
+		var pick_radius := maxf(14.0, runner.radius * unit_scale * 1.8)
+		var distance := center.distance_to(screen_position)
+		if distance <= pick_radius and distance < best_distance:
+			best = runner
+			best_distance = distance
+	return best
+
+
+func set_selected_creep(creep_id: int) -> void:
+	var previous := get_creep(_selected_creep_id)
+	if previous:
+		previous.set_selected(false)
+	_selected_creep_id = creep_id
+	var current := get_creep(creep_id)
+	if current:
+		current.set_selected(true)
 
 
 func get_selected_tower_id() -> int:
@@ -779,6 +806,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_preview_from_viewport(event.position)
 		if not _preview_visible:
 			return
+		if _build_definition == null or not _build_enabled:
+			var creep := creep_at_screen(event.position)
+			if creep != null:
+				creep_clicked.emit(creep.creep_id)
+				get_viewport().set_input_as_handled()
+				return
 		var tower := get_tower_at(_hover_cell)
 		if tower != null:
 			tower_clicked.emit(tower.tower_id)

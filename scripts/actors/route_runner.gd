@@ -50,6 +50,7 @@ var _visual_state := -1
 var _visual_scene: PackedScene
 var _model: Node3D
 var _model_height := 0.0
+var _selection_circle: MeshInstance3D
 
 
 func _ready() -> void:
@@ -267,6 +268,24 @@ func detach_visual() -> Node3D:
 	else:
 		_body = null
 	return visual
+
+
+## WC3 marks selected enemies with a red circle.
+func set_selected(value: bool) -> void:
+	if not value:
+		if _selection_circle:
+			_selection_circle.visible = false
+		return
+	if _selection_circle == null:
+		_selection_circle = MeshInstance3D.new()
+		_selection_circle.mesh = MeshPalette.unit_quad()
+		_selection_circle.material_override = MeshPalette.new_ring_material(Color("f04a3e"), 0.8, 0.1)
+		_selection_circle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_selection_circle.position.y = 0.03
+		add_child(_selection_circle)
+	var circle_radius := MapProjection.units(radius * 1.7)
+	_selection_circle.scale = Vector3(circle_radius, 1.0, circle_radius)
+	_selection_circle.visible = true
 
 
 ## Height above the ground where the health bar should be anchored.

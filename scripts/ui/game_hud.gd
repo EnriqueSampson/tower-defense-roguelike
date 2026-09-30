@@ -23,7 +23,7 @@ const TOAST_DURATION := 3.5
 const MESSAGE_DURATION := 2.5
 ## WC3 command-card grid hotkeys, row by row (QWER / ASDF / ZXCV).
 const CARD_KEYS: Array[Key] = [KEY_Q, KEY_W, KEY_E, KEY_R, KEY_A, KEY_S, KEY_D, KEY_F, KEY_Z, KEY_X, KEY_C, KEY_V]
-const CARD_SLOT_SIZE := Vector2(58, 46)
+const CARD_SLOT_SIZE := Vector2(66, 44)
 const SLOT_UPGRADE := 0
 const SLOT_FIRST_TARGETING := 4
 const SLOT_SELL := 10
@@ -48,6 +48,15 @@ var _tower_targeting := 0
 var _tower_can_control := false
 var _upgrade_cost := -1
 var _sell_value := 0
+## Creep inspection (click a creep); its panel refreshes from the controller.
+var _creep_definition: CreepDefinition
+## 3D portrait: the selected unit's model rendered in its own small world.
+var _portrait_viewport: SubViewport
+var _portrait_holder: Node3D
+var _portrait_camera: Camera3D
+var _portrait_scene: PackedScene
+var _multiboard_toggle: Button
+var _multiboard_collapsed := false
 var _toast_timer := 0.0
 var _message_timer := 0.0
 var _end_screen_shown := false
@@ -106,6 +115,8 @@ func _ready() -> void:
 	top_bar.add_theme_stylebox_override("panel", WC3Theme.bar_style())
 	console.add_theme_stylebox_override("panel", WC3Theme.bar_style())
 	_build_command_card()
+	_build_portrait_view()
+	_build_multiboard_toggle()
 	launch_button.pressed.connect(func() -> void: launch_requested.emit())
 	ready_button.pressed.connect(func() -> void: ready_requested.emit())
 	settings_button.pressed.connect(toggle_settings)
@@ -313,9 +324,10 @@ func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictiona
 	_upgrade_cost = upgrade_cost
 	_sell_value = sell_value
 	_gold = gold
+	_creep_definition = null
 	tower_panel.visible = true
 	idle_info.visible = false
-	_set_portrait(definition.display_name, definition.primary_color, definition.accent_color)
+	_set_portrait(definition.display_name, definition.primary_color, definition.accent_color, definition.visual_scene_for_tier(_tower_tier), &"idle")
 	tower_name.text = "%s  ·  %s  ·  P%d" % [definition.display_name, definition.tier_name(_tower_tier), int(record["position"]) + 1]
 	var lines := PackedStringArray([
 		"Damage %d    Range %.0f    Cooldown %.2fs" % [stats["damage"], stats["range"], stats["cooldown"]],
@@ -336,20 +348,118 @@ func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictiona
 
 
 func hide_tower() -> void:
-	if _shown_tower_id == 0 and not tower_panel.visible:
+	if _shown_tower_id == 0 and _creep_definition == null and not tower_panel.visible:
 		return
 	_shown_tower_id = 0
 	_tower_definition = null
+	_creep_definition = null
 	tower_panel.visible = false
 	idle_info.visible = true
 	_set_portrait("", WC3Theme.STONE, WC3Theme.MUTED)
 	_refresh_card()
 
 
-func _set_portrait(title: String, primary: Color, accent: Color) -> void:
+## Creep inspection panel, refreshed by the controller while selected.
+func show_creep(definition: CreepDefinition, info: Dictionary) -> void:
+	var first_show := _creep_definition != definition
+	_shown_tower_id = 0
+	_tower_definition = null
+	_creep_definition = definition
+	tower_panel.visible = true
+	idle_info.visible = false
+	if first_show:
+		_set_portrait(definition.display_name, definition.color, definition.color.lightened(0.4), definition.visual_scene, &"walk")
+	tower_name.text = "%s  ·  %s  ·  from P%d" % [definition.display_name, definition.role, int(info["position"]) + 1]
+	var lines := PackedStringArray([
+		"Health %d / %d    Armor %d    Speed %.1f tiles/s%s" % [info["health"], info["max_health"], definition.armor, float(info["speed"]), "  (slowed)" if info["slowed"] else ""],
+		"Bounty %d gold%s" % [info["bounty"], "    %s" % definition.trait_summary() if not definition.trait_summary().is_empty() else ""],
+		definition.description,
+	])
+	tower_stats.text = "\n".join(lines)
+	_refresh_card()
+
+
+func _set_portrait(title: String, primary: Color, accent: Color, scene: PackedScene = null, animation: StringName = &"") -> void:
 	portrait.color = primary.darkened(0.55)
 	portrait_glyph.text = title.substr(0, 1).to_upper() if not title.is_empty() else "?"
 	portrait_glyph.add_theme_color_override("font_color", accent)
+	_show_portrait_model(scene, animation)
+
+
+## Small separate 3D world behind the portrait glyph; only draws while a
+## model is shown.
+func _build_portrait_view() -> void:
+	var container := SubViewportContainer.new()
+	container.stretch = true
+	container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait.add_child(container)
+	_portrait_viewport = SubViewport.new()
+	_portrait_viewport.own_world_3d = true
+	_portrait_viewport.transparent_bg = true
+	_portrait_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	container.add_child(_portrait_viewport)
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-35, 30, 0)
+	light.light_energy = 1.3
+	_portrait_viewport.add_child(light)
+	var environment := WorldEnvironment.new()
+	environment.environment = Environment.new()
+	environment.environment.background_mode = Environment.BG_CLEAR_COLOR
+	environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.environment.ambient_light_color = Color(0.75, 0.78, 0.82)
+	environment.environment.ambient_light_energy = 0.6
+	_portrait_viewport.add_child(environment)
+	_portrait_camera = Camera3D.new()
+	_portrait_camera.fov = 35.0
+	_portrait_viewport.add_child(_portrait_camera)
+	_portrait_holder = Node3D.new()
+	_portrait_viewport.add_child(_portrait_holder)
+
+
+func _show_portrait_model(scene: PackedScene, animation: StringName) -> void:
+	if _portrait_viewport == null or scene == _portrait_scene:
+		return
+	_portrait_scene = scene
+	for child in _portrait_holder.get_children():
+		child.queue_free()
+	var model := ActorModel.instantiate(scene)
+	portrait_glyph.visible = model == null
+	if model == null:
+		_portrait_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		return
+	_portrait_holder.add_child(model)
+	ActorModel.play(model, animation, true)
+	# Frame the model from the front (+Z) and slightly above, WC3-portrait style.
+	var box := ActorModel.bounds(model)
+	var center := box.get_center() + Vector3(0.0, box.size.y * 0.1, 0.0)
+	var extent := maxf(box.size.y, maxf(box.size.x, box.size.z) * 0.8)
+	_portrait_camera.position = center + Vector3(0.0, extent * 0.35, extent * 2.1)
+	_portrait_camera.look_at(center, Vector3.UP)
+	_portrait_viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+
+
+## WC3 multiboards fold to their title bar; this one hides everything but
+## the header when collapsed.
+func _build_multiboard_toggle() -> void:
+	var layout := position_label.get_parent()
+	_multiboard_toggle = Button.new()
+	_multiboard_toggle.text = "▾  Scoreboard"
+	_multiboard_toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_multiboard_toggle.focus_mode = Control.FOCUS_NONE
+	_multiboard_toggle.flat = true
+	_multiboard_toggle.pressed.connect(toggle_multiboard)
+	layout.add_child(_multiboard_toggle)
+	layout.move_child(_multiboard_toggle, 0)
+
+
+func toggle_multiboard() -> void:
+	_multiboard_collapsed = not _multiboard_collapsed
+	_multiboard_toggle.text = ("▸  Scoreboard" if _multiboard_collapsed else "▾  Scoreboard")
+	# The return button stays under update_state's control (shown after a run).
+	for child in position_label.get_parent().get_children():
+		if child != _multiboard_toggle and child != return_button and child is Control:
+			(child as Control).visible = not _multiboard_collapsed
 
 
 # --- Command card ---------------------------------------------------------------
@@ -359,6 +469,7 @@ func _build_command_card() -> void:
 		var button := Button.new()
 		button.custom_minimum_size = CARD_SLOT_SIZE
 		button.clip_text = true
+		button.add_theme_font_size_override("font_size", 11)
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(_on_card_slot_pressed.bind(index))
 		command_card.add_child(button)
@@ -381,7 +492,10 @@ func _clear_card() -> void:
 ## Fills one slot; the grid position gives it its WC3 hotkey.
 func _set_card_slot(index: int, label: String, tooltip: String, action: Callable, enabled := true, pressed := false, color := Color(0, 0, 0, 0)) -> void:
 	var button := _card_slots[index]
-	button.text = "%s\n%s" % [OS.get_keycode_string(CARD_KEYS[index]), label]
+	# Always two lines ("Q Upgrade" / "70g") so every slot, and the console,
+	# keeps the same height.
+	var lines := label.split("\n")
+	button.text = "%s %s\n%s" % [OS.get_keycode_string(CARD_KEYS[index]), lines[0], lines[1] if lines.size() > 1 else ""]
 	button.tooltip_text = "%s  [%s]" % [tooltip, OS.get_keycode_string(CARD_KEYS[index])]
 	button.disabled = not enabled
 	button.toggle_mode = pressed
@@ -401,11 +515,15 @@ func _refresh_card() -> void:
 	_clear_card()
 	if _shown_tower_id != 0 and _tower_definition != null:
 		_fill_tower_card()
+	elif _creep_definition != null:
+		_set_card_slot(SLOT_CANCEL, "Cancel", "Deselect", func() -> void: selection_cleared.emit())
 	elif _catalog != null:
 		_fill_build_card()
 
 
 func _card_state_signature() -> String:
+	if _creep_definition != null and _shown_tower_id == 0:
+		return "creep"
 	if _shown_tower_id != 0 and _tower_definition != null:
 		return "tower|%d|%d|%d|%s|%d|%d|%s" % [_shown_tower_id, _tower_tier, _tower_targeting, _tower_can_control, _upgrade_cost, _sell_value, _upgrade_cost >= 0 and _gold >= _upgrade_cost]
 	if _catalog == null:

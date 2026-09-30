@@ -38,6 +38,9 @@ var _run_ended_announced := false
 @onready var wintermaul_map: WintermaulMap = %WintermaulMap
 @onready var battlefield_camera: BattlefieldCamera = %BattlefieldCamera
 var _stats_cache: Dictionary = {}
+var _selected_creep_id := 0
+var _creep_panel_timer := 0.0
+const CREEP_PANEL_INTERVAL := 0.2
 var _stats_cache_revision := -1
 @onready var battlefield_view: Control = %BattlefieldView
 @onready var sun: DirectionalLight3D = $WorldClip/BattlefieldView/BattlefieldViewport/World/Sun
@@ -62,6 +65,7 @@ func _ready() -> void:
 	wintermaul_map.build_cell_requested.connect(_on_build_cell_requested)
 	wintermaul_map.placement_rejected.connect(_on_placement_rejected)
 	wintermaul_map.tower_clicked.connect(_select_tower)
+	wintermaul_map.creep_clicked.connect(_select_creep)
 	wintermaul_map.selection_cleared.connect(_clear_selection)
 	wintermaul_map.tower_fired.connect(_on_tower_fired)
 	wintermaul_map.impact_resolved.connect(func(_tower_id: int, _hits: int, _killed: int) -> void: AudioDirector.play("impact"))
@@ -140,6 +144,11 @@ func _resolve_position_owners() -> PackedInt32Array:
 
 
 func _process(delta: float) -> void:
+	if _selected_creep_id != 0:
+		_creep_panel_timer -= delta
+		if _creep_panel_timer <= 0.0:
+			_creep_panel_timer = CREEP_PANEL_INTERVAL
+			_refresh_creep_panel()
 	if not multiplayer.is_server() or _authority_lost:
 		return
 	if run_state.phase in [RunStateModel.Phase.BUILD, RunStateModel.Phase.WAVE]:
@@ -673,6 +682,7 @@ func _on_palette_selected(definition_id: String) -> void:
 
 
 func _select_tower(tower_id: int) -> void:
+	_set_selected_creep(0)
 	_selected_tower_id = tower_id
 	wintermaul_map.set_selected_tower(tower_id)
 	if tower_id != 0:
@@ -681,7 +691,42 @@ func _select_tower(tower_id: int) -> void:
 	_refresh_local_context()
 
 
+## Clicking a creep inspects it (live health, traits, bounty); it replaces any
+## tower selection or palette pick, as selecting a unit does in WC3.
+func _select_creep(creep_id: int) -> void:
+	_selected_tower_id = 0
+	_selected_definition_id = ""
+	wintermaul_map.set_selected_tower(0)
+	_set_selected_creep(creep_id)
+	AudioDirector.play("ui_confirm")
+	_refresh_local_context()
+
+
+func _set_selected_creep(creep_id: int) -> void:
+	_selected_creep_id = creep_id
+	_creep_panel_timer = 0.0
+	wintermaul_map.set_selected_creep(creep_id)
+
+
+func _refresh_creep_panel() -> void:
+	var runner := wintermaul_map.get_creep(_selected_creep_id)
+	var definition := CATALOG.get_creep(runner.definition_id) if runner != null else null
+	if runner == null or runner.health <= 0 or definition == null:
+		_set_selected_creep(0)
+		hud.hide_tower()
+		return
+	hud.show_creep(definition, {
+		"health": runner.health,
+		"max_health": runner.max_health,
+		"position": runner.lane_id,
+		"slowed": runner.is_slowed(),
+		"speed": runner.current_speed() / WintermaulMap.TILE_SIZE,
+		"bounty": modifiers.bounty(definition.bounty),
+	})
+
+
 func _clear_selection() -> void:
+	_set_selected_creep(0)
 	_selected_tower_id = 0
 	_selected_definition_id = ""
 	wintermaul_map.set_selected_tower(0)
@@ -689,6 +734,9 @@ func _clear_selection() -> void:
 
 
 func _refresh_tower_panel() -> void:
+	if _selected_creep_id != 0:
+		_refresh_creep_panel()
+		return
 	if _selected_tower_id == 0:
 		hud.hide_tower()
 		return

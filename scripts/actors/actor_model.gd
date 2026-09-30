@@ -70,6 +70,17 @@ static func height(model: Node3D) -> float:
 	return top
 
 
+## Combined mesh bounds in the model's local space.
+static func bounds(model: Node3D) -> AABB:
+	var result := AABB()
+	var first := true
+	for mesh_instance: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		var box := _relative_transform(model, mesh_instance) * mesh_instance.get_aabb()
+		result = box if first else result.merge(box)
+		first = false
+	return result
+
+
 ## Turns sun shadow casting on or off for every mesh in the model.
 static func set_cast_shadows(model: Node, enabled: bool) -> void:
 	var setting := GeometryInstance3D.SHADOW_CASTING_SETTING_ON if enabled else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
