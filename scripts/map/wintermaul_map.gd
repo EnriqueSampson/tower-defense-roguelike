@@ -29,6 +29,7 @@ enum Placement {
 const RouteRunnerScene = preload("res://scripts/actors/route_runner.gd")
 const TowerScene = preload("res://scripts/actors/tower.gd")
 const ProjectileScene = preload("res://scripts/actors/projectile.gd")
+const CorpseScene = preload("res://scripts/actors/corpse.gd")
 const PathGridModel = preload("res://scripts/pathfinding/path_grid.gd")
 const Layout = preload("res://scripts/data/classic_wintermaul_layout.gd")
 const GRID_SIZE := Layout.GRID_SIZE
@@ -188,6 +189,7 @@ func remove_creep(creep_id: int, killed := false) -> void:
 		return
 	if killed:
 		effects.death(runner.plane_position, runner.body_color, runner.radius)
+		_spawn_corpse(runner)
 	else:
 		effects.leak(runner.plane_position)
 	_last_creep_positions[creep_id] = runner.plane_position
@@ -884,6 +886,13 @@ func _build_walls() -> void:
 		pines.name = "Pines"
 		_walls.add_child(pines)
 	pines.multimesh = TerrainBuilder.build_pines(_terrain_cells, GRID_SIZE, Layout.Terrain.WALL)
+	for prop in [["Boulders", TerrainBuilder.build_boulders], ["Crystals", TerrainBuilder.build_crystals]]:
+		var instance := _walls.get_node_or_null(str(prop[0])) as MultiMeshInstance3D
+		if instance == null:
+			instance = MultiMeshInstance3D.new()
+			instance.name = str(prop[0])
+			_walls.add_child(instance)
+		instance.multimesh = (prop[1] as Callable).call(_terrain_cells, GRID_SIZE, Layout.Terrain.WALL)
 
 
 func _build_landmarks() -> void:
@@ -1164,6 +1173,35 @@ func _on_runner_killed(creep_id: int) -> void:
 	var runner := get_creep(creep_id)
 	if runner != null:
 		effects.death(runner.plane_position, runner.body_color, runner.radius)
+		_spawn_corpse(runner)
 		_last_creep_positions[creep_id] = runner.plane_position
 		runner.queue_free()
 	creep_killed.emit(creep_id)
+
+
+## Presentation only: the killed creep's visual falls or plays `death`, then
+## sinks. Corpses never take part in combat, snapshots or reconciliation.
+func _spawn_corpse(runner: RouteRunner) -> void:
+	if not is_inside_tree():
+		return
+	var height := runner.get_visual_height()
+	# detach_visual() leaves the visual's world transform in `transform`.
+	var visual := runner.detach_visual()
+	if visual == null:
+		return
+	var corpse := CorpseScene.new() as Corpse
+	_corpses().add_child(corpse)
+	corpse.setup(visual, visual.transform, height)
+
+
+func _corpses() -> Node3D:
+	var container := get_node_or_null("Corpses") as Node3D
+	if container == null:
+		container = Node3D.new()
+		container.name = "Corpses"
+		add_child(container)
+	return container
+
+
+func get_corpse_count() -> int:
+	return _corpses().get_child_count()

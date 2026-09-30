@@ -253,6 +253,22 @@ func _load_current_stage(from_cell: Vector2i) -> void:
 
 # --- Visuals ------------------------------------------------------------------
 
+## Hands the creep's visual (model or procedural body) to a corpse, keeping
+## its world transform. Returns null when there is nothing to hand over.
+func detach_visual() -> Node3D:
+	var visual: Node3D = _model if _model != null else _body
+	if visual == null or visual.get_parent() != self:
+		return null
+	var world := visual.global_transform
+	remove_child(visual)
+	visual.transform = world
+	if visual == _model:
+		_model = null
+	else:
+		_body = null
+	return visual
+
+
 ## Height above the ground where the health bar should be anchored.
 func get_visual_height() -> float:
 	if _model != null:

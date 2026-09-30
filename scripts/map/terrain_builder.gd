@@ -17,6 +17,8 @@ const ROCK_DARK := Color("33363e")
 const PINE := Color("27442f")
 const PINE_SNOW := Color("dfe8ee")
 const TRUNK := Color("4a3424")
+const BOULDER := Color("6a6f78")
+const ICE := Color("a8dcf0")
 
 const DIRECTIONS: Array[Vector2i] = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]
 
@@ -63,13 +65,89 @@ static func build_pines(terrain_cells: Dictionary, grid_size: Vector2i, wall: in
 			var height := minf(minf(_top_height(x, y), _top_height(x + 1, y)), minf(_top_height(x, y + 1), _top_height(x + 1, y + 1)))
 			var basis := Basis(Vector3.UP, _hash(x + 41, y + 43) * TAU).scaled(Vector3.ONE * scale)
 			transforms.append(Transform3D(basis, Vector3(x + 0.5 + offset.x, height, y + 0.5 + offset.y)))
+	return _multimesh(_pine_mesh(), transforms)
+
+
+## Snow-capped boulders on cliff edge cells (pines take the interiors).
+static func build_boulders(terrain_cells: Dictionary, grid_size: Vector2i, wall: int) -> MultiMesh:
+	var transforms: Array[Transform3D] = []
+	for y in range(grid_size.y):
+		for x in range(grid_size.x):
+			var cell := Vector2i(x, y)
+			if int(terrain_cells.get(cell, -1)) != wall or _hash(x * 7 + 3, y * 11 + 5) > 0.16:
+				continue
+			var edge := false
+			for direction in DIRECTIONS:
+				edge = edge or int(terrain_cells.get(cell + direction, wall)) != wall
+			if not edge:
+				continue
+			var size := 0.22 + _hash(x + 23, y + 61) * 0.28
+			var offset := Vector2(_hash(x + 2, y + 9) - 0.5, _hash(x + 17, y + 4) - 0.5) * 0.5
+			var basis := Basis.from_euler(Vector3(_hash(x + 5, y) * 0.5, _hash(x, y + 5) * TAU, _hash(x + 9, y + 9) * 0.5))
+			basis = basis.scaled(Vector3(size * 1.3, size * 0.8, size))
+			transforms.append(Transform3D(basis, Vector3(x + 0.5 + offset.x, _top_height(x, y) + size * 0.25, y + 0.5 + offset.y)))
+	return _multimesh(_boulder_mesh(), transforms)
+
+
+## Rare clusters of ice shards on cliff interiors.
+static func build_crystals(terrain_cells: Dictionary, grid_size: Vector2i, wall: int) -> MultiMesh:
+	var transforms: Array[Transform3D] = []
+	for y in range(grid_size.y):
+		for x in range(grid_size.x):
+			var cell := Vector2i(x, y)
+			if int(terrain_cells.get(cell, -1)) != wall or _hash(x * 13 + 1, y * 3 + 17) > 0.035:
+				continue
+			var interior := true
+			for direction in DIRECTIONS:
+				interior = interior and int(terrain_cells.get(cell + direction, wall)) == wall
+			if not interior:
+				continue
+			var scale := 0.7 + _hash(x + 31, y + 7) * 0.6
+			var basis := Basis(Vector3.UP, _hash(x + 3, y + 37) * TAU).scaled(Vector3.ONE * scale)
+			transforms.append(Transform3D(basis, Vector3(x + 0.5, _top_height(x, y), y + 0.5)))
+	return _multimesh(_crystal_mesh(), transforms)
+
+
+static func _multimesh(mesh: Mesh, transforms: Array[Transform3D]) -> MultiMesh:
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
-	multimesh.mesh = _pine_mesh()
+	multimesh.mesh = mesh
 	multimesh.instance_count = transforms.size()
 	for index in range(transforms.size()):
 		multimesh.set_instance_transform(index, transforms[index])
 	return multimesh
+
+
+static func _boulder_mesh() -> ArrayMesh:
+	var cached := MeshBuilder.cached("terrain:boulder")
+	if cached:
+		return cached
+	var builder := MeshBuilder.new()
+	var rock := SphereMesh.new()
+	rock.radius = 1.0
+	rock.height = 1.6
+	rock.radial_segments = 6
+	rock.rings = 3
+	builder.add(rock, Transform3D.IDENTITY, SNOW_SHADE, BOULDER)
+	return MeshBuilder.store("terrain:boulder", builder.commit(_terrain_material()))
+
+
+static func _crystal_mesh() -> ArrayMesh:
+	var cached := MeshBuilder.cached("terrain:crystal")
+	if cached:
+		return cached
+	var builder := MeshBuilder.new()
+	for shard in range(4):
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = 0.07 + shard * 0.015
+		cone.height = 0.55 + shard * 0.18
+		cone.radial_segments = 5
+		cone.rings = 0
+		var tilt := Basis(Vector3.RIGHT, deg_to_rad(12.0 + shard * 7.0)).rotated(Vector3.UP, shard * TAU / 4.0)
+		var offset := Vector3(cos(shard * 1.7), 0.0, sin(shard * 1.7)) * 0.12
+		builder.add(cone, Transform3D(tilt, offset + tilt * Vector3(0, cone.height * 0.5, 0)), ICE, ICE.darkened(0.25))
+	return MeshBuilder.store("terrain:crystal", builder.commit(_terrain_material()))
 
 
 static func _pine_mesh() -> ArrayMesh:

@@ -1218,6 +1218,13 @@ func _test_actor_models() -> void:
 	runner.take_damage(1)
 	var meshes := creep_model.find_children("*", "MeshInstance3D", true, false)
 	_check(not meshes.is_empty() and (meshes[0] as MeshInstance3D).material_overlay != null, "hit flashes tint creep models")
+	runner.take_damage(runner.health)
+	_check(map.get_creep(runner.creep_id) == null or runner.is_queued_for_deletion(), "a killed creep leaves combat immediately")
+	_check(map.get_corpse_count() == 1 and creep_model.get_parent() is Corpse, "its model is handed to a corpse that plays out the death")
+	var corpse := creep_model.get_parent() as Corpse
+	for step in range(40):
+		corpse._process(0.1)
+	_check(corpse.is_queued_for_deletion() and creep_model.position.y < 0.0, "the corpse sinks into the ground and frees itself")
 	map.queue_free()
 
 

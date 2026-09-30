@@ -161,6 +161,20 @@ def optimize_for_game():
         parts[0].name = (parent.name if parent else "Model") + ("Mesh" if material_name == shared.name else "Glow")
 
 
+def death_fall(body):
+    """Death: the body pivot (at the feet) topples onto its side around the
+    forward (Y) axis and settles with a small bounce. Sideways reads clearly
+    from the WC3 camera; a backward fall looks like standing from above."""
+    keyframe_action(body, "death", "rotation_euler", [
+        (0.0, radians(0, 0, 0)),
+        (0.12, radians(0, 18, 0)),
+        (0.42, radians(0, 90, 0)),
+        (0.52, radians(0, 80, 0)),
+        (0.62, radians(0, 88, 0)),
+    ])
+    body.rotation_euler = radians(0, 0, 0)
+
+
 def export_glb(relative_path):
     path = os.path.join(MODELS_DIR, relative_path)
     os.makedirs(os.path.dirname(path), exist_ok=True)

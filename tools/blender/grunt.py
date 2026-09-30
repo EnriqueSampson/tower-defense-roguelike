@@ -31,4 +31,6 @@ pc.keyframe_action(body, "walk", "location", [
     (0.4, (0.0, 0.0, 0.0)),
 ])
 
+pc.death_fall(body)
+
 pc.export_glb("creeps/grunt.glb")

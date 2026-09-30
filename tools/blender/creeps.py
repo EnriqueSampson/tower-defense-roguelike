@@ -19,6 +19,7 @@ def walk(body, height, period):
         (period * 0.5, (0.0, 0.0, height)),
         (period, (0.0, 0.0, 0.0)),
     ])
+    pc.death_fall(body)
 
 
 def runner():
