@@ -12,10 +12,26 @@ static func instantiate(scene: PackedScene) -> Node3D:
 		return null
 	var node := scene.instantiate()
 	if node is Node3D:
+		_enable_vertex_colors(node)
 		return node
 	node.free()
 	push_warning("ActorModel: %s does not have a Node3D root" % scene.resource_path)
 	return null
+
+
+## Exported placeholders carry their colour in vertex colours (one draw call
+## per part); Godot's glTF import does not switch that on, so enable it for
+## any surface that has a colour array. Materials are shared, so this runs
+## once per material.
+static func _enable_vertex_colors(model: Node) -> void:
+	for mesh_instance: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		var mesh := mesh_instance.mesh
+		if mesh == null:
+			continue
+		for surface in range(mesh.get_surface_count()):
+			var material := mesh.surface_get_material(surface) as StandardMaterial3D
+			if material != null and not material.vertex_color_use_as_albedo and mesh.surface_get_format(surface) & Mesh.ARRAY_FORMAT_COLOR:
+				material.vertex_color_use_as_albedo = true
 
 
 static func animation_player(model: Node) -> AnimationPlayer:
@@ -52,6 +68,13 @@ static func height(model: Node3D) -> float:
 	for mesh_instance: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
 		top = maxf(top, (_relative_transform(model, mesh_instance) * mesh_instance.get_aabb()).end.y)
 	return top
+
+
+## Turns sun shadow casting on or off for every mesh in the model.
+static func set_cast_shadows(model: Node, enabled: bool) -> void:
+	var setting := GeometryInstance3D.SHADOW_CASTING_SETTING_ON if enabled else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for mesh_instance: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		mesh_instance.cast_shadow = setting
 
 
 ## Adds (or clears, with alpha 0) a flat tint over every mesh in the model.

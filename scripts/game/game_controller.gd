@@ -37,7 +37,10 @@ var _run_ended_announced := false
 
 @onready var wintermaul_map: WintermaulMap = %WintermaulMap
 @onready var battlefield_camera: BattlefieldCamera = %BattlefieldCamera
+var _stats_cache: Dictionary = {}
+var _stats_cache_revision := -1
 @onready var battlefield_view: Control = %BattlefieldView
+@onready var sun: DirectionalLight3D = $WorldClip/BattlefieldView/BattlefieldViewport/World/Sun
 @onready var hud: GameHud = %Hud
 
 
@@ -50,8 +53,8 @@ func _ready() -> void:
 		_spawn_queues[position_index] = []
 
 	battlefield_camera.set_edge_pan_area(battlefield_view)
-	battlefield_camera.edge_pan_enabled = GameSettings.edge_pan_enabled
-	GameSettings.changed.connect(func() -> void: battlefield_camera.edge_pan_enabled = GameSettings.edge_pan_enabled)
+	GameSettings.changed.connect(_apply_settings)
+	_apply_settings()
 	battlefield_camera.focus_on(wintermaul_map.get_position_world_rect(_home_position_index()).get_center())
 
 	wintermaul_map.creep_route_finished.connect(_on_creep_route_finished)
@@ -88,6 +91,11 @@ func _ready() -> void:
 	if not GameSettings.controls_seen:
 		hud.show_controls_overlay()
 	AudioDirector.start_music()
+
+
+func _apply_settings() -> void:
+	battlefield_camera.edge_pan_enabled = GameSettings.edge_pan_enabled
+	sun.shadow_enabled = GameSettings.shadows_enabled
 
 
 ## The local player's roster position, or Position 9 (where every lane meets
@@ -412,11 +420,22 @@ func _refresh_local_context() -> void:
 		hud.show_end_screen(_latest_snapshot["results"], CATALOG)
 
 
+## Effective tower stats, cached per definition, tier and Position 9 flag
+## until the applied upgrades change. Callers must not mutate the result.
 func _stats_for_record(record: Dictionary) -> Dictionary:
+	if _stats_cache_revision != modifiers.revision:
+		_stats_cache.clear()
+		_stats_cache_revision = modifiers.revision
+	var in_final := int(record.get("position", -1)) == FINAL_POSITION_INDEX
+	var key := "%s:%d:%s" % [record["definition_id"], int(record["tier"]), in_final]
+	if _stats_cache.has(key):
+		return _stats_cache[key]
 	var definition := CATALOG.get_tower(str(record["definition_id"]))
 	if definition == null:
 		return {}
-	return modifiers.modify_stats(definition.stats_for_tier(int(record["tier"])), definition.id, int(record.get("position", -1)) == FINAL_POSITION_INDEX)
+	var stats := modifiers.modify_stats(definition.stats_for_tier(int(record["tier"])), definition.id, in_final)
+	_stats_cache[key] = stats
+	return stats
 
 
 # --- Tower transactions (host validation) -----------------------------------

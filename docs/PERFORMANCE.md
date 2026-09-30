@@ -18,6 +18,29 @@ Targets are for the busiest wave (wave 9 "Full Assault" at nine-player scale, or
 | Network (host upstream) | ≤ 40 KB/s per client | Creep snapshot ≈ 60 B/creep at 0.15 s; state snapshot ≤ 8 KB at 0.5 s |
 | Startup | ≤ 3 s to lobby, ≤ 2 s lobby → game | Includes procedural audio synthesis |
 
+## Busiest-wave harness
+
+`tests/perf_wave.gd` reproduces the worst case without playing to wave 9. It places 300 towers at seeded valid spots, fakes a nine-player roster so wave 9 spawns at full scale, turns vsync off, zooms fully out, and reports average, median (p50), 95th and 99th percentile and maximum frame times, plus peak creeps, projectiles, effects and draw calls.
+
+```sh
+godot --headless --path . --script res://tests/perf_wave.gd   # game logic only
+godot --path . --script res://tests/perf_wave.gd              # full frame (keep the window in front)
+PERF_ZOOM=1.0 PERF_SHADOWS=off PERF_TOWERS=150 godot --path . --script res://tests/perf_wave.gd
+```
+
+Close the Godot editor, Blender and browsers first: they share the integrated GPU and make results noisy. The headless loop has a ~7.2 ms frame floor on this Mac even for an empty scene, so read headless numbers as "floor + logic".
+
+### Results, September 29, 2026 (Iris 550, 1280x800, busy machine: load average 8-48)
+
+| Change | Measurement |
+| --- | --- |
+| Before | Logic: 20 ms average, p95 56 ms. Idle towers re-scanned every frame (each scan rebuilt the creep list); 8.8 ms of tower stats per snapshot; the HUD rebuilt the command card twice per snapshot. |
+| Active-creep list cached per frame; idle towers retarget every 0.15 s (staggered); `reconcile_towers` uses an id map; tower stats cached per definition/tier/Position 9 until upgrades change; command card skips unchanged rebuilds | Logic: 7.5 ms average against the 7.2 ms floor (about 0.3 ms real), p95 about 2.3 ms above the floor. Snapshot broadcast 5.4 ms → 1.9 ms. |
+| Placeholder models merged to one mesh per moving part with vertex colours (one draw call each); creep models stop casting sun shadows | Draw calls at full zoom-out: 3141 → 1088 with shadows, 328 without. |
+| Real-time sun shadows default off (WC3 used blob shadows); `Real-time shadows` setting | Shadows alone cost about 5.5 ms on an empty map and about 8 ms more with 300 towers. Default zoom: 152 draw calls. |
+
+Full-frame times were inconsistent between runs on the loaded machine (the far-zoom median ranged from 7 to 20 ms), so the 60 fps floor still has to be confirmed on a quiet machine. Open budget risk: the base scene without shadows costs about 6.5 ms (pines about 1.5 ms, ground detail about 1 ms, HUD about 0.7 ms).
+
 ## Profiling procedure
 
 1. Run the windowed smoke test and confirm fps: `godot --path . --script res://tests/visual_smoke.gd` (prints fps and `frames_drawn` at frame 200 and writes `/tmp/wintermaul_smoke.png` plus `/tmp/wintermaul_zoomed.png`). Keep the window in the foreground: macOS stops drawing occluded windows, so `frames_drawn` far below the frame count means the numbers are meaningless. `Performance.TIME_PROCESS` includes rendering and the vsync wait, so it reads ≈ 16.7 ms at a steady 60 fps.

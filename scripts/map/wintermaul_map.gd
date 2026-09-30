@@ -52,6 +52,10 @@ var _occupied_cells: Dictionary = {}
 var _positions: Array[Dictionary] = []
 var _path_grid: PathGrid
 var _last_creep_positions: Dictionary = {}
+## Active creeps shared by every caller within a frame (towers, impacts,
+## minimap); rebuilt on the next frame or when creeps spawn, die or leave.
+var _active_creeps_cache: Array = []
+var _active_creeps_frame := -1
 var _terrain_texture: ImageTexture
 
 var _build_enabled := false
@@ -149,6 +153,7 @@ func spawn_creep(creep_id: int, lane_id: int, definition: CreepDefinition, healt
 	var spawn_cell: Vector2i = spawners[creep_id % spawners.size()]
 	var runner := RouteRunnerScene.new() as RouteRunner
 	%RouteRunners.add_child(runner)
+	_invalidate_active_creeps()
 	runner.setup(
 		creep_id,
 		lane_id,
@@ -177,6 +182,7 @@ func spawn_creep(creep_id: int, lane_id: int, definition: CreepDefinition, healt
 
 
 func remove_creep(creep_id: int, killed := false) -> void:
+	_invalidate_active_creeps()
 	var runner := get_creep(creep_id)
 	if runner == null:
 		return
@@ -189,6 +195,7 @@ func remove_creep(creep_id: int, killed := false) -> void:
 
 
 func clear_creeps() -> void:
+	_invalidate_active_creeps()
 	for child in %RouteRunners.get_children():
 		child.queue_free()
 
@@ -200,12 +207,23 @@ func get_creep(creep_id: int) -> RouteRunner:
 	return null
 
 
+## Callers must not modify the returned array. Entries can die later in the
+## same frame, so consumers still check health (TowerTargeting, CombatResolver).
 func get_active_creeps() -> Array:
+	var frame := Engine.get_process_frames()
+	if frame == _active_creeps_frame:
+		return _active_creeps_cache
 	var creeps: Array = []
 	for child in %RouteRunners.get_children():
 		if child is RouteRunner and child.health > 0 and not child.is_queued_for_deletion():
 			creeps.append(child)
+	_active_creeps_cache = creeps
+	_active_creeps_frame = frame
 	return creeps
+
+
+func _invalidate_active_creeps() -> void:
+	_active_creeps_frame = -1
 
 
 func show_bounty(creep_id: int, amount: int) -> void:
@@ -266,6 +284,8 @@ func reconcile_creeps(records: Array, creep_lookup: Callable, speed_multiplier :
 		if child is RouteRunner and not seen.has(child.creep_id) and not child.is_queued_for_deletion():
 			child.queue_free()
 			summary["removed"] += 1
+	if summary["removed"] > 0 or summary["added"] > 0:
+		_invalidate_active_creeps()
 	return summary
 
 
@@ -365,10 +385,14 @@ func get_selected_tower_id() -> int:
 func reconcile_towers(records: Array, definition_lookup: Callable, stats_lookup: Callable) -> Dictionary:
 	var summary := {"added": 0, "updated": 0, "removed": 0}
 	var seen: Dictionary = {}
+	var by_id: Dictionary = {}
+	for child in %Towers.get_children():
+		if child is Tower and not child.is_queued_for_deletion():
+			by_id[child.tower_id] = child
 	for record in records:
 		var tower_id := int(record["id"])
 		seen[tower_id] = true
-		var tower := get_tower(tower_id)
+		var tower: Tower = by_id.get(tower_id)
 		var stats: Dictionary = stats_lookup.call(record)
 		if tower == null:
 			var definition: TowerDefinition = definition_lookup.call(str(record["definition_id"]))
@@ -1121,6 +1145,7 @@ static func _preview_color(result: int) -> Color:
 # --- Runner callbacks ---------------------------------------------------------
 
 func _on_runner_finished(creep_id: int) -> void:
+	_invalidate_active_creeps()
 	# Clients hold leaked creeps at the gate until the host confirms the leak.
 	if not _is_authority():
 		return
@@ -1133,6 +1158,7 @@ func _on_runner_finished(creep_id: int) -> void:
 
 
 func _on_runner_killed(creep_id: int) -> void:
+	_invalidate_active_creeps()
 	var runner := get_creep(creep_id)
 	if runner != null:
 		effects.death(runner.plane_position, runner.body_color, runner.radius)

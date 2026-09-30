@@ -281,6 +281,9 @@ func _refresh_visual() -> void:
 		_model = ActorModel.instantiate(_visual_scene)
 		if _model != null:
 			add_child(_model)
+			# Creeps are many and small: the blob shadow disc stands in for a
+			# real shadow, which would add a shadow-pass draw call per creep.
+			ActorModel.set_cast_shadows(_model, false)
 			_model_height = ActorModel.height(_model)
 			ActorModel.play(_model, &"walk", true)
 	if _model != null:

@@ -7,12 +7,16 @@ signal changed
 const SETTINGS_PATH := "user://settings.cfg"
 const SECTION_AUDIO := "audio"
 const SECTION_UX := "ux"
+const SECTION_GRAPHICS := "graphics"
 
 var master_volume := 0.8
 var music_volume := 0.5
 var effects_volume := 0.8
 var edge_pan_enabled := true
 var controls_seen := false
+## Real-time sun shadows cost ~5-13 ms on the Iris 550 target; off by default
+## (WC3 itself used blob shadows, which creeps keep either way).
+var shadows_enabled := false
 
 
 func _ready() -> void:
@@ -29,6 +33,7 @@ func load_settings() -> void:
 	effects_volume = clampf(float(config.get_value(SECTION_AUDIO, "effects", effects_volume)), 0.0, 1.0)
 	edge_pan_enabled = bool(config.get_value(SECTION_UX, "edge_pan", edge_pan_enabled))
 	controls_seen = bool(config.get_value(SECTION_UX, "controls_seen", controls_seen))
+	shadows_enabled = bool(config.get_value(SECTION_GRAPHICS, "shadows", shadows_enabled))
 	changed.emit()
 
 
@@ -39,6 +44,7 @@ func save_settings() -> void:
 	config.set_value(SECTION_AUDIO, "effects", effects_volume)
 	config.set_value(SECTION_UX, "edge_pan", edge_pan_enabled)
 	config.set_value(SECTION_UX, "controls_seen", controls_seen)
+	config.set_value(SECTION_GRAPHICS, "shadows", shadows_enabled)
 	config.save(SETTINGS_PATH)
 
 
@@ -57,6 +63,12 @@ func set_volume(bus: String, value: float) -> void:
 
 func set_edge_pan(enabled: bool) -> void:
 	edge_pan_enabled = enabled
+	changed.emit()
+	save_settings()
+
+
+func set_shadows(enabled: bool) -> void:
+	shadows_enabled = enabled
 	changed.emit()
 	save_settings()
 

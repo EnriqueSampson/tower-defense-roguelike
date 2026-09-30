@@ -4,6 +4,8 @@ extends RefCounted
 ## Aggregated effect of chosen run upgrades. Rebuilt from the ordered list of
 ## upgrade IDs so snapshots stay small and resource files are never mutated.
 var applied_ids: Array[String] = []
+## Bumped whenever the applied set changes, so callers can cache derived stats.
+var revision := 0
 
 var _catalog: ContentCatalog
 var _applied: Array[RunUpgradeDefinition] = []
@@ -19,12 +21,20 @@ func apply(upgrade: RunUpgradeDefinition) -> bool:
 		return false
 	applied_ids.append(upgrade.id)
 	_applied.append(upgrade)
+	revision += 1
 	for tag in upgrade.tags:
 		_tags[tag] = true
 	return true
 
 
 func rebuild(upgrade_ids: Array) -> void:
+	if upgrade_ids.size() == applied_ids.size():
+		var unchanged := true
+		for index in range(upgrade_ids.size()):
+			unchanged = unchanged and str(upgrade_ids[index]) == applied_ids[index]
+		if unchanged:
+			return
+	revision += 1
 	applied_ids.clear()
 	_applied.clear()
 	_tags.clear()

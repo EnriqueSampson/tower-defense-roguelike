@@ -561,6 +561,11 @@ layout_mode = 2
 button_pressed = true
 text = "Edge-of-screen camera panning"
 
+[node name="ShadowsCheck" type="CheckButton" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Real-time shadows (slower on integrated graphics)"
+
 [node name="ShowControlsButton" type="Button" parent="Hud/SettingsOverlay/Center/Panel/Margin/VBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 36)

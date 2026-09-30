@@ -88,7 +88,7 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 - [ ] UI polish: 3D model portraits, a collapsible multiboard, and a creep info panel when a creep is selected.
 - [x] Terrain: a frozen Northrend look. Wall cells are raised, flat-shaded rock cliffs with uneven snowy tops (`TerrainBuilder`). The ground is lit snow with a tiling noise detail layer and a faint build grid, the outside is a dark abyss, and the sun casts shadows (2 splits). It holds 60 fps on the Iris 550 in the smoke run.
 - [ ] Unit readability: selection circles, health bars, damage numbers, and projectile and impact effects sized for a perspective camera. Model creeps no longer show the procedural lane-color band, so bring back a lane or position signal (for example a colored ground ring).
-- [ ] Performance check: the busiest current wave on the Iris 550, with the camera fully zoomed out.
+- [x] Performance check: busiest wave (wave 9 at nine-player scale, 300 towers) via `tests/perf_wave.gd`. Game logic is now within budget. Rendering fixes: one draw call per moving part and real-time shadows off by default. See [PERFORMANCE.md](PERFORMANCE.md). Still to do: confirm 60 fps on a quiet machine.
 
 **Exit:** Every tower and creep uses a model file. The camera and picking work at 1280×800 and 1920×1080. The busiest wave meets the target frame rate on the Iris 550.
 
@@ -200,7 +200,7 @@ These conventions keep placeholder and final models interchangeable. The placeho
 - **Turning:** on towers, everything that should turn toward the target sits under an empty named `Turret`. Creeps turn as a whole to face where they're walking.
 - **Animations:** action names become the in-game animation names. Towers use `idle` (looping) and `attack` (plays once per shot, then returns to `idle`). Creeps use `walk` (looping). Planned: `death`, and `build` for builders and construction. Keep each animation on as few objects as possible; the placeholders animate one pivot empty per animation.
 - **Materials:** use a Principled BSDF with base color, roughness and optionally one texture. Avoid Blender-only shader nodes, which glTF can't export. Colors pass through as linear light: Blender's color picker already handles this, but values typed into a script must be converted from sRGB (the placeholder helper does this). Keep emission strength below about 1, or glowing parts wash out to white in game.
-- **Budget:** to be set by the Phase 1 performance check. Start around 1–3k triangles per tower and 0.5–1.5k per creep, with one texture atlas per race.
+- **Budget (from the Phase 1 performance check):** draw calls matter far more than triangles on the Iris 550 (each separate mesh-and-material pair is one draw call). A tower should be at most 3–4 meshes (base, the `Turret`, and one extra moving part if animated) and a creep 1–2, each with a single material using one texture atlas per race. Keep roughly 1–3k triangles per tower and 0.5–1.5k per creep. Don't rely on real-time shadows: they are off by default, so bake contact shading into the texture.
 
 ## 8. Explicitly deferred
 

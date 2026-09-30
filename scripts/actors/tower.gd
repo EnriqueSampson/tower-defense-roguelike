@@ -4,6 +4,9 @@ extends Node3D
 signal fired(tower: Tower, target: RouteRunner)
 
 const BASE_HEIGHT := 0.12
+## Idle towers look for a new target this often instead of every frame;
+## each tower is offset so a full map of idle towers does not scan at once.
+const RETARGET_INTERVAL := 0.15
 const RANGE_RING_HEIGHT := 0.02
 
 ## Simulation position in sim pixels; the 3D transform is derived from it.
@@ -96,6 +99,7 @@ func _process(delta: float) -> void:
 		return
 	var target := TowerTargeting.select(_map.get_active_creeps(), plane_position, attack_range(), targeting)
 	if target == null:
+		_cooldown_remaining = RETARGET_INTERVAL * (0.75 + 0.5 * fposmod(tower_id * 0.618, 1.0))
 		return
 	_cooldown_remaining = float(stats.get("cooldown", 1.0))
 	face_target(target.plane_position)

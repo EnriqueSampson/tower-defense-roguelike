@@ -34,6 +34,9 @@ const TARGETING_SHORT_NAMES: Array[String] = ["First", "Last", "Strong", "Near"]
 var _catalog: ContentCatalog
 var _card_slots: Array[Button] = []
 var _card_actions: Array[Callable] = []
+## Inputs the card was last built from; rebuilding restyles 12 buttons and
+## re-shapes their text, so it is skipped when nothing visible changed.
+var _card_signature := ""
 var _selected_definition_id := ""
 var _shown_tower_id := 0
 var _gold := 0
@@ -91,6 +94,7 @@ var _offer_ids: Array[String] = []
 @onready var music_slider: HSlider = %MusicSlider
 @onready var effects_slider: HSlider = %EffectsSlider
 @onready var edge_pan_check: CheckButton = %EdgePanCheck
+@onready var shadows_check: CheckButton = %ShadowsCheck
 @onready var show_controls_button: Button = %ShowControlsButton
 @onready var close_settings_button: Button = %CloseSettingsButton
 @onready var controls_overlay: Control = %ControlsOverlay
@@ -118,6 +122,7 @@ func _ready() -> void:
 	music_slider.value_changed.connect(func(value: float) -> void: GameSettings.set_volume("music", value))
 	effects_slider.value_changed.connect(func(value: float) -> void: GameSettings.set_volume("effects", value))
 	edge_pan_check.toggled.connect(func(pressed: bool) -> void: GameSettings.set_edge_pan(pressed))
+	shadows_check.toggled.connect(func(pressed: bool) -> void: GameSettings.set_shadows(pressed))
 	tower_panel.visible = false
 	offer_overlay.visible = false
 	end_overlay.visible = false
@@ -331,6 +336,8 @@ func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictiona
 
 
 func hide_tower() -> void:
+	if _shown_tower_id == 0 and not tower_panel.visible:
+		return
 	_shown_tower_id = 0
 	_tower_definition = null
 	tower_panel.visible = false
@@ -387,11 +394,27 @@ func _set_card_slot(index: int, label: String, tooltip: String, action: Callable
 func _refresh_card() -> void:
 	if _card_slots.is_empty():
 		return
+	var signature := _card_state_signature()
+	if signature == _card_signature:
+		return
+	_card_signature = signature
 	_clear_card()
 	if _shown_tower_id != 0 and _tower_definition != null:
 		_fill_tower_card()
 	elif _catalog != null:
 		_fill_build_card()
+
+
+func _card_state_signature() -> String:
+	if _shown_tower_id != 0 and _tower_definition != null:
+		return "tower|%d|%d|%d|%s|%d|%d|%s" % [_shown_tower_id, _tower_tier, _tower_targeting, _tower_can_control, _upgrade_cost, _sell_value, _upgrade_cost >= 0 and _gold >= _upgrade_cost]
+	if _catalog == null:
+		return "empty"
+	var parts := PackedStringArray(["build", _selected_definition_id])
+	for definition in _catalog.towers:
+		var cost := _modifiers.build_cost(definition.cost) if _modifiers else definition.cost
+		parts.append("%d:%s" % [cost, _gold >= cost])
+	return "|".join(parts)
 
 
 func _fill_build_card() -> void:
@@ -517,6 +540,7 @@ func toggle_settings() -> void:
 		music_slider.set_value_no_signal(GameSettings.music_volume)
 		effects_slider.set_value_no_signal(GameSettings.effects_volume)
 		edge_pan_check.set_pressed_no_signal(GameSettings.edge_pan_enabled)
+		shadows_check.set_pressed_no_signal(GameSettings.shadows_enabled)
 
 
 ## Closes the top-most dismissible overlay. Returns true when one was closed.
