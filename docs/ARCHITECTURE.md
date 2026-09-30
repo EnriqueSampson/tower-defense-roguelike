@@ -23,6 +23,7 @@ This document freezes the invariants that the MVP depends on. Change them delibe
 | `towers` | `tower_id -> {id, definition_id, cell, position, targeting, invested}`; an upgrade replaces `definition_id` with the chosen option from the tower's upgrade tree and adds its price to `invested` (which sets the sell value); `cell` is the footprint anchor (top-left cell of the tower's `TowerDefinition.footprint`, 2×2 for shipped towers). Work in progress adds `build_remaining`/`build_total`/`build_paid` (construction) or `upgrade_to`/`upgrade_remaining`/`upgrade_total`/`upgrade_paid` (timed upgrade); the host counts them down in `_tick_construction` |
 | `position_owners` | `position_index -> peer_id` (0 = unfilled, host controls) |
 | `peer_races` | `peer_id -> race_id` picked in the lobby (Steam member data `race`); unknown or missing picks fall back to the catalog's first race. Replicated as `races` in the state snapshot |
+| `peer_bonus_races`, `peer_relics`, `midpoint_pending` | The halfway choice (§9): a second race per peer, Relics left per peer, and the peers who still have to choose. Replicated as `bonus_races`, `relics` and `midpoint` |
 | `run_seed` | Host-generated seed for deterministic upgrade offers |
 | `applied_upgrades`, `pending_offer` | Ordered upgrade IDs; offers pause the build timer |
 | `elapsed_seconds`, `stats` | Run duration and results counters |
@@ -88,6 +89,7 @@ Every client intent carries the sender peer ID (`multiplayer.get_remote_sender_i
 | Construction start (builder arrives within `BUILDER_REACH_CELLS`) | the full place-tower check again, since the maze, creeps or gold may have changed; failure drops the order with a reason to its owner and spends nothing |
 | Place tower | phase allows building; definition ID exists; race root as above; every footprint cell in bounds, buildable, inside one position, unoccupied, and free of creeps; the footprint as a whole does not seal any required route or active creep segment; requester controls the position; team gold covers the modified cost. Builder orders start the tower under construction (it holds its footprint but does not attack) |
 | Move / Stop order | requester has a builder; move target inside the world rect. Builders walk anywhere and never touch the path grid |
+| Halfway choice (`choice`, `race_id`) | requester is still pending; `race` names a known race other than its own; recorded once |
 | Upgrade tower (`tower_id`, `target_id`) | phase; tower exists; requester controls its position; not under construction or already upgrading; `target_id` is one of the tower's `upgrade_options`; gold covers the target's modified cost. Paid up front; the tower keeps fighting as itself until the timer ends, then becomes the target |
 | Sell tower | phase; tower exists; requester controls its position; exactly-once (second sell finds no record). Selling during construction cancels it for a full refund; selling mid-upgrade also returns the upgrade payment |
 | Set targeting | tower exists; mode is valid; requester controls its position |
@@ -108,13 +110,15 @@ Typed RPC parameters reject malformed payloads at the transport layer before the
 - `RaceDefinition` lists the tier-1 towers its builder builds and the builder model. Each `TowerDefinition` names the towers it can upgrade into (`upgrade_options`, one tier up); a tower with several options branches, as in classic Wintermaul.
 - `ContentCatalog.validate()` checks that options name known towers one tier up, trees never merge, every tower belongs to exactly one race, every race can detect invisible creeps, and tower-specific run upgrades name a line root.
 - A tower's *line* is the root of its tree (`ContentCatalog.line_of`). Run upgrades that name a tower apply to its whole line, and offers only include lines some race in the run can build.
+- Each race also has a unique ultimate (`RaceDefinition.ultimate`) outside its trees. It is built directly, but only with a Relic.
+- **Halfway choice.** Clearing level 15 of 30 (`BalanceConfig.midpoint_wave_index`) fills `midpoint_pending` with every peer that has a builder; the build timer and Launch wait until it empties (after `MIDPOINT_CHOICE_TIMEOUT` everyone left gets a Relic). Each peer sends `_request_midpoint_choice("relic" | "race", race_id)`: a Relic, or a second race (never its own) whose tier-1 towers and trees its builder may then build. Building the ultimate costs its gold plus one Relic (`Placement.NEEDS_RELIC` without one); cancelling construction refunds both, selling a finished ultimate refunds gold only.
 - Content comes from `tools/race_content.py` (stats, trees, model recipes) through `tools/generate_races.py` (resources) and `tools/blender/race_towers.py` (placeholder models).
 
 ## 10. Special creeps (Phase 3)
 
 | Trait | Rule |
 | --- | --- |
-| Air (`CreepDefinition.is_air`) | Flies straight between route checkpoints, never repaths, never blocks building. Only towers with `can_target_air` target or splash it |
+| Air (`CreepDefinition.is_air`) | Follows its lane's fixed flight path (`WintermaulMap.get_air_route`: the corners of the empty-map route, so every corridor and checkpoint) and ignores towers: never repaths, never blocks building. Only towers with `can_target_air` target or splash it |
 | Magic immune | Magic towers (`TowerDefinition.is_magic`, Frost) skip it and their impacts deal no damage or slow |
 | Invisible | Targetable only while inside some tower's `detection_range` (the Nosy Neighbor tower, or any tower with the Snitch Network upgrade). Splash still hits it, as in WC3 |
 | Splitter (`split_into` × `split_count`) | On death, children spawn where it fell on the same stage, with the parent's health and bounty multipliers. Children never split again |

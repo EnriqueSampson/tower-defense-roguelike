@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://4evqmg8xeiy3" path="res://assets/models/towers/orc_shaman.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "orc_shaman"
+display_name = "Shaman With Opinions"
+role = "Control"
+description = "Curses creeps with bad vibes. A magic slow the Orcs never had before."
+primary_color = Color(0.4, 0.55, 0.3, 1)
+accent_color = Color(0.7, 0.4, 0.9, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 40
+damage = 6
+attack_range = 252.0
+attack_cooldown = 0.9
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.3
+slow_duration = 2.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = true
+detection_range = 0.0
+default_targeting = 0
+tier = 2
+upgrade_options = PackedStringArray("orc_witch_doctor")
+sell_refund_percent = 70

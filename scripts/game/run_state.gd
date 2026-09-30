@@ -31,6 +31,14 @@ var position_owners := PackedInt32Array()
 ## peer id -> race id picked in the lobby (the host also builds its race's
 ## towers in the positions it controls for absent players).
 var peer_races: Dictionary = {}
+## Halfway choice (see BalanceConfig.midpoint_wave_index): peer id -> a second
+## race whose towers that builder may also build...
+var peer_bonus_races: Dictionary = {}
+## ...or peer id -> Relics left, each allowing one race ultimate.
+var peer_relics: Dictionary = {}
+## Peers who still have to make the halfway choice (the build timer waits).
+var midpoint_pending: Array[int] = []
+var midpoint_done := false
 var run_seed := 0
 var applied_upgrades: Array[String] = []
 var pending_offer: Array[String] = []
@@ -222,6 +230,43 @@ func race_of(peer_id: int) -> String:
 	return str(peer_races.get(peer_id, ""))
 
 
+func bonus_race_of(peer_id: int) -> String:
+	return str(peer_bonus_races.get(peer_id, ""))
+
+
+func relics_of(peer_id: int) -> int:
+	return int(peer_relics.get(peer_id, 0))
+
+
+func has_midpoint_pending() -> bool:
+	return not midpoint_pending.is_empty()
+
+
+## Records a peer's halfway choice: "relic" or "race" (with `race_id`).
+## The caller validates the race; returns false when the peer owes no choice.
+func choose_midpoint(peer_id: int, choice: String, race_id := "") -> bool:
+	if not midpoint_pending.has(peer_id):
+		return false
+	match choice:
+		"relic":
+			peer_relics[peer_id] = relics_of(peer_id) + 1
+		"race":
+			if race_id.is_empty():
+				return false
+			peer_bonus_races[peer_id] = race_id
+		_:
+			return false
+	midpoint_pending.erase(peer_id)
+	return true
+
+
+func spend_relic(peer_id: int) -> bool:
+	if relics_of(peer_id) <= 0:
+		return false
+	peer_relics[peer_id] = relics_of(peer_id) - 1
+	return true
+
+
 func set_tower_targeting(tower_id: int, mode: int) -> bool:
 	if not towers.has(tower_id) or not TowerTargeting.is_valid_mode(mode):
 		return false
@@ -267,6 +312,9 @@ func snapshot(countdown: float) -> Dictionary:
 		"towers": tower_records(),
 		"owners": position_owners,
 		"races": peer_races.duplicate(),
+		"bonus_races": peer_bonus_races.duplicate(),
+		"relics": peer_relics.duplicate(),
+		"midpoint": midpoint_pending.duplicate(),
 		"seed": run_seed,
 		"upgrades": applied_upgrades.duplicate(),
 		"offer": pending_offer.duplicate(),
@@ -292,6 +340,15 @@ func restore(data: Dictionary) -> void:
 	var races: Dictionary = data.get("races", {})
 	for peer_id in races:
 		peer_races[int(peer_id)] = str(races[peer_id])
+	peer_bonus_races.clear()
+	var bonus: Dictionary = data.get("bonus_races", {})
+	for peer_id in bonus:
+		peer_bonus_races[int(peer_id)] = str(bonus[peer_id])
+	peer_relics.clear()
+	var relics: Dictionary = data.get("relics", {})
+	for peer_id in relics:
+		peer_relics[int(peer_id)] = int(relics[peer_id])
+	midpoint_pending.assign(data.get("midpoint", []))
 	run_seed = int(data.get("seed", run_seed))
 	applied_upgrades.assign(data.get("upgrades", []))
 	pending_offer.assign(data.get("offer", []))

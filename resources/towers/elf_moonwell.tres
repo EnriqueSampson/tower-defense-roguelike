@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://ce8nav5gdiw7c" path="res://assets/models/towers/elf_moonwell.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "elf_moonwell"
+display_name = "Moon Well"
+role = "Detection and splash"
+description = "A glowing pool that reveals everything and zaps whoever it finds. Magic splash."
+primary_color = Color(0.3, 0.35, 0.6, 1)
+accent_color = Color(0.75, 0.8, 1.0, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 110
+damage = 24
+attack_range = 336.0
+attack_cooldown = 1.0
+projectile_speed = 620.0
+splash_radius = 33.6
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = true
+detection_range = 504.0
+default_targeting = 0
+tier = 3
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

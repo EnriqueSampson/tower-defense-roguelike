@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://p86sxqj2v1iu" path="res://assets/models/towers/orc_witch_doctor.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "orc_witch_doctor"
+display_name = "Witch Doctor"
+role = "Area slow"
+description = "Hexes whole groups at once. No medical license. Magic splash that slows."
+primary_color = Color(0.35, 0.5, 0.3, 1)
+accent_color = Color(0.8, 0.45, 1.0, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 110
+damage = 24
+attack_range = 280.0
+attack_cooldown = 1.1
+projectile_speed = 620.0
+splash_radius = 44.8
+slow_factor = 0.4
+slow_duration = 2.5
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = true
+detection_range = 0.0
+default_targeting = 0
+tier = 3
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

@@ -28,5 +28,5 @@ is_magic = true
 detection_range = 0.0
 default_targeting = 0
 tier = 2
-upgrade_options = PackedStringArray("elf_water_elemental")
+upgrade_options = PackedStringArray("elf_water_elemental", "elf_kraken")
 sell_refund_percent = 70

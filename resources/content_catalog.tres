@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="ContentCatalog" load_steps=101 format=3]
+[gd_resource type="Resource" script_class="ContentCatalog" load_steps=124 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/content_catalog.gd" id="1_catalog"]
 [ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="2_tower"]
@@ -47,6 +47,23 @@
 [ext_resource type="Resource" path="res://resources/towers/bug_lantern.tres" id="t_bug_lantern"]
 [ext_resource type="Resource" path="res://resources/towers/bug_mosquito.tres" id="t_bug_mosquito"]
 [ext_resource type="Resource" path="res://resources/towers/bug_horsefly.tres" id="t_bug_horsefly"]
+[ext_resource type="Resource" path="res://resources/towers/human_ballista.tres" id="t_human_ballista"]
+[ext_resource type="Resource" path="res://resources/towers/human_paladin.tres" id="t_human_paladin"]
+[ext_resource type="Resource" path="res://resources/towers/human_monster_truck.tres" id="t_human_monster_truck"]
+[ext_resource type="Resource" path="res://resources/towers/human_drone.tres" id="t_human_drone"]
+[ext_resource type="Resource" path="res://resources/towers/human_orbital.tres" id="t_human_orbital"]
+[ext_resource type="Resource" path="res://resources/towers/orc_shaman.tres" id="t_orc_shaman"]
+[ext_resource type="Resource" path="res://resources/towers/orc_witch_doctor.tres" id="t_orc_witch_doctor"]
+[ext_resource type="Resource" path="res://resources/towers/orc_boar_cavalry.tres" id="t_orc_boar_cavalry"]
+[ext_resource type="Resource" path="res://resources/towers/orc_stompa.tres" id="t_orc_stompa"]
+[ext_resource type="Resource" path="res://resources/towers/elf_moonwell.tres" id="t_elf_moonwell"]
+[ext_resource type="Resource" path="res://resources/towers/elf_kraken.tres" id="t_elf_kraken"]
+[ext_resource type="Resource" path="res://resources/towers/elf_thornbush.tres" id="t_elf_thornbush"]
+[ext_resource type="Resource" path="res://resources/towers/elf_world_tree.tres" id="t_elf_world_tree"]
+[ext_resource type="Resource" path="res://resources/towers/bug_stink.tres" id="t_bug_stink"]
+[ext_resource type="Resource" path="res://resources/towers/bug_dragonfly.tres" id="t_bug_dragonfly"]
+[ext_resource type="Resource" path="res://resources/towers/bug_hornet.tres" id="t_bug_hornet"]
+[ext_resource type="Resource" path="res://resources/towers/bug_locusts.tres" id="t_bug_locusts"]
 [ext_resource type="Resource" path="res://resources/races/humans.tres" id="r_humans"]
 [ext_resource type="Resource" path="res://resources/races/orcs.tres" id="r_orcs"]
 [ext_resource type="Resource" path="res://resources/races/elves.tres" id="r_elves"]
@@ -70,6 +87,12 @@
 [ext_resource type="Resource" path="res://resources/upgrades/snitch_network.tres" id="u_snitch_network"]
 [ext_resource type="Resource" path="res://resources/upgrades/pheromone_trails.tres" id="u_pheromone_trails"]
 [ext_resource type="Resource" path="res://resources/upgrades/swarm_tactics.tres" id="u_swarm_tactics"]
+[ext_resource type="Resource" path="res://resources/upgrades/gossip_network.tres" id="u_gossip_network"]
+[ext_resource type="Resource" path="res://resources/upgrades/axe_sharpening.tres" id="u_axe_sharpening"]
+[ext_resource type="Resource" path="res://resources/upgrades/boar_snacks.tres" id="u_boar_snacks"]
+[ext_resource type="Resource" path="res://resources/upgrades/elven_precision.tres" id="u_elven_precision"]
+[ext_resource type="Resource" path="res://resources/upgrades/deep_roots.tres" id="u_deep_roots"]
+[ext_resource type="Resource" path="res://resources/upgrades/chitin_plating.tres" id="u_chitin_plating"]
 [ext_resource type="Resource" path="res://resources/waves/wave_01.tres" id="w_01"]
 [ext_resource type="Resource" path="res://resources/waves/wave_02.tres" id="w_02"]
 [ext_resource type="Resource" path="res://resources/waves/wave_03.tres" id="w_03"]
@@ -103,7 +126,7 @@
 
 [resource]
 script = ExtResource("1_catalog")
-towers = Array[ExtResource("2_tower")]([ExtResource("t_bolt"), ExtResource("t_human_crossbow"), ExtResource("t_human_musket"), ExtResource("t_human_streamer"), ExtResource("t_human_knight"), ExtResource("t_human_minivan"), ExtResource("t_sentry"), ExtResource("t_human_watch"), ExtResource("t_human_hoa"), ExtResource("t_orc_axe"), ExtResource("t_orc_raider"), ExtResource("t_orc_lizard"), ExtResource("t_orc_lizard_king"), ExtResource("t_cannon"), ExtResource("t_orc_mortar"), ExtResource("t_orc_wagon"), ExtResource("t_orc_warrig"), ExtResource("t_orc_flak"), ExtResource("t_orc_boar"), ExtResource("t_orc_warboar"), ExtResource("t_elf_archer"), ExtResource("t_elf_ranger"), ExtResource("t_elf_hippogryph"), ExtResource("t_elf_owl"), ExtResource("t_frost"), ExtResource("t_elf_tide"), ExtResource("t_elf_water_elemental"), ExtResource("t_elf_sapling"), ExtResource("t_elf_treant"), ExtResource("t_elf_ent"), ExtResource("t_bug_ant"), ExtResource("t_bug_soldier_ant"), ExtResource("t_bug_army_ant"), ExtResource("t_bug_queen"), ExtResource("t_bug_beetle"), ExtResource("t_bug_stag"), ExtResource("t_bug_rhino"), ExtResource("t_bug_firefly"), ExtResource("t_bug_lantern"), ExtResource("t_bug_mosquito"), ExtResource("t_bug_horsefly")])
+towers = Array[ExtResource("2_tower")]([ExtResource("t_bolt"), ExtResource("t_human_crossbow"), ExtResource("t_human_musket"), ExtResource("t_human_streamer"), ExtResource("t_human_knight"), ExtResource("t_human_minivan"), ExtResource("t_sentry"), ExtResource("t_human_watch"), ExtResource("t_human_hoa"), ExtResource("t_orc_axe"), ExtResource("t_orc_raider"), ExtResource("t_orc_lizard"), ExtResource("t_orc_lizard_king"), ExtResource("t_cannon"), ExtResource("t_orc_mortar"), ExtResource("t_orc_wagon"), ExtResource("t_orc_warrig"), ExtResource("t_orc_flak"), ExtResource("t_orc_boar"), ExtResource("t_orc_warboar"), ExtResource("t_elf_archer"), ExtResource("t_elf_ranger"), ExtResource("t_elf_hippogryph"), ExtResource("t_elf_owl"), ExtResource("t_frost"), ExtResource("t_elf_tide"), ExtResource("t_elf_water_elemental"), ExtResource("t_elf_sapling"), ExtResource("t_elf_treant"), ExtResource("t_elf_ent"), ExtResource("t_bug_ant"), ExtResource("t_bug_soldier_ant"), ExtResource("t_bug_army_ant"), ExtResource("t_bug_queen"), ExtResource("t_bug_beetle"), ExtResource("t_bug_stag"), ExtResource("t_bug_rhino"), ExtResource("t_bug_firefly"), ExtResource("t_bug_lantern"), ExtResource("t_bug_mosquito"), ExtResource("t_bug_horsefly"), ExtResource("t_human_ballista"), ExtResource("t_human_paladin"), ExtResource("t_human_monster_truck"), ExtResource("t_human_drone"), ExtResource("t_human_orbital"), ExtResource("t_orc_shaman"), ExtResource("t_orc_witch_doctor"), ExtResource("t_orc_boar_cavalry"), ExtResource("t_orc_stompa"), ExtResource("t_elf_moonwell"), ExtResource("t_elf_kraken"), ExtResource("t_elf_thornbush"), ExtResource("t_elf_world_tree"), ExtResource("t_bug_stink"), ExtResource("t_bug_dragonfly"), ExtResource("t_bug_hornet"), ExtResource("t_bug_locusts")])
 races = Array[ExtResource("5_race")]([ExtResource("r_humans"), ExtResource("r_orcs"), ExtResource("r_elves"), ExtResource("r_bugs")])
 waves = Array[ExtResource("3_wave")]([ExtResource("w_01"), ExtResource("w_02"), ExtResource("w_03"), ExtResource("w_04"), ExtResource("w_05"), ExtResource("w_06"), ExtResource("w_07"), ExtResource("w_08"), ExtResource("w_09"), ExtResource("w_10"), ExtResource("w_11"), ExtResource("w_12"), ExtResource("w_13"), ExtResource("w_14"), ExtResource("w_15"), ExtResource("w_16"), ExtResource("w_17"), ExtResource("w_18"), ExtResource("w_19"), ExtResource("w_20"), ExtResource("w_21"), ExtResource("w_22"), ExtResource("w_23"), ExtResource("w_24"), ExtResource("w_25"), ExtResource("w_26"), ExtResource("w_27"), ExtResource("w_28"), ExtResource("w_29"), ExtResource("w_30")])
-upgrades = Array[ExtResource("4_upgrade")]([ExtResource("u_bolt_damage"), ExtResource("u_bolt_rapid"), ExtResource("u_cannon_splash"), ExtResource("u_cannon_damage"), ExtResource("u_cannon_shock"), ExtResource("u_frost_deep"), ExtResource("u_frost_range"), ExtResource("u_all_range"), ExtResource("u_bounty_bonus"), ExtResource("u_cheap_upgrades"), ExtResource("u_better_refunds"), ExtResource("u_war_chest"), ExtResource("u_extra_lives"), ExtResource("u_p9_bastion"), ExtResource("u_overclock"), ExtResource("u_glass_cannons"), ExtResource("u_frugal"), ExtResource("u_snitch_network"), ExtResource("u_pheromone_trails"), ExtResource("u_swarm_tactics")])
+upgrades = Array[ExtResource("4_upgrade")]([ExtResource("u_bolt_damage"), ExtResource("u_bolt_rapid"), ExtResource("u_cannon_splash"), ExtResource("u_cannon_damage"), ExtResource("u_cannon_shock"), ExtResource("u_frost_deep"), ExtResource("u_frost_range"), ExtResource("u_all_range"), ExtResource("u_bounty_bonus"), ExtResource("u_cheap_upgrades"), ExtResource("u_better_refunds"), ExtResource("u_war_chest"), ExtResource("u_extra_lives"), ExtResource("u_p9_bastion"), ExtResource("u_overclock"), ExtResource("u_glass_cannons"), ExtResource("u_frugal"), ExtResource("u_snitch_network"), ExtResource("u_pheromone_trails"), ExtResource("u_swarm_tactics"), ExtResource("u_gossip_network"), ExtResource("u_axe_sharpening"), ExtResource("u_boar_snacks"), ExtResource("u_elven_precision"), ExtResource("u_deep_roots"), ExtResource("u_chitin_plating")])

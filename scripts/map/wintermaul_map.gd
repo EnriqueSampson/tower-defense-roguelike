@@ -31,6 +31,7 @@ enum Placement {
 	LOCKED,
 	NO_TOWER_SELECTED,
 	WRONG_RACE,
+	NEEDS_RELIC,
 }
 
 const RouteRunnerScene = preload("res://scripts/actors/route_runner.gd")
@@ -761,6 +762,8 @@ static func placement_text(result: int) -> String:
 			return "Select a tower from the palette"
 		Placement.WRONG_RACE:
 			return "Your builder cannot build that"
+		Placement.NEEDS_RELIC:
+			return "Needs a Relic (the halfway choice)"
 	return "Unknown"
 
 

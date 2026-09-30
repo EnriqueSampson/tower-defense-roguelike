@@ -21,6 +21,7 @@ var _spawn_timers := PackedFloat32Array()
 var _creep_bounties: Dictionary = {}
 var _creep_is_boss: Dictionary = {}
 var _creep_bounty_multipliers: Dictionary = {}
+var _midpoint_timer := 0.0
 var _latest_snapshot: Dictionary = {}
 var _selected_definition_id := ""
 var _selected_tower_id := 0
@@ -90,6 +91,7 @@ func _ready() -> void:
 	hud.sell_requested.connect(_on_sell_requested)
 	hud.targeting_requested.connect(_on_targeting_requested)
 	hud.offer_chosen.connect(_on_offer_chosen)
+	hud.midpoint_chosen.connect(_on_midpoint_chosen)
 	hud.return_requested.connect(_return_to_lobby)
 	hud.selection_cleared.connect(_clear_selection)
 	hud.ready_requested.connect(_on_ready_pressed)
@@ -168,15 +170,26 @@ func _race_for(peer_id: int) -> RaceDefinition:
 	return CATALOG.get_race(CATALOG.resolve_race_id(run_state.race_of(peer_id)))
 
 
+## Whether `peer_id`'s builder may build `definition` directly: a tier-1
+## tower of its race or of the second race it recruited at the halfway point,
+## or its race's ultimate (which also needs a Relic, see _try_place_tower).
 func _race_builds(peer_id: int, definition: TowerDefinition) -> bool:
 	var race := _race_for(peer_id)
-	return race == null or race.has_root(definition.id)
+	if race == null or race.has_root(definition.id) or race.ultimate == definition:
+		return true
+	var bonus := CATALOG.get_race(run_state.bonus_race_of(peer_id))
+	return bonus != null and bonus.has_root(definition.id)
+
+
+func _is_ultimate(definition: TowerDefinition) -> bool:
+	var race := CATALOG.get_race(CATALOG.race_of_tower(definition.id))
+	return race != null and race.ultimate == definition
 
 
 ## Tower lines any race in the run can build (race-aware upgrade offers).
 func _available_lines() -> PackedStringArray:
 	var lines := PackedStringArray()
-	var race_ids: Array = run_state.peer_races.values()
+	var race_ids: Array = run_state.peer_races.values() + run_state.peer_bonus_races.values()
 	if race_ids.is_empty():
 		race_ids = [CATALOG.resolve_race_id("")]
 	for race_id in race_ids:
@@ -229,6 +242,10 @@ func _process(delta: float) -> void:
 				if _load_ack_timer <= 0.0:
 					_awaiting_peers.clear()
 					_mark_dirty()
+			elif run_state.has_midpoint_pending():
+				_midpoint_timer -= delta
+				if _midpoint_timer <= 0.0:
+					_resolve_midpoint_timeout()
 			elif not run_state.has_pending_offer():
 				if run_state.current_wave_index == 0 and _wave_one_pending_ready.is_empty():
 					_begin_wave()
@@ -397,6 +414,8 @@ func _finish_creep_resolution() -> void:
 		var cleared_wave: WaveDefinition = CATALOG.waves[run_state.current_wave_index]
 		run_state.advance_after_clear()
 		if run_state.phase == RunStateModel.Phase.BUILD:
+			if run_state.current_wave_index - 1 == BalanceConfig.midpoint_wave_index(run_state.wave_count):
+				_open_midpoint_choice()
 			if cleared_wave.offers_upgrade_after and run_state.roguelike_enabled:
 				run_state.pending_offer = UpgradeOffer.roll(CATALOG.upgrades, modifiers, run_state.run_seed, run_state.current_wave_index, BalanceConfig.OFFER_CHOICE_COUNT, _available_lines())
 			_start_build_phase()
@@ -481,6 +500,13 @@ func _apply_state_snapshot(snapshot: Dictionary) -> void:
 		var races: Dictionary = snapshot.get("races", {})
 		for peer_id in races:
 			run_state.peer_races[int(peer_id)] = str(races[peer_id])
+		var bonus: Dictionary = snapshot.get("bonus_races", {})
+		for peer_id in bonus:
+			run_state.peer_bonus_races[int(peer_id)] = str(bonus[peer_id])
+		var relics: Dictionary = snapshot.get("relics", {})
+		for peer_id in relics:
+			run_state.peer_relics[int(peer_id)] = int(relics[peer_id])
+		run_state.midpoint_pending.assign(snapshot.get("midpoint", []))
 		wintermaul_map.reconcile_towers(snapshot.get("towers", []), CATALOG.get_tower, _stats_for_record)
 		_apply_builder_records(snapshot.get("builders", []))
 	_refresh_local_context()
@@ -529,14 +555,26 @@ func _refresh_local_context() -> void:
 		"wave": CATALOG.waves[clampi(int(_latest_snapshot["wave_index"]), 0, CATALOG.waves.size() - 1)],
 		"selected_definition": _selected_definition_id,
 		"race": _race_for(local_peer),
+		"bonus_race": CATALOG.get_race(run_state.bonus_race_of(local_peer)),
+		"relics": run_state.relics_of(local_peer),
 		"build_cost": cost,
 		"wave_one_ready_pressed": _wave_one_ready_pressed,
 	}
 	hud.update_state(_latest_snapshot, context)
 	_refresh_tower_panel()
 
+	var midpoint: Array = _latest_snapshot.get("midpoint", [])
+	if midpoint.has(local_peer):
+		var own := _race_for(local_peer)
+		var recruitable: Array[RaceDefinition] = []
+		for race in CATALOG.races:
+			if race != own:
+				recruitable.append(race)
+		hud.show_midpoint(own, recruitable, modifiers.build_cost(own.ultimate.cost) if own and own.ultimate else 0)
+	else:
+		hud.hide_midpoint()
 	var offer_ids: Array = _latest_snapshot.get("offer", [])
-	if offer_ids.is_empty():
+	if offer_ids.is_empty() or midpoint.has(local_peer):
 		hud.hide_offer()
 	else:
 		var offered: Array[RunUpgradeDefinition] = []
@@ -604,6 +642,8 @@ func _try_order_build(peer_id: int, definition_id: String, cell: Vector2i, queue
 		return WintermaulMap.Placement.LOCKED
 	if not _race_builds(peer_id, definition):
 		return WintermaulMap.Placement.WRONG_RACE
+	if _is_ultimate(definition) and run_state.relics_of(peer_id) <= 0:
+		return WintermaulMap.Placement.NEEDS_RELIC
 	var geometry := wintermaul_map.evaluate_placement(cell, definition.footprint)
 	if geometry != WintermaulMap.Placement.OK:
 		return geometry
@@ -804,9 +844,17 @@ func _try_place_tower(definition_id: String, cell: Vector2i, peer_id := HOST_PEE
 	if not BuildPermissionPolicy.can_control(peer_id, position_index, run_state.position_owners, HOST_PEER_ID):
 		return WintermaulMap.Placement.NOT_OWNED
 	var cost := modifiers.build_cost(definition.cost)
+	var ultimate := _is_ultimate(definition)
+	if ultimate and run_state.relics_of(peer_id) <= 0:
+		return WintermaulMap.Placement.NEEDS_RELIC
 	if not run_state.spend_gold(cost):
 		return WintermaulMap.Placement.UNAFFORDABLE
+	if ultimate:
+		run_state.spend_relic(peer_id)
 	var record := run_state.add_tower(definition.id, cell, position_index, definition.default_targeting, cost)
+	if ultimate:
+		# Cancelling construction hands the Relic back to whoever spent it.
+		record["relic_peer"] = peer_id
 	if construction_seconds > 0.0:
 		record["build_remaining"] = construction_seconds
 		record["build_total"] = construction_seconds
@@ -931,8 +979,11 @@ func _try_sell_tower(tower_id: int, peer_id := HOST_PEER_ID) -> bool:
 		return false
 	var refund := definition.sell_value(int(record.get("invested", 0)), modifiers.sell_refund_bonus())
 	if float(record.get("build_remaining", 0.0)) > 0.0:
-		# Cancelling construction refunds everything, as in WC3.
+		# Cancelling construction refunds everything, as in WC3, Relic included.
 		refund = int(record.get("build_paid", modifiers.build_cost(definition.cost)))
+		if record.has("relic_peer"):
+			var relic_peer := int(record["relic_peer"])
+			run_state.peer_relics[relic_peer] = run_state.relics_of(relic_peer) + 1
 	elif float(record.get("upgrade_remaining", 0.0)) > 0.0:
 		refund += int(record.get("upgrade_paid", 0))
 	run_state.remove_tower(tower_id)
@@ -975,6 +1026,59 @@ func _transaction_feedback(success: bool, success_text: String, failure_text: St
 	hud.show_placement_message(success_text if success else failure_text, not success)
 	if not success:
 		AudioDirector.play("ui_error")
+
+
+# --- Halfway choice ------------------------------------------------------------
+
+## Every player with a builder picks once: a second race, or a Relic for
+## their race's ultimate tower. The build timer waits for everyone.
+func _open_midpoint_choice() -> void:
+	if run_state.midpoint_done or builder_system == null:
+		return
+	run_state.midpoint_done = true
+	var peers: Array[int] = []
+	for peer_id in builder_system.builders:
+		peers.append(int(peer_id))
+	peers.sort()
+	run_state.midpoint_pending = peers
+	_midpoint_timer = BalanceConfig.MIDPOINT_CHOICE_TIMEOUT
+	_show_notice.rpc("Halfway there! Recruit a second race, or take a Relic for your race's ultimate tower.", false)
+	_play_event.rpc("upgrade_chosen")
+
+
+func _on_midpoint_chosen(choice: String, race_id: String) -> void:
+	if multiplayer.is_server():
+		_transaction_feedback(_try_choose_midpoint(HOST_PEER_ID, choice, race_id), "Choice made", "Choice rejected")
+	else:
+		_request_midpoint_choice.rpc_id(HOST_PEER_ID, choice, race_id)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_midpoint_choice(choice: String, race_id: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	_transaction_feedback.rpc_id(sender, _try_choose_midpoint(sender, choice, race_id), "Choice made", "Choice rejected")
+
+
+func _try_choose_midpoint(peer_id: int, choice: String, race_id := "") -> bool:
+	if choice == "race":
+		var race := CATALOG.get_race(race_id)
+		if race == null or race.id == CATALOG.resolve_race_id(run_state.race_of(peer_id)):
+			return false
+	if not run_state.choose_midpoint(peer_id, choice, race_id):
+		return false
+	if choice == "race":
+		_show_notice.rpc("A builder recruited the %s." % CATALOG.get_race(race_id).display_name, false)
+	_mark_dirty()
+	return true
+
+
+## Anyone who has not chosen when the timer runs out gets a Relic.
+func _resolve_midpoint_timeout() -> void:
+	for peer_id in run_state.midpoint_pending.duplicate():
+		run_state.choose_midpoint(peer_id, "relic")
+	_mark_dirty()
 
 
 # --- Run upgrades -------------------------------------------------------------
@@ -1138,7 +1242,7 @@ func _find_tower_record(tower_id: int) -> Dictionary:
 
 
 func _on_launch_pressed() -> void:
-	if multiplayer.is_server() and run_state.phase == RunStateModel.Phase.BUILD and not run_state.has_pending_offer() and _awaiting_peers.is_empty():
+	if multiplayer.is_server() and run_state.phase == RunStateModel.Phase.BUILD and not run_state.has_pending_offer() and not run_state.has_midpoint_pending() and _awaiting_peers.is_empty():
 		build_countdown = 0.0
 
 

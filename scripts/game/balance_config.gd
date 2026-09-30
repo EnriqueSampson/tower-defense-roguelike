@@ -36,6 +36,17 @@ const BUILDER_TRIP_CHANCE := 0.04
 const BUILDER_TRIP_SECONDS := 1.6
 
 
+## Halfway choice: after this many levels (half the run) every builder picks
+## a second race or a Relic for its race's ultimate. Unpicked choices become
+## Relics when the timer runs out.
+const MIDPOINT_CHOICE_TIMEOUT := 60.0
+
+
+## Wave index whose clear triggers the halfway choice (level 15 of 30).
+static func midpoint_wave_index(wave_count: int) -> int:
+	return maxi(0, wave_count / 2 - 1)
+
+
 static func player_scale(player_count: int, max_players := ClassicWintermaulLayout.PLAYER_COUNT) -> float:
 	var clamped := clampi(player_count, 1, max_players)
 	var t := float(clamped - 1) / float(maxi(1, max_players - 1))

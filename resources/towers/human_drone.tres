@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://cm0he4njjlqso" path="res://assets/models/towers/human_drone.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "human_drone"
+display_name = "Doorbell Camera Drone"
+role = "Detection and anti-air"
+description = "It records everything and uploads it to the neighborhood app. Wide detection, shreds flyers. Air only."
+primary_color = Color(0.3, 0.3, 0.35, 1)
+accent_color = Color(0.4, 0.9, 1.0, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 110
+damage = 40
+attack_range = 336.0
+attack_cooldown = 0.5
+projectile_speed = 1000.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = false
+can_target_air = true
+is_magic = false
+detection_range = 448.0
+default_targeting = 0
+tier = 3
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

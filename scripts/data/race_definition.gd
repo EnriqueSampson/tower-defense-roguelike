@@ -12,6 +12,9 @@ extends Resource
 @export var builder_scene: PackedScene
 ## Towers the builder builds directly (tier 1). Upgrades reach the rest.
 @export var towers: Array[TowerDefinition] = []
+## The race's unique ultimate: built directly, once per Relic, for gold plus
+## the Relic. Relics come from the halfway choice (BalanceConfig.MIDPOINT_*).
+@export var ultimate: TowerDefinition
 
 
 func is_valid() -> bool:

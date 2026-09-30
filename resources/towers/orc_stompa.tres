@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://bicg2su80rtoy" path="res://assets/models/towers/orc_stompa.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "orc_stompa"
+display_name = "Da Big Stompa"
+role = "Race ultimate"
+description = "A mammoth-sized war truck with legs. Nobody knows who drives it. Enormous splash; flattens armor. One per Relic."
+primary_color = Color(0.35, 0.25, 0.2, 1)
+accent_color = Color(1.0, 0.45, 0.15, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 700
+damage = 320
+attack_range = 308.0
+attack_cooldown = 1.6
+projectile_speed = 500.0
+splash_radius = 84.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 6
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 0.0
+default_targeting = 2
+tier = 5
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

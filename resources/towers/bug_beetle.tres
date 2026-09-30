@@ -28,5 +28,5 @@ is_magic = false
 detection_range = 0.0
 default_targeting = 0
 tier = 1
-upgrade_options = PackedStringArray("bug_stag")
+upgrade_options = PackedStringArray("bug_stag", "bug_stink")
 sell_refund_percent = 70
