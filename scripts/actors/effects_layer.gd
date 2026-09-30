@@ -82,8 +82,9 @@ func _draw() -> void:
 		var radius: float = effect["radius"] * unit_scale
 		match int(effect["kind"]):
 			Kind.IMPACT:
+				# The ring shows the splash area; the spark stays small at any zoom.
 				draw_arc(center, radius * (0.4 + t * 0.9), 0.0, TAU, 20, Color(color.r, color.g, color.b, fade * 0.9), 2.0)
-				draw_circle(center, radius * 0.35 * fade, Color(1, 1, 0.9, fade))
+				draw_circle(center, minf(radius * 0.2, 6.0) * fade, Color(color.lightened(0.6), fade * 0.9))
 			Kind.DEATH:
 				for index in range(6):
 					var angle := TAU * index / 6.0

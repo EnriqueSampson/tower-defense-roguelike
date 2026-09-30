@@ -8,6 +8,7 @@ const BASE_HEIGHT := 0.12
 ## each tower is offset so a full map of idle towers does not scan at once.
 const RETARGET_INTERVAL := 0.15
 const RANGE_RING_HEIGHT := 0.02
+const SELECTION_COLOR := Color("5ce36b")
 
 ## Simulation position in sim pixels; the 3D transform is derived from it.
 var plane_position: Vector2:
@@ -35,6 +36,7 @@ var _map: WintermaulMap
 var _body: MeshInstance3D
 var _turret: MeshInstance3D
 var _range_ring: MeshInstance3D
+var _selection_circle: MeshInstance3D
 var _turret_rest_height := 0.0
 ## Authored model (definition.visual_scene); replaces _body/_turret when set.
 var _model: Node3D
@@ -70,6 +72,7 @@ func set_selected(value: bool) -> void:
 		return
 	selected = value
 	_refresh_range_ring()
+	_refresh_selection_circle()
 
 
 func attack_range() -> float:
@@ -188,6 +191,24 @@ func _refresh_model() -> bool:
 func _update_turret_height() -> void:
 	if _turret:
 		_turret.position.y = _turret_rest_height - _recoil * MapProjection.units(20.0)
+
+
+## WC3-style green circle around the selected tower's footprint.
+func _refresh_selection_circle() -> void:
+	if not selected:
+		if _selection_circle:
+			_selection_circle.visible = false
+		return
+	if _selection_circle == null:
+		_selection_circle = MeshInstance3D.new()
+		_selection_circle.mesh = MeshPalette.unit_quad()
+		_selection_circle.material_override = MeshPalette.new_ring_material(SELECTION_COLOR, 0.86, 0.12)
+		_selection_circle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_selection_circle.position.y = RANGE_RING_HEIGHT * 1.5
+		add_child(_selection_circle)
+	var radius := maxf(footprint.x, footprint.y) * 0.5 * 1.18
+	_selection_circle.scale = Vector3(radius, 1.0, radius)
+	_selection_circle.visible = true
 
 
 func _refresh_range_ring() -> void:

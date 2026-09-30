@@ -272,10 +272,13 @@ func _refresh_visual() -> void:
 	if _shadow == null:
 		_shadow = MeshInstance3D.new()
 		_shadow.mesh = MeshPalette.unit_quad()
-		_shadow.material_override = MeshPalette.disc_material(Color(0, 0, 0, 0.35))
+		# Lane-coloured blob shadow: shows where a creep came from at no extra
+		# draw call (model creeps lost the procedural lane band).
+		var tint := lane_color.darkened(0.35)
+		_shadow.material_override = MeshPalette.disc_material(Color(tint.r, tint.g, tint.b, 0.6))
 		_shadow.position.y = 0.01
 		add_child(_shadow)
-		var shadow_radius := MapProjection.units(radius * 1.15)
+		var shadow_radius := MapProjection.units(radius * 1.3)
 		_shadow.scale = Vector3(shadow_radius, 1.0, shadow_radius)
 	if _visual_scene != null and _model == null:
 		_model = ActorModel.instantiate(_visual_scene)

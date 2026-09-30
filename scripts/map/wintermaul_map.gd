@@ -1023,11 +1023,13 @@ func _paint_dynamic_canvas(canvas: CanvasItem) -> void:
 	var unit_scale := get_screen_scale()
 	for runner: RouteRunner in get_active_creeps():
 		var anchor := project_to_screen(runner.plane_position, runner.get_visual_height())
-		var bar_width := maxf(16.0, runner.radius * 2.6) * unit_scale
+		# Scales with zoom but stays readable when zoomed out and tidy up close.
+		var bar_width := clampf(runner.radius * 3.0 * unit_scale, 18.0, 64.0)
+		var bar_height := clampf(bar_width * 0.12, 3.0, 6.0)
 		var health_ratio := float(runner.health) / float(runner.max_health)
-		var bar_rect := Rect2(anchor.x - bar_width * 0.5, anchor.y - 6.0, bar_width, 2.5)
-		canvas.draw_rect(bar_rect, Color(0.08, 0.1, 0.09, 0.9))
-		var bar_color := Color("65d685") if health_ratio > 0.5 else (Color("e0cf45") if health_ratio > 0.25 else Color("ef5753"))
+		var bar_rect := Rect2(anchor.x - bar_width * 0.5, anchor.y - bar_height - 4.0, bar_width, bar_height)
+		canvas.draw_rect(bar_rect.grow(1.0), Color(0.02, 0.02, 0.02, 0.9))
+		var bar_color := Color("4fe06d") if health_ratio > 0.5 else (Color("f0d23c") if health_ratio > 0.25 else Color("f04a3e"))
 		bar_rect.size.x *= health_ratio
 		canvas.draw_rect(bar_rect, bar_color)
 	if not _build_enabled or not _preview_visible or _build_definition == null or get_tower_at(_hover_cell) != null:
