@@ -17,11 +17,17 @@ const ORDER_BUILD := "build"
 var builders: Dictionary = {}
 var speed_pixels := 224.0
 var reach_pixels := 45.0
+## Easter egg: a builder that stops next to a building after a move order
+## sometimes bumps it and falls over. Rolled on the host from the run seed.
+var trip_chance := 0.0
+var trip_seconds := 1.6
+var _rng := RandomNumberGenerator.new()
 
 
-func _init(speed := 224.0, reach := 45.0) -> void:
+func _init(speed := 224.0, reach := 45.0, seed := 0) -> void:
 	speed_pixels = speed
 	reach_pixels = reach
+	_rng.seed = seed
 
 
 func ensure_builder(peer_id: int, spawn: Vector2) -> void:
@@ -61,6 +67,8 @@ func _issue(peer_id: int, order: Dictionary, queue: bool) -> bool:
 	if not queue:
 		orders.clear()
 	orders.append(order)
+	# A trip is cosmetic: any new order gets the builder straight back up.
+	builders[peer_id]["stun"] = 0.0
 	return true
 
 
@@ -76,9 +84,11 @@ func stun(peer_id: int, seconds: float) -> void:
 
 
 ## Advances every builder. `start_build(peer, definition_id, cell) -> int`
-## returns a WintermaulMap.Placement code. Returns events for feedback:
-## {peer, kind: "build_started" | "build_failed", result, cell, definition_id}.
-func tick(delta: float, start_build: Callable) -> Array[Dictionary]:
+## returns a WintermaulMap.Placement code; `near_building(point) -> bool`
+## (optional) lets a builder that stops beside a building trip over it.
+## Returns events for feedback: {peer, kind: "build_started" | "build_failed"
+## | "tripped", result, cell, definition_id}.
+func tick(delta: float, start_build: Callable, near_building := Callable()) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	for peer_id in builders:
 		var builder: Dictionary = builders[peer_id]
@@ -100,6 +110,9 @@ func tick(delta: float, start_build: Callable) -> Array[Dictionary]:
 				if remaining - step > 0.001:
 					break
 			orders.pop_front()
+			if order["type"] == ORDER_MOVE and orders.is_empty() and _rolls_trip(builder["position"], near_building):
+				builder["stun"] = trip_seconds
+				events.append({"peer": peer_id, "kind": "tripped"})
 			if order["type"] == ORDER_BUILD:
 				var result: int = start_build.call(peer_id, str(order["definition_id"]), order["cell"])
 				events.append({
@@ -110,6 +123,12 @@ func tick(delta: float, start_build: Callable) -> Array[Dictionary]:
 					"definition_id": order["definition_id"],
 				})
 	return events
+
+
+func _rolls_trip(point: Vector2, near_building: Callable) -> bool:
+	if trip_chance <= 0.0 or not near_building.is_valid():
+		return false
+	return bool(near_building.call(point)) and _rng.randf() < trip_chance
 
 
 func state_of(peer_id: int) -> int:

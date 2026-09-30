@@ -27,6 +27,10 @@ const BUILDER_REACH_CELLS := 1.6
 const BUILD_SECONDS_PER_GOLD := 0.05
 const MIN_BUILD_SECONDS := 1.5
 const MAX_BUILD_SECONDS := 6.0
+## Easter egg: chance that a builder stopping beside a building after a move
+## order bumps it and falls over. Cosmetic: any new order gets it back up.
+const BUILDER_TRIP_CHANCE := 0.04
+const BUILDER_TRIP_SECONDS := 1.6
 
 
 static func player_scale(player_count: int, max_players := ClassicWintermaulLayout.PLAYER_COUNT) -> float:

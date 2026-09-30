@@ -98,6 +98,8 @@ func _run_tests() -> void:
 	_test_upgrade_and_sell_economy()
 	# Builder
 	_test_builder_orders_and_construction()
+	_test_builder_stop_and_trip()
+	_test_builder_reconciliation()
 	# Roguelike layer
 	_test_run_modifiers()
 	_test_upgrade_offer_rules_and_determinism()
@@ -1084,6 +1086,9 @@ func _test_builder_orders_and_construction() -> void:
 	creep.plane_position = tower.plane_position + Vector2(20, 0)
 	tower._process(0.01)
 	_check(map.get_node("Projectiles").get_child_count() == 0, "towers under construction do not attack")
+	# The probe creep stands inside the footprint; left there, its segment would
+	# start in a blocked cell and every later placement would read BLOCKS_ROUTE.
+	map.remove_creep(7001)
 	game.call("_tick_construction", 10.0)
 	_check(not state.towers.values()[0].has("build_remaining") or float(state.towers.values()[0]["build_remaining"]) <= 0.0, "construction completes after its build time")
 	# Queued orders show as sites; a plain order replaces the queue.
@@ -1110,6 +1115,87 @@ func _test_builder_orders_and_construction() -> void:
 	_check(builders.get_position(1).distance_to(target) < 1.0 and map.get_builder(1).plane_position.distance_to(target) < 1.0, "the builder and its visual reach the move target")
 	steam_session.set("is_solo_session", false)
 	game.queue_free()
+
+
+func _test_builder_stop_and_trip() -> void:
+	var steam_session := root.get_node("SteamSession")
+	steam_session.set("is_solo_session", true)
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	var map := game.get_node(MAP_PATH) as WintermaulMap
+	var builders: BuilderSystem = game.get("builder_system")
+	state.team_gold = 1000
+	_check(is_equal_approx(builders.trip_chance, BalanceConfig.BUILDER_TRIP_CHANCE) and builders.trip_chance < 0.1, "builders trip only now and then")
+	# Stop clears queued orders; a peer without a builder cannot issue one.
+	game.call("_try_order_build", 1, "bolt", P9_OPEN, true)
+	game.call("_try_order_build", 1, "cannon", P9_OPEN + Vector2i(4, 0), true)
+	_check(game.call("_try_order_stop", 1) and builders.get_orders(1).is_empty(), "Stop clears the builder's queued orders")
+	_check(not game.call("_try_order_stop", 7), "peers without a builder cannot issue Stop")
+	_check(((game.get("_builder_records") as Array)[0]["sites"] as Array).is_empty(), "Stop clears the replicated build site markers")
+	_run_builders(game, 3.0)
+	_check(state.towers.is_empty() and state.team_gold == 1000, "stopped build orders never start construction or charge")
+	# Trip: forced on, a move that ends beside a building knocks the builder over.
+	game.call("_try_place_tower", "bolt", P9_OPEN)
+	var tower := map.get_tower(state.tower_records()[0]["id"])
+	builders.trip_chance = 1.0
+	var beside := tower.plane_position + Vector2(WintermaulMap.TILE_SIZE * 1.5, 0.0)
+	game.call("_try_order_move", 1, beside, false)
+	var guard := 0
+	while not builders.get_orders(1).is_empty() and guard < 200:
+		game.call("_tick_builders", 0.05)
+		guard += 1
+	_check(builders.state_of(1) == BuilderSystem.State.STUNNED and map.get_builder(1).state == BuilderSystem.State.STUNNED, "a builder stopping beside a building can trip over it")
+	var elsewhere := map.grid_to_world(P9_OPEN + Vector2i(-6, -10))
+	var before := builders.get_position(1)
+	game.call("_try_order_move", 1, elsewhere, false)
+	_check(builders.state_of(1) == BuilderSystem.State.MOVING, "a new order gets a tripped builder straight back up")
+	game.call("_tick_builders", 0.1)
+	_check(builders.get_position(1).distance_to(before) > 1.0, "tripping never delays the next order")
+	_run_builders(game, 4.0)
+	_check(builders.state_of(1) == BuilderSystem.State.IDLE, "moves that end away from buildings never trip")
+	builders.trip_chance = 0.0
+	game.call("_try_order_move", 1, beside, false)
+	_run_builders(game, 4.0)
+	_check(builders.state_of(1) == BuilderSystem.State.IDLE, "with no trip chance the builder never trips")
+	steam_session.set("is_solo_session", false)
+	game.queue_free()
+
+
+func _test_builder_reconciliation() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	var speed := 100.0
+	var start := Vector2(400, 400)
+	var record := {"owner": 2, "x": start.x, "y": start.y, "tx": 600.0, "ty": 400.0, "state": BuilderSystem.State.MOVING, "sites": []}
+	map.reconcile_builders([record], speed, false)
+	var builder := map.get_builder(2)
+	_check(builder != null and builder.plane_position.is_equal_approx(start), "clients spawn missing builders at the replicated position")
+	builder._process(0.5)
+	_check(builder.plane_position.is_equal_approx(start + Vector2(50, 0)), "clients walk moving builders toward the replicated target")
+	var near := record.duplicate()
+	near["x"] = start.x + 40.0
+	map.reconcile_builders([near], speed, false)
+	_check(builder.plane_position.is_equal_approx(start + Vector2(50, 0)), "small drift keeps the client's smooth position")
+	var far := record.duplicate()
+	far["x"] = start.x + 200.0
+	map.reconcile_builders([far], speed, false)
+	_check(builder.plane_position.is_equal_approx(start + Vector2(200, 0)), "large drift snaps the client builder to the host position")
+	var idle := far.duplicate()
+	idle["state"] = BuilderSystem.State.IDLE
+	map.reconcile_builders([idle], speed, false)
+	builder._process(0.5)
+	_check(builder.plane_position.is_equal_approx(start + Vector2(200, 0)), "idle builders stay put on clients")
+	builder._process(0.5)
+	var stopped := idle.duplicate()
+	stopped["x"] = start.x + 190.0
+	stopped["tx"] = stopped["x"]
+	map.reconcile_builders([stopped], speed, false)
+	builder._process(0.5)
+	_check(builder.plane_position.is_equal_approx(start + Vector2(190, 0)), "a stopped client builder settles onto the host position instead of keeping small drift")
+	map.reconcile_builders([], speed, false)
+	_check(map.get_builder(2) == null, "builders missing from the host record are removed")
+	map.queue_free()
 
 
 # --- Roguelike layer ----------------------------------------------------------

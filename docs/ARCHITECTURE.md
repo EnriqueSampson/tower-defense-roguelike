@@ -20,19 +20,20 @@ This document freezes the invariants that the MVP depends on. Change them delibe
 | `shared_lives`, `team_gold` | Shared economy and defense |
 | `lane_queued`, `lane_spawned` | Per-position spawn bookkeeping |
 | `active_creeps` | `creep_id -> {position, definition_id, health_multiplier}` |
-| `towers` | `tower_id -> {id, definition_id, cell, tier, position, targeting}`; `cell` is the footprint anchor (top-left cell of the tower's `TowerDefinition.footprint`, 2×2 for shipped towers) |
+| `towers` | `tower_id -> {id, definition_id, cell, tier, position, targeting}`; `cell` is the footprint anchor (top-left cell of the tower's `TowerDefinition.footprint`, 2×2 for shipped towers). Work in progress adds `build_remaining`/`build_total`/`build_paid` (construction) or `upgrade_remaining`/`upgrade_total`/`upgrade_paid` (timed upgrade); the host counts them down in `_tick_construction` |
 | `position_owners` | `position_index -> peer_id` (0 = unfilled, host controls) |
 | `run_seed` | Host-generated seed for deterministic upgrade offers |
 | `applied_upgrades`, `pending_offer` | Ordered upgrade IDs; offers pause the build timer |
 | `elapsed_seconds`, `stats` | Run duration and results counters |
 | `_next_tower_id`, `_next_creep_id` | Monotonic ID allocators (included in snapshots) |
 
-Host-only runtime that is *not* in `RunState`: spawn queues and timers, bounty lookup per creep, load-acknowledgement set. Creep presentation state (health, stage, position, slow) is owned by `RouteRunner` nodes on the host and exported through `WintermaulMap.creep_snapshot()`.
+Host-only runtime that is *not* in `RunState`: spawn queues and timers, bounty lookup per creep, load-acknowledgement set, and builders (`BuilderSystem`, `scripts/game/builder_system.gd`: one per controlling peer, keyed by peer ID, holding position, order queue and trip timer). Creep presentation state (health, stage, position, slow) is owned by `RouteRunner` nodes on the host and exported through `WintermaulMap.creep_snapshot()`.
 
 ## 3. Replicated presentation state (every peer)
 
 - Tower nodes, creep nodes, projectiles, and effects are presentation. They are created by RPC events and corrected by snapshots.
 - Clients simulate creep movement locally for smoothness; `RouteRunner.sync_authoritative()` corrects health, stage, slow, and position (smooth nudge under 1.5 tiles, snap and repath beyond that).
+- Clients walk a moving builder toward its replicated target at builder speed, glide onto the host position once it stops, and snap when drift passes 1.5 tiles (`Builder.apply_record`). Clients count construction and upgrade timers down locally between snapshots, for the progress bars only.
 - Clients never resolve damage. Projectiles on clients are visual only. A creep that reaches the gate on a client waits there until the host confirms the leak.
 - Clients run `RunModifiers.rebuild()` from the snapshot's upgrade list so previews and tower panels show host-equivalent numbers.
 
@@ -42,6 +43,8 @@ Host-only runtime that is *not* in `RunState`: spawn queues and timers, bounty l
 | --- | --- | --- |
 | `_apply_state_snapshot` (RunState + tower records + results) | reliable | every 0.5 s and immediately after any transaction (`_mark_dirty`) |
 | `_apply_creep_snapshot` (creep presentation records) | unreliable ordered | every 0.15 s during waves, only when peers are connected |
+| `_apply_builder_snapshot` (`BuilderSystem.records()`: owner, position, current target, state, queued build sites) | unreliable ordered | every 0.15 s, only when peers are connected; the same records ride in the state snapshot as `builders` |
+| `_builder_started_build` | reliable event | when a builder starts construction (plays `build`) |
 | `_spawn_creep_visual`, `_remove_creep_visual`, `_spawn_tower_visual`, `_update_tower_visual`, `_remove_tower_visual`, `_clear_creeps_visual` | reliable events | on change |
 | `_projectile_fired` | unreliable | per shot |
 | `_play_event`, `_show_notice`, `_show_bounty`, `_placement_feedback`, `_transaction_feedback` | reliable | on change |
@@ -79,9 +82,12 @@ Every client intent carries the sender peer ID (`multiplayer.get_remote_sender_i
 
 | Request | Checks |
 | --- | --- |
-| Place tower | phase allows building; definition ID exists; every footprint cell in bounds, buildable, inside one position, unoccupied, and free of creeps; the footprint as a whole does not seal any required route or active creep segment; requester controls the position; team gold covers the modified cost |
-| Upgrade tower | phase; tower exists; requester controls its position; a next tier exists; gold covers the modified cost |
-| Sell tower | phase; tower exists; requester controls its position; exactly-once (second sell finds no record) |
+| Build order | phase allows building; definition ID exists; requester has a builder; the placement checks below pass; requester controls the position; team gold covers the modified cost. Nothing is spent yet. A plain order replaces the queue, a shift order appends |
+| Construction start (builder arrives within `BUILDER_REACH_CELLS`) | the full place-tower check again, since the maze, creeps or gold may have changed; failure drops the order with a reason to its owner and spends nothing |
+| Place tower | phase allows building; definition ID exists; every footprint cell in bounds, buildable, inside one position, unoccupied, and free of creeps; the footprint as a whole does not seal any required route or active creep segment; requester controls the position; team gold covers the modified cost. Builder orders start the tower under construction (it holds its footprint but does not attack) |
+| Move / Stop order | requester has a builder; move target inside the world rect. Builders walk anywhere and never touch the path grid |
+| Upgrade tower | phase; tower exists; requester controls its position; not under construction or already upgrading; a next tier exists; gold covers the modified cost. Paid up front; the tower keeps its old tier until the timer ends |
+| Sell tower | phase; tower exists; requester controls its position; exactly-once (second sell finds no record). Selling during construction cancels it for a full refund; selling mid-upgrade also returns the upgrade payment |
 | Set targeting | tower exists; mode is valid; requester controls its position |
 | Choose upgrade | requester is the host; upgrade is in the pending offer; not already applied |
 | Creep resolution | `resolve_creep` erases the creep first so duplicate kill/leak reports are no-ops |

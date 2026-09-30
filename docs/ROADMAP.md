@@ -1,6 +1,6 @@
 # Roadmap
 
-**Updated:** September 29, 2026
+**Updated:** September 30, 2026
 **Goal:** A commercial Steam Early Access release of a co-op tower defense that plays like Warcraft III Wintermaul, with a light roguelike layer.
 **Pace:** Part-time (10–20 h/week). No launch date yet; phases are ordered, not scheduled. Size estimates are rough, at that pace.
 
@@ -19,9 +19,10 @@ A faithful co-op Wintermaul for modern players:
 
 ## 2. Where we are
 
-### Built and tested (310 headless checks)
+### Built and tested (384 headless checks, plus a two-process sync check and a scripted solo run)
 
 - Host-authoritative co-op over Steam lobbies, plus solo on `OfflineMultiplayerPeer`. Nine positions, with the host controlling unfilled and disconnected positions.
+- A WC3-style builder per player: right-click to move, shift-queued build orders, Stop, construction over time, and cancel for a full refund. Solo uses one builder at double speed.
 - Mazing on a 144×160 grid (72×80 two-by-two towers, scaled to classic Wintermaul proportions): A* rerouting, anti-block placement, relay checkpoints into Position 9, and shared lives and gold.
 - Three towers (Bolt, Cannon, Frost), each with two upgrade tiers, selling, and four target priorities.
 - Five creep roles, including one boss, across 10 waves.
@@ -40,11 +41,10 @@ A faithful co-op Wintermaul for modern players:
 
 | Vision | Today |
 |---|---|
-| Builder unit you control, with build time | Click a tile and the tower appears instantly |
-| WC3 perspective camera and real models | Orthographic camera; procedural primitive meshes built per ID in `tower.gd` and `route_runner.gd` |
+| Final art | Placeholder `.glb` models from `tools/blender/` for every tower, creep and the builder |
 | 30+ levels, air and special waves | 10 ground waves; air waves deferred |
 | 3–4 races with large tower rosters | 3 towers, no races |
-| Balanced for 1–4 players and solo | Solo exists, but controlling nine positions alone is untested |
+| Balanced for 1–4 players and solo | Solo is finishable, but too easy: a scripted solo run that walls only Position 9's route wins all 10 waves with 0 leaks |
 
 ## 3. Decisions from the planning interview
 
@@ -96,16 +96,20 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 
 **Goal:** Building feels like WC3 Wintermaul.
 
-- [ ] Builder units: the host owns their position and order queue, and snapshots and reconciliation replicate them the same way as towers and creeps. Builders cannot be killed and do not block creeps.
-- [ ] Orders: right-click to move, a WC3-style build grid of hotkeys, shift-queued builds, and cancel.
-- [ ] Construction: the build site is validated when ordered and again when construction starts, because a path may have changed in between. Towers build over time (placement stays reserved), and cancelling refunds the cost.
-- [ ] Movement: builders walk anywhere, including other players' positions, and clip through towers and other builders. They don't use the creep path grid.
-- [ ] Permissions: a builder may only build inside positions its owner controls (`BuildPermissionPolicy`), even though it can walk anywhere.
-- [ ] Easter egg: occasionally a builder "bumps" a building and plays a fall-over animation. It's purely cosmetic and never changes gameplay.
-- [ ] Solo control: one builder per player. Decide how a solo player covers nine positions (§6).
-- [ ] Protocol bump, plus tests for order validation, construction timing, cancel and refund, and builder reconciliation.
+- [x] Builder units: `BuilderSystem` on the host owns each builder's position and order queue; the state snapshot and a 0.15 s unreliable builder snapshot replicate them, and `WintermaulMap.reconcile_builders` mirrors them by owner peer. Builders cannot be killed and do not block creeps. Placeholder model: `tools/blender/human_peasant.py` (`idle`, `walk`, `build`, `trip`).
+- [x] Orders: right-click to move (Shift queues), build from the command card's hotkey grid (Shift-click queues more sites, shown as blue footprint markers), Stop on `S`, right-click or `V` to cancel placement, F1 to select and centre the builder. Camera drag moved to the middle button.
+- [x] Construction: a build order is validated when issued and again when the builder arrives, because the maze may have changed. Gold is paid when construction starts. The tower holds its footprint, rises out of the ground over cost / 20 s (1.5–6 s) and does not attack until done. Cancelling refunds the full cost. Upgrades are timed the same way; the tower keeps fighting at its old tier meanwhile.
+- [x] Movement: builders walk in straight lines anywhere, including other players' positions, clip through towers and each other, and never use the creep path grid.
+- [x] Permissions: a builder may only build inside positions its owner controls (`BuildPermissionPolicy`), even though it can walk anywhere.
+- [x] Easter egg: a builder that stops beside a building after a move order sometimes (4%, rolled from the run seed) bumps it and falls over (`trip`). Purely cosmetic: any new order gets it straight back up.
+- [x] Solo control: one builder at double speed (16 cells/s) covers all nine positions (§6). Revisit after Playtest gate A.
+- [x] Protocol bump (now 5), plus tests for order validation, construction timing, cancel and refund, Stop, the trip, and client-side builder reconciliation.
 
-**Exit:** A solo run can be finished using only the builder, and a 2-player local or Steam test stays in sync.
+**Exit:** met in automated form. `tests/solo_builder_run.gd` finishes a solo run using only builder orders (victory at wave 10, 38 towers), and `tests/net_sync.gd` runs a host and a client over local ENet: the client builds, gets a foreign-position build rejected, upgrades, moves and readies up, and towers, gold, builders and creeps match on both peers. A human 2-player Steam session is still part of Playtest gate A.
+
+Found while testing, for later phases:
+- The creep snapshot is a list of dictionaries with string keys and exceeds the ENet MTU with only 18 creeps (Godot warns about packet loss). Pack it into typed arrays before the 9-player test (Phase 6).
+- The host broadcasts snapshots to peers whose game scene hasn't loaded yet, which logs "node not found" RPC errors on them. It's harmless, because a client requests state on load, but it's noisy.
 
 ### Playtest gate A: First friends playtest
 
@@ -184,7 +188,7 @@ Race 4 keeps its ninja, samurai and AI chip maker towers, but its name and frami
 
 ## 6. Open questions
 
-- **Solo and small lobbies:** should solo control all nine positions with one builder, get several builders, have positions merged or disabled, or get AI help?
+- **Solo and small lobbies:** for now solo controls all nine positions with one builder at double speed (Phase 2). Revisit after Playtest gate A: several builders, merged or disabled positions, or AI help are still options, and Phase 6 has to settle 2–4 player lobbies too.
 - **Race 4's name and framing** (see Phase 4), and whether races share any towers.
 - **Final game name.**
 
@@ -193,12 +197,12 @@ Race 4 keeps its ninja, samurai and AI chip maker towers, but its name and frami
 These conventions keep placeholder and final models interchangeable. The placeholder scripts in `tools/blender/` follow them and are working examples.
 
 - **Format:** `.glb` (glTF binary) exported from Blender with +Y up (the exporter default). One file per tower, creep or builder. A tower tier can have its own file (`TowerUpgradeTier.visual_scene`); otherwise it reuses the base model.
-- **Where:** `assets/models/towers/`, `assets/models/creeps/` and, later, `assets/models/builders/`. File names use the content ID in snake_case (for example `human_swordsman.glb`).
+- **Where:** `assets/models/towers/`, `assets/models/creeps/` and `assets/models/builders/`. File names use the content ID in snake_case (for example `human_swordsman.glb`).
 - **Scale:** 1 Blender unit = 1 map tile. Towers are 2×2 tiles, so a tower fits a 2×2-unit square, base included. Creeps are about half a tile across. The game does not rescale models, so author them at size.
 - **Pivot:** the object origin is at the center of the footprint, on the ground (z = 0).
 - **Facing:** the model's front faces −Y in Blender (the side Blender's Front view shows). After export that becomes +Z, which the game treats as forward.
 - **Turning:** on towers, everything that should turn toward the target sits under an empty named `Turret`. Creeps turn as a whole to face where they're walking.
-- **Animations:** action names become the in-game animation names. Towers use `idle` (looping) and `attack` (plays once per shot, then returns to `idle`). Creeps use `walk` (looping) and `death` (plays once, up to about 1.2 s, then the corpse sinks; a sideways fall reads best from the WC3 camera). Planned: `build` for builders and construction. Keep each animation on as few objects as possible; the placeholders animate one pivot empty per animation.
+- **Animations:** action names become the in-game animation names. Towers use `idle` (looping) and `attack` (plays once per shot, then returns to `idle`). Creeps use `walk` (looping) and `death` (plays once, up to about 1.2 s, then the corpse sinks; a sideways fall reads best from the WC3 camera). Builders use `idle`, `walk` (looping), `build` (plays when construction starts) and `trip` (the fall-over easter egg). Keep each animation on as few objects as possible; the placeholders animate one pivot empty per animation.
 - **Materials:** use a Principled BSDF with base color, roughness and optionally one texture. Avoid Blender-only shader nodes, which glTF can't export. Colors pass through as linear light: Blender's color picker already handles this, but values typed into a script must be converted from sRGB (the placeholder helper does this). Keep emission strength below about 1, or glowing parts wash out to white in game.
 - **Budget (from the Phase 1 performance check):** draw calls matter far more than triangles on the Iris 550 (each separate mesh-and-material pair is one draw call). A tower should be at most 3–4 meshes (base, the `Turret`, and one extra moving part if animated) and a creep 1–2, each with a single material using one texture atlas per race. Keep roughly 1–3k triangles per tower and 0.5–1.5k per creep. Don't rely on real-time shadows: they are off by default, so bake contact shading into the texture.
 

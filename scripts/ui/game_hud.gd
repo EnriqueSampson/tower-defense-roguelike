@@ -13,6 +13,8 @@ signal targeting_requested(tower_id: int, mode: int)
 signal offer_chosen(upgrade_id: String)
 signal return_requested
 signal selection_cleared
+## WC3 Stop (S): clears the local builder's order queue.
+signal builder_stop_requested
 
 const RunStateModel = preload("res://scripts/game/run_state.gd")
 const COLOR_OK := Color("8ed8c6")
@@ -27,6 +29,8 @@ const CARD_SLOT_SIZE := Vector2(66, 44)
 const SLOT_UPGRADE := 0
 const SLOT_FIRST_TARGETING := 4
 const SLOT_SELL := 10
+## Row two, column two: the S hotkey, where WC3 puts Stop.
+const SLOT_STOP := 5
 const SLOT_CANCEL := 11
 ## Card-sized names for TowerTargeting.Mode (FIRST, LAST, STRONGEST, NEAREST).
 const TARGETING_SHORT_NAMES: Array[String] = ["First", "Last", "Strong", "Near"]
@@ -552,6 +556,8 @@ func _fill_build_card() -> void:
 		_set_card_slot(index, label, tooltip, _on_palette_button_pressed.bind(definition.id), _gold >= cost, definition.id == _selected_definition_id, definition.accent_color.lightened(0.25))
 	if not _selected_definition_id.is_empty():
 		_set_card_slot(SLOT_CANCEL, "Cancel", "Stop placing", _on_palette_button_pressed.bind(_selected_definition_id))
+	else:
+		_set_card_slot(SLOT_STOP, "Stop", "Stop: clear your builder's queued orders", func() -> void: builder_stop_requested.emit())
 
 
 func _fill_tower_card() -> void:

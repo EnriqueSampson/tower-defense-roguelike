@@ -3,7 +3,8 @@ extends Node3D
 
 ## Presentation of a player's builder. The host drives it straight from
 ## BuilderSystem every frame; clients walk it toward the replicated target at
-## builder speed and snap when drift grows past SNAP_DISTANCE.
+## builder speed, glide onto the host position once it stops, and snap when
+## drift grows past SNAP_DISTANCE.
 
 const MODEL_SCENE := preload("res://assets/models/builders/human_peasant.glb")
 const SNAP_DISTANCE := WintermaulMap.TILE_SIZE * 1.5
@@ -44,6 +45,10 @@ func apply_record(record: Dictionary, authoritative: bool) -> void:
 	if authoritative or plane_position.distance_to(authoritative_position) > SNAP_DISTANCE:
 		_face(authoritative_position - plane_position)
 		plane_position = authoritative_position
+	elif state != BuilderSystem.State.MOVING:
+		# Extrapolation overshoots a build site (the host stops within reach of
+		# it), so a stopped builder settles onto the host's position.
+		target = authoritative_position
 	if state != previous_state or _animation == &"":
 		_refresh_animation()
 
@@ -70,11 +75,12 @@ func set_selected(value: bool) -> void:
 
 
 func _process(delta: float) -> void:
-	if _authoritative or state != BuilderSystem.State.MOVING:
+	if _authoritative or plane_position.is_equal_approx(target):
 		return
 	var before := plane_position
 	plane_position = before.move_toward(target, speed_pixels * delta)
-	_face(plane_position - before)
+	if state == BuilderSystem.State.MOVING:
+		_face(plane_position - before)
 
 
 func _refresh_animation() -> void:

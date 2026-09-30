@@ -22,8 +22,14 @@ godot --path . --editor
 # Run the game directly
 godot --path .
 
-# Headless regression suite (337 checks)
+# Headless regression suite (384 checks)
 godot --headless --path . --script res://tests/run_tests.gd
+
+# Two-process host/client sync check over local ENet (no Steam needed)
+godot --headless --path . --script res://tests/net_sync.gd
+
+# A full solo run played only through builder orders (about 2 minutes at 8x)
+godot --headless --path . --script res://tests/solo_builder_run.gd -- --fast
 
 # Windowed smoke run: boots a solo game, builds, launches a wave, saves /tmp/wintermaul_smoke.png
 godot --path . --script res://tests/visual_smoke.gd
@@ -67,14 +73,16 @@ scripts/
   network/                 steam_session_manager.gd, lobby_match_policy.gd
   data/                    Definitions, catalog, layout, BuildInfo
   game/                    game_controller.gd (host authority), run_state.gd, run_modifiers.gd,
-                           upgrade_offer.gd, build_permission_policy.gd, balance_config.gd
+                           upgrade_offer.gd, build_permission_policy.gd, balance_config.gd,
+                           builder_system.gd (host-side builders and their order queues)
   combat/                  tower_targeting.gd, combat_resolver.gd
-  actors/                  tower.gd, route_runner.gd, projectile.gd, effects_layer.gd
+  actors/                  tower.gd, route_runner.gd, builder.gd, projectile.gd, effects_layer.gd
   map/                     wintermaul_map.gd, battlefield_camera.gd, map_paint_layer.gd,
                            map_projection.gd (sim pixels -> 3D plane), mesh_builder.gd, mesh_palette.gd
   pathfinding/             path_grid.gd (four-direction AStarGrid2D with anti-block probes)
   ui/                      game_hud.gd
-tests/                     run_tests.gd (headless suite), visual_smoke.gd (windowed smoke)
+tests/                     run_tests.gd (headless suite), net_sync.gd (two-process sync check),
+                           solo_builder_run.gd (scripted solo run), perf_wave.gd, visual_smoke.gd
 tools/                     Generators used to author wave and upgrade resources
 docs/                      Roadmap, architecture, release checklist, playtest template, licenses
 ```

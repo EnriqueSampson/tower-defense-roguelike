@@ -90,14 +90,17 @@ func _ready() -> void:
 	hud.return_requested.connect(_return_to_lobby)
 	hud.selection_cleared.connect(_clear_selection)
 	hud.ready_requested.connect(_on_ready_pressed)
+	hud.builder_stop_requested.connect(_on_builder_stop_requested)
 
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	SteamSession.game_end_requested.connect(_on_game_end_requested)
 
 	if multiplayer.is_server():
-		builder_system = BuilderSystem.new(BalanceConfig.builder_speed_pixels(SteamSession.is_solo_session), BalanceConfig.BUILDER_REACH_CELLS * WintermaulMap.TILE_SIZE)
 		_initialize_host_run()
+		builder_system = BuilderSystem.new(BalanceConfig.builder_speed_pixels(SteamSession.is_solo_session), BalanceConfig.BUILDER_REACH_CELLS * WintermaulMap.TILE_SIZE, run_state.run_seed)
+		builder_system.trip_chance = BalanceConfig.BUILDER_TRIP_CHANCE
+		builder_system.trip_seconds = BalanceConfig.BUILDER_TRIP_SECONDS
 		_ensure_builders()
 		_sync_builder_view()
 		_select_builder(true, true)
@@ -592,7 +595,7 @@ func _first_position_of(peer_id: int) -> int:
 func _tick_builders(delta: float) -> void:
 	if builder_system == null:
 		return
-	var events := builder_system.tick(delta, _start_construction)
+	var events := builder_system.tick(delta, _start_construction, _is_near_building)
 	for event in events:
 		if event["kind"] == "build_failed":
 			var peer := int(event["peer"])
@@ -603,6 +606,40 @@ func _tick_builders(delta: float) -> void:
 	_sync_builder_view()
 	if not events.is_empty():
 		_mark_dirty()
+
+
+## True when `point` is on or beside a tower footprint (the trip easter egg).
+func _is_near_building(point: Vector2) -> bool:
+	var cell := wintermaul_map.world_to_grid(point)
+	for y in range(-1, 2):
+		for x in range(-1, 2):
+			if wintermaul_map.get_tower_at(cell + Vector2i(x, y)) != null:
+				return true
+	return false
+
+
+func _on_builder_stop_requested() -> void:
+	if multiplayer.is_server():
+		_try_order_stop(HOST_PEER_ID)
+	else:
+		_request_stop_order.rpc_id(HOST_PEER_ID)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_stop_order() -> void:
+	if multiplayer.is_server():
+		_try_order_stop(multiplayer.get_remote_sender_id())
+
+
+## Clears the builder's order queue (WC3 Stop). Construction already under
+## way is unaffected; cancel it from the tower's card for a refund.
+func _try_order_stop(peer_id: int) -> bool:
+	if builder_system == null or not builder_system.has_builder(peer_id):
+		return false
+	builder_system.stop(peer_id)
+	_sync_builder_view()
+	_mark_dirty()
+	return true
 
 
 func _sync_builder_view() -> void:
