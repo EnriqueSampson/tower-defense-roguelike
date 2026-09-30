@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://bnbnh6gdro5s2" path="res://assets/models/towers/elf_water_elemental.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "elf_water_elemental"
+display_name = "Water Elemental"
+role = "Ultimate: area slow"
+description = "A lake with ambitions. Its magic splash slows everything it touches."
+primary_color = Color(0.15, 0.3, 0.6, 1)
+accent_color = Color(0.45, 0.8, 1.0, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 130
+damage = 20
+attack_range = 308.0
+attack_cooldown = 1.0
+projectile_speed = 700.0
+splash_radius = 47.6
+slow_factor = 0.45
+slow_duration = 2.5
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = true
+detection_range = 0.0
+default_targeting = 0
+tier = 3
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

@@ -133,6 +133,7 @@ func _initialize_host_run() -> void:
 	run_state.team_gold = BalanceConfig.starting_gold(SteamSession.player_count())
 	run_state.roguelike_enabled = SteamSession.roguelike_enabled
 	run_state.position_owners = _resolve_position_owners()
+	run_state.peer_races = _resolve_peer_races()
 	if multiplayer.has_multiplayer_peer():
 		_awaiting_peers.assign(multiplayer.get_peers())
 	_load_ack_timer = BalanceConfig.LOAD_ACK_TIMEOUT
@@ -144,6 +145,51 @@ func _initialize_host_run() -> void:
 		_wave_one_total = _wave_one_pending_ready.size()
 	_start_build_phase()
 	_broadcast_state()
+
+
+## peer id -> race id from the lobby roster; the host's comes from its own
+## pick, and anyone without a valid pick gets the default race.
+func _resolve_peer_races() -> Dictionary:
+	var races := {HOST_PEER_ID: CATALOG.resolve_race_id(SteamSession.local_race)}
+	for member in SteamSession.roster:
+		var steam_id := int(member.get("steam_id", 0))
+		if bool(member.get("is_host", false)) or steam_id == Steamworks.steam_id:
+			continue
+		var peer_id := int(SteamSession.get_peer_id_for_steam_id(steam_id))
+		if peer_id > 0:
+			races[peer_id] = CATALOG.resolve_race_id(str(member.get("race", "")))
+	return races
+
+
+## The race a peer builds with (the default race if it never picked).
+func _race_for(peer_id: int) -> RaceDefinition:
+	return CATALOG.get_race(CATALOG.resolve_race_id(run_state.race_of(peer_id)))
+
+
+func _race_builds(peer_id: int, definition: TowerDefinition) -> bool:
+	var race := _race_for(peer_id)
+	return race == null or race.has_root(definition.id)
+
+
+## Tower lines any race in the run can build (race-aware upgrade offers).
+func _available_lines() -> PackedStringArray:
+	var lines := PackedStringArray()
+	var race_ids: Array = run_state.peer_races.values()
+	if race_ids.is_empty():
+		race_ids = [CATALOG.resolve_race_id("")]
+	for race_id in race_ids:
+		var race := CATALOG.get_race(str(race_id))
+		if race == null:
+			continue
+		for root in race.towers:
+			if not lines.has(root.id):
+				lines.append(root.id)
+	return lines
+
+
+func _builder_scene_for(owner_peer: int) -> PackedScene:
+	var race := _race_for(owner_peer)
+	return race.builder_scene if race != null else null
 
 
 func _resolve_position_owners() -> PackedInt32Array:
@@ -350,7 +396,7 @@ func _finish_creep_resolution() -> void:
 		run_state.advance_after_clear()
 		if run_state.phase == RunStateModel.Phase.BUILD:
 			if cleared_wave.offers_upgrade_after and run_state.roguelike_enabled:
-				run_state.pending_offer = UpgradeOffer.roll(CATALOG.upgrades, modifiers, run_state.run_seed, run_state.current_wave_index)
+				run_state.pending_offer = UpgradeOffer.roll(CATALOG.upgrades, modifiers, run_state.run_seed, run_state.current_wave_index, BalanceConfig.OFFER_CHOICE_COUNT, _available_lines())
 			_start_build_phase()
 		elif run_state.phase == RunStateModel.Phase.VICTORY:
 			_announce_run_end()
@@ -430,6 +476,9 @@ func _apply_state_snapshot(snapshot: Dictionary) -> void:
 		run_state.position_owners = PackedInt32Array(snapshot.get("owners", run_state.position_owners))
 		run_state.phase = int(snapshot.get("phase", run_state.phase))
 		run_state.team_gold = int(snapshot.get("gold", run_state.team_gold))
+		var races: Dictionary = snapshot.get("races", {})
+		for peer_id in races:
+			run_state.peer_races[int(peer_id)] = str(races[peer_id])
 		wintermaul_map.reconcile_towers(snapshot.get("towers", []), CATALOG.get_tower, _stats_for_record)
 		_apply_builder_records(snapshot.get("builders", []))
 	_refresh_local_context()
@@ -444,7 +493,7 @@ func _apply_builder_snapshot(records: Array) -> void:
 
 func _apply_builder_records(records: Array) -> void:
 	_builder_records = records
-	wintermaul_map.reconcile_builders(records, BalanceConfig.builder_speed_pixels(SteamSession.is_solo_session), false)
+	wintermaul_map.reconcile_builders(records, BalanceConfig.builder_speed_pixels(SteamSession.is_solo_session), false, _builder_scene_for)
 	_refresh_build_sites()
 
 
@@ -477,6 +526,7 @@ func _refresh_local_context() -> void:
 		"modifiers": modifiers,
 		"wave": CATALOG.waves[clampi(int(_latest_snapshot["wave_index"]), 0, CATALOG.waves.size() - 1)],
 		"selected_definition": _selected_definition_id,
+		"race": _race_for(local_peer),
 		"build_cost": cost,
 		"wave_one_ready_pressed": _wave_one_ready_pressed,
 	}
@@ -498,20 +548,20 @@ func _refresh_local_context() -> void:
 		hud.show_end_screen(_latest_snapshot["results"], CATALOG)
 
 
-## Effective tower stats, cached per definition, tier and Position 9 flag
+## Effective tower stats, cached per definition and Position 9 flag
 ## until the applied upgrades change. Callers must not mutate the result.
 func _stats_for_record(record: Dictionary) -> Dictionary:
 	if _stats_cache_revision != modifiers.revision:
 		_stats_cache.clear()
 		_stats_cache_revision = modifiers.revision
 	var in_final := int(record.get("position", -1)) == FINAL_POSITION_INDEX
-	var key := "%s:%d:%s" % [record["definition_id"], int(record["tier"]), in_final]
+	var key := "%s:%s" % [record["definition_id"], in_final]
 	if _stats_cache.has(key):
 		return _stats_cache[key]
 	var definition := CATALOG.get_tower(str(record["definition_id"]))
 	if definition == null:
 		return {}
-	var stats := modifiers.modify_stats(definition.stats_for_tier(int(record["tier"])), definition.id, in_final)
+	var stats := modifiers.modify_stats(definition.stats(), CATALOG.line_of(definition.id), in_final)
 	_stats_cache[key] = stats
 	return stats
 
@@ -550,6 +600,8 @@ func _try_order_build(peer_id: int, definition_id: String, cell: Vector2i, queue
 		return WintermaulMap.Placement.NO_TOWER_SELECTED
 	if builder_system == null or not builder_system.has_builder(peer_id):
 		return WintermaulMap.Placement.LOCKED
+	if not _race_builds(peer_id, definition):
+		return WintermaulMap.Placement.WRONG_RACE
 	var geometry := wintermaul_map.evaluate_placement(cell, definition.footprint)
 	if geometry != WintermaulMap.Placement.OK:
 		return geometry
@@ -676,7 +728,7 @@ func _sync_builder_view() -> void:
 	if builder_system == null:
 		return
 	_builder_records = builder_system.records()
-	wintermaul_map.reconcile_builders(_builder_records, builder_system.speed_pixels, true)
+	wintermaul_map.reconcile_builders(_builder_records, builder_system.speed_pixels, true, _builder_scene_for)
 	_refresh_build_sites()
 
 
@@ -712,8 +764,11 @@ func _tick_construction(delta: float) -> void:
 		elif float(record.get("upgrade_remaining", 0.0)) > 0.0:
 			record["upgrade_remaining"] = maxf(0.0, float(record["upgrade_remaining"]) - delta)
 			if record["upgrade_remaining"] <= 0.0:
-				record.erase("upgrade_paid")
-				run_state.upgrade_tower(int(tower_id))
+				var paid := int(record.get("upgrade_paid", 0))
+				var target := str(record.get("upgrade_to", record["definition_id"]))
+				for key in ["upgrade_paid", "upgrade_to", "upgrade_remaining", "upgrade_total"]:
+					record.erase(key)
+				run_state.upgrade_tower(int(tower_id), target, paid)
 				_update_tower_visual.rpc(run_state.get_tower(int(tower_id)), _stats_for_record(run_state.get_tower(int(tower_id))))
 				_play_event.rpc("upgrade")
 				_mark_dirty()
@@ -738,6 +793,8 @@ func _try_place_tower(definition_id: String, cell: Vector2i, peer_id := HOST_PEE
 	var definition := CATALOG.get_tower(definition_id)
 	if definition == null:
 		return WintermaulMap.Placement.NO_TOWER_SELECTED
+	if not _race_builds(peer_id, definition):
+		return WintermaulMap.Placement.WRONG_RACE
 	var geometry := wintermaul_map.evaluate_placement(cell, definition.footprint)
 	if geometry != WintermaulMap.Placement.OK:
 		return geometry
@@ -747,7 +804,7 @@ func _try_place_tower(definition_id: String, cell: Vector2i, peer_id := HOST_PEE
 	var cost := modifiers.build_cost(definition.cost)
 	if not run_state.spend_gold(cost):
 		return WintermaulMap.Placement.UNAFFORDABLE
-	var record := run_state.add_tower(definition.id, cell, position_index, definition.default_targeting)
+	var record := run_state.add_tower(definition.id, cell, position_index, definition.default_targeting, cost)
 	if construction_seconds > 0.0:
 		record["build_remaining"] = construction_seconds
 		record["build_total"] = construction_seconds
@@ -777,14 +834,14 @@ func _spawn_tower_visual(record: Dictionary, stats: Dictionary) -> void:
 	var definition := CATALOG.get_tower(str(record["definition_id"]))
 	if definition == null:
 		return
-	var tower := wintermaul_map.spawn_tower(int(record["id"]), record["cell"], definition, int(record["tier"]), int(record["targeting"]), stats, int(record.get("position", -1)))
+	var tower := wintermaul_map.spawn_tower(int(record["id"]), record["cell"], definition, int(record["targeting"]), stats, int(record.get("position", -1)))
 	if tower != null:
 		tower.apply_progress(record)
 
 
 @rpc("authority", "call_local", "reliable")
 func _update_tower_visual(record: Dictionary, stats: Dictionary) -> void:
-	wintermaul_map.update_tower(int(record["id"]), int(record["tier"]), int(record["targeting"]), stats)
+	wintermaul_map.update_tower(int(record["id"]), CATALOG.get_tower(str(record["definition_id"])), int(record["targeting"]), stats)
 	var tower := wintermaul_map.get_tower(int(record["id"]))
 	if tower != null:
 		tower.apply_progress(record)
@@ -799,22 +856,24 @@ func _remove_tower_visual(tower_id: int) -> void:
 		_clear_selection()
 
 
-func _on_upgrade_requested(tower_id: int) -> void:
+func _on_upgrade_requested(tower_id: int, target_id: String) -> void:
 	if multiplayer.is_server():
-		_transaction_feedback(_try_upgrade_tower(tower_id, HOST_PEER_ID), "Tower upgraded", "Upgrade rejected")
+		_transaction_feedback(_try_upgrade_tower(tower_id, target_id, HOST_PEER_ID), "Upgrading", "Upgrade rejected")
 	else:
-		_request_upgrade_tower.rpc_id(HOST_PEER_ID, tower_id)
+		_request_upgrade_tower.rpc_id(HOST_PEER_ID, tower_id, target_id)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_upgrade_tower(tower_id: int) -> void:
+func _request_upgrade_tower(tower_id: int, target_id: String) -> void:
 	if not multiplayer.is_server():
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	_transaction_feedback.rpc_id(sender, _try_upgrade_tower(tower_id, sender), "Tower upgraded", "Upgrade rejected")
+	_transaction_feedback.rpc_id(sender, _try_upgrade_tower(tower_id, target_id, sender), "Upgrading", "Upgrade rejected")
 
 
-func _try_upgrade_tower(tower_id: int, peer_id := HOST_PEER_ID) -> bool:
+## Starts turning a tower into `target_id`, one of its tree options. Paid up
+## front; the tower keeps fighting as itself until the upgrade completes.
+func _try_upgrade_tower(tower_id: int, target_id: String, peer_id := HOST_PEER_ID) -> bool:
 	if not run_state.can_build():
 		return false
 	var record := run_state.get_tower(tower_id)
@@ -825,14 +884,14 @@ func _try_upgrade_tower(tower_id: int, peer_id := HOST_PEER_ID) -> bool:
 	if float(record.get("build_remaining", 0.0)) > 0.0 or float(record.get("upgrade_remaining", 0.0)) > 0.0:
 		return false
 	var definition := CATALOG.get_tower(str(record["definition_id"]))
-	var base_cost := definition.upgrade_cost(int(record["tier"])) if definition else -1
-	if base_cost < 0:
+	var target := CATALOG.get_tower(target_id)
+	if definition == null or target == null or not definition.upgrade_options.has(target_id):
 		return false
-	var cost := modifiers.upgrade_cost(base_cost)
+	var cost := modifiers.upgrade_cost(target.cost)
 	if not run_state.spend_gold(cost):
 		return false
-	# The tower keeps fighting at its current tier until the upgrade completes.
 	var seconds := BalanceConfig.construction_seconds(cost)
+	record["upgrade_to"] = target_id
 	record["upgrade_remaining"] = seconds
 	record["upgrade_total"] = seconds
 	record["upgrade_paid"] = cost
@@ -868,7 +927,7 @@ func _try_sell_tower(tower_id: int, peer_id := HOST_PEER_ID) -> bool:
 	var definition := CATALOG.get_tower(str(record["definition_id"]))
 	if definition == null:
 		return false
-	var refund := definition.sell_value(int(record["tier"]), modifiers.sell_refund_bonus())
+	var refund := definition.sell_value(int(record.get("invested", 0)), modifiers.sell_refund_bonus())
 	if float(record.get("build_remaining", 0.0)) > 0.0:
 		# Cancelling construction refunds everything, as in WC3.
 		refund = int(record.get("build_paid", modifiers.build_cost(definition.cost)))
@@ -1056,13 +1115,17 @@ func _refresh_tower_panel() -> void:
 	var definition := CATALOG.get_tower(str(record["definition_id"]))
 	var owners: PackedInt32Array = _latest_snapshot.get("owners", PackedInt32Array())
 	var can_control := BuildPermissionPolicy.can_control(multiplayer.get_unique_id(), int(record["position"]), owners, HOST_PEER_ID)
-	var upgrade_cost := modifiers.upgrade_cost(definition.upgrade_cost(int(record["tier"])))
-	var refund := definition.sell_value(int(record["tier"]), modifiers.sell_refund_bonus())
+	var options: Array[Dictionary] = []
+	for option_id in definition.upgrade_options:
+		var option := CATALOG.get_tower(option_id)
+		if option != null:
+			options.append({"definition": option, "cost": modifiers.upgrade_cost(option.cost)})
+	var refund := definition.sell_value(int(record.get("invested", 0)), modifiers.sell_refund_bonus())
 	if float(record.get("build_remaining", 0.0)) > 0.0:
 		refund = int(record.get("build_paid", refund))
 	elif float(record.get("upgrade_remaining", 0.0)) > 0.0:
 		refund += int(record.get("upgrade_paid", 0))
-	hud.show_tower(record, definition, _stats_for_record(record), upgrade_cost, refund, can_control, int(_latest_snapshot.get("gold", 0)))
+	hud.show_tower(record, definition, _stats_for_record(record), options, refund, can_control, int(_latest_snapshot.get("gold", 0)))
 
 
 func _find_tower_record(tower_id: int) -> Dictionary:

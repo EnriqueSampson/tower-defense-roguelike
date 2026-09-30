@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="RaceDefinition" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/race_definition.gd" id="1_race"]
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="2_tower"]
+[ext_resource type="PackedScene" uid="uid://bpw7n44f147yu" path="res://assets/models/builders/orc_peon.glb" id="3_builder"]
+[ext_resource type="Resource" path="res://resources/towers/orc_axe.tres" id="t_0"]
+[ext_resource type="Resource" path="res://resources/towers/cannon_tower.tres" id="t_1"]
+[ext_resource type="Resource" path="res://resources/towers/orc_boar.tres" id="t_2"]
+
+[resource]
+script = ExtResource("1_race")
+id = "orcs"
+display_name = "Orcs"
+description = "Splash and brute force. Junk cannons become war rigs; axe throwers end up riding giant lizards. Detection: the Sniffer Boar."
+color = Color(0.45, 0.68, 0.3, 1)
+builder_scene = ExtResource("3_builder")
+towers = Array[ExtResource("2_tower")]([ExtResource("t_0"), ExtResource("t_1"), ExtResource("t_2")])

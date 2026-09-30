@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://ur8vx0v6mjff" path="res://assets/models/towers/bug_lantern.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "bug_lantern"
+display_name = "Lantern Bug"
+role = "Detection"
+description = "A firefly that got into management. Brighter, wider detection."
+primary_color = Color(0.35, 0.3, 0.2, 1)
+accent_color = Color(1.0, 0.85, 0.3, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 40
+damage = 5
+attack_range = 224.0
+attack_cooldown = 0.8
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 392.0
+default_targeting = 0
+tier = 2
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

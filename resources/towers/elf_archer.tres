@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://bn3ceyniki5th" path="res://assets/models/towers/elf_archer.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "elf_archer"
+display_name = "Elf Archer"
+role = "Long range"
+description = "Never misses. Rarely hits hard. Long range, hits air."
+primary_color = Color(0.25, 0.45, 0.3, 1)
+accent_color = Color(0.75, 0.95, 0.7, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 25
+damage = 4
+attack_range = 336.0
+attack_cooldown = 0.55
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 0.0
+default_targeting = 0
+tier = 1
+upgrade_options = PackedStringArray("elf_ranger", "elf_owl")
+sell_refund_percent = 70

@@ -22,10 +22,15 @@ var lane_queued := PackedInt32Array()
 var lane_spawned := PackedInt32Array()
 ## creep_id -> {"position": int, "definition_id": String, "health_multiplier": float}
 var active_creeps: Dictionary = {}
-## tower_id -> {"id", "definition_id", "cell": Vector2i, "tier", "position", "targeting"}
+## tower_id -> {"id", "definition_id", "cell": Vector2i, "position", "targeting", "invested"}
+## An upgrade replaces definition_id with the chosen tree option; invested is
+## the gold paid so far (it sets the sell value).
 var towers: Dictionary = {}
 ## position_index -> owning peer id (0 = unfilled, host controls)
 var position_owners := PackedInt32Array()
+## peer id -> race id picked in the lobby (the host also builds its race's
+## towers in the positions it controls for absent players).
+var peer_races: Dictionary = {}
 var run_seed := 0
 var applied_upgrades: Array[String] = []
 var pending_offer: Array[String] = []
@@ -176,14 +181,14 @@ func has_pending_offer() -> bool:
 	return not pending_offer.is_empty()
 
 
-func add_tower(definition_id: String, cell: Vector2i, position_index: int, targeting: int, tier := 0) -> Dictionary:
+func add_tower(definition_id: String, cell: Vector2i, position_index: int, targeting: int, invested := 0) -> Dictionary:
 	var record := {
 		"id": allocate_tower_id(),
 		"definition_id": definition_id,
 		"cell": cell,
-		"tier": tier,
 		"position": position_index,
 		"targeting": targeting,
+		"invested": invested,
 	}
 	towers[record["id"]] = record
 	stats["towers_built"] += 1
@@ -202,12 +207,19 @@ func remove_tower(tower_id: int) -> bool:
 	return true
 
 
-func upgrade_tower(tower_id: int) -> bool:
+## Turns the tower into `definition_id` (a tree option) and adds `paid` to
+## its investment. The caller validates the option.
+func upgrade_tower(tower_id: int, definition_id: String, paid := 0) -> bool:
 	if not towers.has(tower_id):
 		return false
-	towers[tower_id]["tier"] += 1
+	towers[tower_id]["definition_id"] = definition_id
+	towers[tower_id]["invested"] = int(towers[tower_id].get("invested", 0)) + paid
 	stats["towers_upgraded"] += 1
 	return true
+
+
+func race_of(peer_id: int) -> String:
+	return str(peer_races.get(peer_id, ""))
 
 
 func set_tower_targeting(tower_id: int, mode: int) -> bool:
@@ -254,6 +266,7 @@ func snapshot(countdown: float) -> Dictionary:
 		"countdown": countdown,
 		"towers": tower_records(),
 		"owners": position_owners,
+		"races": peer_races.duplicate(),
 		"seed": run_seed,
 		"upgrades": applied_upgrades.duplicate(),
 		"offer": pending_offer.duplicate(),
@@ -275,6 +288,10 @@ func restore(data: Dictionary) -> void:
 	lane_queued = PackedInt32Array(data.get("queued", lane_queued))
 	lane_spawned = PackedInt32Array(data.get("spawned", lane_spawned))
 	position_owners = PackedInt32Array(data.get("owners", position_owners))
+	peer_races.clear()
+	var races: Dictionary = data.get("races", {})
+	for peer_id in races:
+		peer_races[int(peer_id)] = str(races[peer_id])
 	run_seed = int(data.get("seed", run_seed))
 	applied_upgrades.assign(data.get("upgrades", []))
 	pending_offer.assign(data.get("offer", []))

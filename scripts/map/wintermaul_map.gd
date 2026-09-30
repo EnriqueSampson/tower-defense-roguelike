@@ -30,6 +30,7 @@ enum Placement {
 	UNAFFORDABLE,
 	LOCKED,
 	NO_TOWER_SELECTED,
+	WRONG_RACE,
 }
 
 const RouteRunnerScene = preload("res://scripts/actors/route_runner.gd")
@@ -342,7 +343,7 @@ func reconcile_creeps(records: Array, creep_lookup: Callable, speed_multiplier :
 
 # --- Towers -------------------------------------------------------------------
 
-func spawn_tower(tower_id: int, cell: Vector2i, definition: TowerDefinition, tier := 0, targeting := -1, stats := {}, position_index := -1) -> Tower:
+func spawn_tower(tower_id: int, cell: Vector2i, definition: TowerDefinition, targeting := -1, stats := {}, position_index := -1) -> Tower:
 	_ensure_map_data()
 	if definition == null:
 		return null
@@ -358,9 +359,9 @@ func spawn_tower(tower_id: int, cell: Vector2i, definition: TowerDefinition, tie
 	%Towers.add_child(tower)
 	tower.plane_position = footprint_center(cell, definition.footprint)
 	var resolved_targeting := targeting if TowerTargeting.is_valid_mode(targeting) else definition.default_targeting
-	var resolved_stats := stats if not stats.is_empty() else definition.stats_for_tier(tier)
+	var resolved_stats := stats if not stats.is_empty() else definition.stats()
 	var resolved_position := position_index if position_index >= 0 else get_cell_position_index(cell)
-	tower.setup(tower_id, cell, definition, tier, resolved_targeting, resolved_stats, resolved_position)
+	tower.setup(tower_id, cell, definition, resolved_targeting, resolved_stats, resolved_position)
 	tower.fired.connect(_on_tower_fired)
 	effects.ring(tower.plane_position, definition.accent_color, TILE_SIZE * 0.7 * definition.footprint.x)
 	_refresh_preview()
@@ -383,12 +384,12 @@ func remove_tower(tower_id: int) -> bool:
 	return true
 
 
-func update_tower(tower_id: int, tier: int, targeting: int, stats: Dictionary) -> bool:
+func update_tower(tower_id: int, definition: TowerDefinition, targeting: int, stats: Dictionary) -> bool:
 	var tower := get_tower(tower_id)
-	if tower == null:
+	if tower == null or definition == null:
 		return false
-	var upgraded := tier > tower.tier
-	tower.apply_stats(tier, targeting, stats)
+	var upgraded := definition != tower.definition
+	tower.apply_stats(definition, targeting, stats)
 	if upgraded:
 		effects.ring(tower.plane_position, Color("9ff2d1"), TILE_SIZE * 0.9)
 	return true
@@ -465,7 +466,8 @@ func get_builder(owner_peer: int) -> Builder:
 
 ## Mirrors BuilderSystem records by owner. `authoritative` places them
 ## exactly (host); clients extrapolate toward each record's target.
-func reconcile_builders(records: Array, speed_pixels: float, authoritative: bool) -> void:
+## `scene_for_owner(owner_peer) -> PackedScene` picks each builder's race model.
+func reconcile_builders(records: Array, speed_pixels: float, authoritative: bool, scene_for_owner := Callable()) -> void:
 	var seen: Dictionary = {}
 	for record in records:
 		var owner_peer := int(record["owner"])
@@ -478,6 +480,8 @@ func reconcile_builders(records: Array, speed_pixels: float, authoritative: bool
 			builder.plane_position = Vector2(float(record["x"]), float(record["y"]))
 			builder.set_selected(owner_peer == _selected_builder_owner and owner_peer != 0)
 		builder.speed_pixels = speed_pixels
+		if scene_for_owner.is_valid():
+			builder.set_model_scene(scene_for_owner.call(owner_peer))
 		builder.apply_record(record, authoritative)
 	for child in _builders().get_children():
 		if child is Builder and not seen.has(child.owner_peer):
@@ -560,13 +564,13 @@ func reconcile_towers(records: Array, definition_lookup: Callable, stats_lookup:
 			var definition: TowerDefinition = definition_lookup.call(str(record["definition_id"]))
 			if definition == null:
 				continue
-			var spawned := spawn_tower(tower_id, record["cell"], definition, int(record["tier"]), int(record["targeting"]), stats, int(record.get("position", -1)))
+			var spawned := spawn_tower(tower_id, record["cell"], definition, int(record["targeting"]), stats, int(record.get("position", -1)))
 			if spawned != null:
 				spawned.apply_progress(record)
 				summary["added"] += 1
 			continue
-		elif tower.tier != int(record["tier"]) or tower.targeting != int(record["targeting"]) or tower.stats != stats:
-			update_tower(tower_id, int(record["tier"]), int(record["targeting"]), stats)
+		elif tower.definition == null or tower.definition.id != str(record["definition_id"]) or tower.targeting != int(record["targeting"]) or tower.stats != stats:
+			update_tower(tower_id, definition_lookup.call(str(record["definition_id"])), int(record["targeting"]), stats)
 			summary["updated"] += 1
 		tower.apply_progress(record)
 	for child in %Towers.get_children():
@@ -751,6 +755,8 @@ static func placement_text(result: int) -> String:
 			return "Building is locked"
 		Placement.NO_TOWER_SELECTED:
 			return "Select a tower from the palette"
+		Placement.WRONG_RACE:
+			return "Your builder cannot build that"
 	return "Unknown"
 
 

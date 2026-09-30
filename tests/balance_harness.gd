@@ -15,9 +15,12 @@ extends SceneTree
 ##                     and a share of the nine positions, as a lobby would.
 ##   --strategy=NAME   maze (default): greedy mazing in each player's home
 ##                     position (Position 9 for the host); lazy: towers beside
-##                     Position 9's route only, no mazing. Both mix in a
-##                     detection tower every sixth build and an upgrade every
-##                     third purchase.
+##                     Position 9's route only, no mazing. Both build their
+##                     race's towers in turn (detection included) and make
+##                     every third purchase an upgrade, alternating branches.
+##   --race=ID         every bot's race (humans, orcs, elves, bugs), or
+##                     "mixed" to deal the races out in catalog order.
+##                     Default: the catalog's default race.
 ##   --waves=N         stop after N levels.
 ##   --seed=N          run seed (upgrade offers).
 ##   --out=PATH        also write the report as JSON.
@@ -28,14 +31,11 @@ extends SceneTree
 const GAME_SCENE_PATH := "res://scenes/game/Game.tscn"
 const MAP_PATH := "WorldClip/BattlefieldView/BattlefieldViewport/World/WintermaulMap"
 const REAL_TIMEOUT_MSEC := 1800000
-## Build mix while lining routes. Cannon cannot hit air and Frost cannot touch
-## magic-immune creeps, so Bolt carries the mix.
-const MIX: Array[String] = ["bolt", "bolt", "frost", "bolt", "cannon", "sentry"]
 ## Spare gold above this goes into upgrades even while sites remain.
 const UPGRADE_RESERVE := 150
 const HOST := 1
 
-var _options := {"players": 1, "strategy": "maze", "waves": 0, "seed": 0, "out": "", "quiet": false}
+var _options := {"players": 1, "strategy": "maze", "race": "", "waves": 0, "seed": 0, "out": "", "quiet": false}
 var _game: Node
 var _map: WintermaulMap
 var _state: RunState
@@ -84,10 +84,11 @@ func _start() -> void:
 	if int(_options["seed"]) != 0:
 		_state.run_seed = int(_options["seed"])
 	_assign_positions(players)
+	_assign_races(players)
 	for peer_id in _builders.builders:
 		_candidates[peer_id] = _candidates_for(peer_id)
 	_started_msec = Time.get_ticks_msec()
-	print("BALANCE players=%d strategy=%s seed=%d levels=%d" % [players, _options["strategy"], _state.run_seed, _state.wave_count])
+	print("BALANCE players=%d strategy=%s race=%s seed=%d levels=%d" % [players, _options["strategy"], _options["race"] if not str(_options["race"]).is_empty() else _state.race_of(HOST), _state.run_seed, _state.wave_count])
 
 
 ## Splits the nine positions between the bots like a lobby would (each bot
@@ -101,6 +102,25 @@ func _assign_positions(players: int) -> void:
 	_state.position_owners = owners
 	_game.call("_ensure_builders")
 	_game.call("_sync_builder_view")
+
+
+func _assign_races(players: int) -> void:
+	for index in range(players):
+		var race_id := str(_options["race"])
+		if race_id == "mixed":
+			race_id = _catalog.races[index % _catalog.races.size()].id
+		_state.peer_races[HOST + index] = _catalog.resolve_race_id(race_id)
+	_game.call("_sync_builder_view")
+
+
+## The tower a builder builds next: its race's roots in turn, with the
+## generalist (first root) every other time.
+func _next_definition(peer_id: int, built: int) -> String:
+	var race := _catalog.get_race(_state.race_of(peer_id))
+	var roots := race.towers
+	if built % 2 == 0:
+		return roots[0].id
+	return roots[(built / 2) % roots.size()].id
 
 
 func _process(_delta: float) -> bool:
@@ -153,7 +173,7 @@ func _play(peer_id: int) -> void:
 			return
 	# Each builder walks the mix on its own, so every player builds detection.
 	var built: int = _built_by.get(peer_id, 0)
-	var definition_id := MIX[built % MIX.size()]
+	var definition_id := _next_definition(peer_id, built)
 	var cost: int = (_game.get("modifiers") as RunModifiers).build_cost(_catalog.get_tower(definition_id).cost)
 	if _state.team_gold >= cost:
 		var site := _next_site(peer_id, definition_id)
@@ -171,15 +191,24 @@ func _play(peer_id: int) -> void:
 func _upgrade_cheapest(peer_id: int) -> bool:
 	var modifiers: RunModifiers = _game.get("modifiers")
 	var best_id := 0
+	var best_target := ""
 	var best_cost := 1 << 30
 	for record in _state.tower_records():
 		if not BuildPermissionPolicy.can_control(peer_id, int(record["position"]), _state.position_owners):
 			continue
-		var cost := modifiers.upgrade_cost(_catalog.get_tower(str(record["definition_id"])).upgrade_cost(int(record["tier"])))
-		if cost >= 0 and cost < best_cost:
+		if record.has("build_remaining") and float(record["build_remaining"]) > 0.0 or record.has("upgrade_to"):
+			continue
+		var options := _catalog.get_tower(str(record["definition_id"])).upgrade_options
+		if options.is_empty():
+			continue
+		# Alternate branches by tower id so both sides of a tree get used.
+		var target := options[int(record["id"]) % options.size()]
+		var cost := modifiers.upgrade_cost(_catalog.get_tower(target).cost)
+		if cost < best_cost:
 			best_cost = cost
 			best_id = int(record["id"])
-	return best_id != 0 and _state.team_gold >= best_cost and _game.call("_try_upgrade_tower", best_id, peer_id)
+			best_target = target
+	return best_id != 0 and _state.team_gold >= best_cost and _game.call("_try_upgrade_tower", best_id, best_target, peer_id)
 
 
 # --- Strategies ---------------------------------------------------------------
@@ -348,7 +377,7 @@ func _track_levels() -> void:
 func _invested() -> int:
 	var total := 0
 	for record in _state.tower_records():
-		total += _catalog.get_tower(str(record["definition_id"])).total_invested(int(record["tier"]))
+		total += int(record.get("invested", 0))
 	return total
 
 
@@ -362,6 +391,7 @@ func _finish() -> void:
 	var report := {
 		"players": int(_options["players"]),
 		"strategy": _options["strategy"],
+		"races": _state.peer_races.duplicate(),
 		"seed": _state.run_seed,
 		"victory": results["victory"],
 		"level_reached": results["wave_reached"],

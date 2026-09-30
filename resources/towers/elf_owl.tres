@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://6gt4b1g2xxsd" path="res://assets/models/towers/elf_owl.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "elf_owl"
+display_name = "Owl Post"
+role = "Detection"
+description = "Sees everything at night, delivers mail during the day. Reveals invisible creeps."
+primary_color = Color(0.5, 0.4, 0.3, 1)
+accent_color = Color(1.0, 0.85, 0.4, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 50
+damage = 10
+attack_range = 336.0
+attack_cooldown = 0.6
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 448.0
+default_targeting = 0
+tier = 2
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

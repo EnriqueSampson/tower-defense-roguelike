@@ -24,6 +24,9 @@ var is_host := false
 var is_solo_session := false
 ## Chosen in the pre-launch Map Options prompt; applied to the run when it starts.
 var roguelike_enabled := true
+## The local player's builder race (RaceDefinition.id), picked in the lobby.
+## Published as Steam lobby member data "race" so the host can read it.
+var local_race := ""
 var last_status := ""
 var last_status_is_error := false
 var _quick_match_pending := false
@@ -32,6 +35,8 @@ var _peer: SteamMultiplayerPeer
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# GameSettings is registered before this autoload (project.godot).
+	local_race = GameSettings.preferred_race
 	status_changed.connect(func(message: String, is_error: bool) -> void:
 		last_status = message
 		last_status_is_error = is_error)
@@ -99,6 +104,15 @@ func start_game() -> void:
 	_begin_game.rpc()
 
 
+## Picks the local builder race; in a lobby every member sees it on the roster.
+func set_local_race(race_id: String) -> void:
+	local_race = race_id
+	GameSettings.set_preferred_race(race_id)
+	if lobby_id != 0 and Steamworks.is_initialized:
+		Steam.setLobbyMemberData(lobby_id, "race", race_id)
+	_refresh_roster()
+
+
 func start_solo_game() -> void:
 	if lobby_id != 0:
 		leave_lobby()
@@ -110,6 +124,7 @@ func start_solo_game() -> void:
 		"name": Steamworks.persona_name if Steamworks.is_initialized else "Solo Defender",
 		"is_host": true,
 		"lane": 1,
+		"race": local_race,
 	}]
 	roster_changed.emit(roster)
 	status_changed.emit("Starting a solo defense with all nine positions active.", false)
@@ -231,6 +246,7 @@ func _on_lobby_created(connect_status: int, created_lobby_id: int) -> void:
 		leave_lobby()
 		return
 	multiplayer.multiplayer_peer = _peer
+	Steam.setLobbyMemberData(lobby_id, "race", local_race)
 	_refresh_roster()
 	lobby_changed.emit(lobby_id, true)
 	status_changed.emit("Steam lobby ready for players.", false)
@@ -253,6 +269,7 @@ func _on_lobby_joined(joined_lobby_id: int, _permissions: int, _locked: bool, re
 			leave_lobby()
 			return
 		multiplayer.multiplayer_peer = _peer
+	Steam.setLobbyMemberData(lobby_id, "race", local_race)
 	_refresh_roster()
 	lobby_changed.emit(lobby_id, is_host)
 	var host_name := Steam.getLobbyData(lobby_id, "host_name")
@@ -306,10 +323,15 @@ func _on_lobby_match_list(lobbies: Array) -> void:
 
 
 func _refresh_roster() -> void:
-	roster.clear()
 	if lobby_id == 0:
+		# Solo keeps its one-member roster (with the current race pick).
+		if is_solo_session and roster.size() == 1:
+			roster[0]["race"] = local_race
+		else:
+			roster.clear()
 		roster_changed.emit(roster)
 		return
+	roster.clear()
 	var member_count := Steam.getNumLobbyMembers(lobby_id)
 	for member_index in range(member_count):
 		var member_steam_id := Steam.getLobbyMemberByIndex(lobby_id, member_index)
@@ -318,6 +340,7 @@ func _refresh_roster() -> void:
 			"name": Steam.getFriendPersonaName(member_steam_id),
 			"is_host": member_steam_id == Steam.getLobbyOwner(lobby_id),
 			"lane": member_index + 1,
+			"race": Steam.getLobbyMemberData(lobby_id, member_steam_id, "race"),
 		})
 	roster_changed.emit(roster)
 

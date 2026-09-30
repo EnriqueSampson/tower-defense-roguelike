@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://dg6lfe7dnj1sj" path="res://assets/models/towers/elf_ent.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "elf_ent"
+display_name = "Ancient Ent"
+role = "Armor breaker"
+description = "Remembers when this map was a forest. Holds a grudge about it. Crushes armor and hurls boulders at anything that flies."
+primary_color = Color(0.3, 0.25, 0.18, 1)
+accent_color = Color(0.4, 0.75, 0.3, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 150
+damage = 110
+attack_range = 224.0
+attack_cooldown = 1.5
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 5
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 0.0
+default_targeting = 0
+tier = 3
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

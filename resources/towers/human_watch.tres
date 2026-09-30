@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://c1pfjkdx124kk" path="res://assets/models/towers/human_watch.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "human_watch"
+display_name = "Neighborhood Watch"
+role = "Detection"
+description = "Three neighbors, one flashlight, zero chill. Wider detection and a sharper tongue."
+primary_color = Color(0.6, 0.45, 0.3, 1)
+accent_color = Color(0.95, 0.9, 0.4, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 60
+damage = 10
+attack_range = 252.0
+attack_cooldown = 0.7
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 392.0
+default_targeting = 0
+tier = 2
+upgrade_options = PackedStringArray("human_hoa")
+sell_refund_percent = 70

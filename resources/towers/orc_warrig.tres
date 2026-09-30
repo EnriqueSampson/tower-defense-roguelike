@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://2tqmfd44bw8e" path="res://assets/models/towers/orc_warrig.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "orc_warrig"
+display_name = "War Rig"
+role = "Ultimate: area damage"
+description = "Eighteen wheels, four cannons, no brakes. Enormous splash. Ground only."
+primary_color = Color(0.35, 0.25, 0.2, 1)
+accent_color = Color(1.0, 0.4, 0.15, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 240
+damage = 120
+attack_range = 280.0
+attack_cooldown = 1.1
+projectile_speed = 450.0
+splash_radius = 64.4
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 3
+can_target_ground = true
+can_target_air = false
+is_magic = false
+detection_range = 0.0
+default_targeting = 2
+tier = 4
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

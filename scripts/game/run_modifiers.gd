@@ -54,12 +54,14 @@ func applied_definitions() -> Array[RunUpgradeDefinition]:
 	return _applied.duplicate()
 
 
-## Layers run modifiers on top of a tower's tier stats.
-func modify_stats(base: Dictionary, tower_id: String, in_final_position := false) -> Dictionary:
+## Layers run modifiers on top of a tower's stats. `line_id` is the root of
+## the tower's upgrade tree (ContentCatalog.line_of): tower-specific upgrades
+## apply to the whole line.
+func modify_stats(base: Dictionary, line_id: String, in_final_position := false) -> Dictionary:
 	var stats := base.duplicate()
 	var damage := float(stats.get("damage", 1))
 	for upgrade in _applied:
-		if not upgrade.tower_id.is_empty() and upgrade.tower_id != tower_id:
+		if not upgrade.tower_id.is_empty() and upgrade.tower_id != line_id:
 			continue
 		damage *= upgrade.damage_multiplier
 		stats["range"] = float(stats.get("range", 0.0)) + upgrade.range_bonus

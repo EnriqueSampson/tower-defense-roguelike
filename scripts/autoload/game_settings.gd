@@ -17,6 +17,8 @@ var controls_seen := false
 ## Real-time sun shadows cost ~5-13 ms on the Iris 550 target; off by default
 ## (WC3 itself used blob shadows, which creeps keep either way).
 var shadows_enabled := false
+## Last race picked in the lobby (RaceDefinition.id; empty = default race).
+var preferred_race := ""
 
 
 func _ready() -> void:
@@ -34,6 +36,7 @@ func load_settings() -> void:
 	edge_pan_enabled = bool(config.get_value(SECTION_UX, "edge_pan", edge_pan_enabled))
 	controls_seen = bool(config.get_value(SECTION_UX, "controls_seen", controls_seen))
 	shadows_enabled = bool(config.get_value(SECTION_GRAPHICS, "shadows", shadows_enabled))
+	preferred_race = str(config.get_value(SECTION_UX, "race", preferred_race))
 	changed.emit()
 
 
@@ -45,6 +48,7 @@ func save_settings() -> void:
 	config.set_value(SECTION_UX, "edge_pan", edge_pan_enabled)
 	config.set_value(SECTION_UX, "controls_seen", controls_seen)
 	config.set_value(SECTION_GRAPHICS, "shadows", shadows_enabled)
+	config.set_value(SECTION_UX, "race", preferred_race)
 	config.save(SETTINGS_PATH)
 
 
@@ -70,6 +74,11 @@ func set_edge_pan(enabled: bool) -> void:
 func set_shadows(enabled: bool) -> void:
 	shadows_enabled = enabled
 	changed.emit()
+	save_settings()
+
+
+func set_preferred_race(race_id: String) -> void:
+	preferred_race = race_id
 	save_settings()
 
 

@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://ci65tp8ltorf5" path="res://assets/models/towers/bug_mosquito.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "bug_mosquito"
+display_name = "Mosquito"
+role = "Control"
+description = "Bites. Itches. Creeps stop to scratch. A weak magic slow for ten gold."
+primary_color = Color(0.35, 0.35, 0.4, 1)
+accent_color = Color(0.9, 0.3, 0.3, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 10
+damage = 1
+attack_range = 224.0
+attack_cooldown = 0.8
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.2
+slow_duration = 1.5
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = true
+detection_range = 0.0
+default_targeting = 0
+tier = 1
+upgrade_options = PackedStringArray("bug_horsefly")
+sell_refund_percent = 70

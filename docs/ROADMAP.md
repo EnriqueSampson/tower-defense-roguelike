@@ -24,7 +24,7 @@ A faithful co-op Wintermaul for modern players:
 - Host-authoritative co-op over Steam lobbies, plus solo on `OfflineMultiplayerPeer`. Nine positions, with the host controlling unfilled and disconnected positions.
 - A WC3-style builder per player: right-click to move, shift-queued build orders, Stop, construction over time, and cancel for a full refund. Solo uses one builder at double speed.
 - Mazing on a 144×160 grid (72×80 two-by-two towers, scaled to classic Wintermaul proportions): A* rerouting, anti-block placement, relay checkpoints into Position 9, and shared lives and gold.
-- Four towers (Bolt, Cannon, Frost and the Nosy Neighbor detection tower), each with two upgrade tiers, selling, and four target priorities.
+- Four builder races picked in the lobby (Humans, Orcs, Elves, Bugs) with 41 towers in classic Wintermaul upgrade trees (branching, up to four tiers), selling, and four target priorities.
 - A classic 30-level run: 17 creeps including air, invisible, magic-immune, swarm and splitting creeps, with a boss every fifth level.
 - 18 seeded run upgrades, offered after every third level.
 - A data-driven content catalog: towers, creeps, waves and upgrades are `.tres` resources.
@@ -42,7 +42,7 @@ A faithful co-op Wintermaul for modern players:
 | Vision | Today |
 |---|---|
 | Final art | Placeholder `.glb` models from `tools/blender/` for every tower, creep and the builder |
-| 3–4 races with large tower rosters | 3 towers, no races |
+| 3–4 races with large tower rosters | 4 races, 9–11 towers each, placeholder art |
 | Balanced for 1–4 players and solo | Balance-harness bots win with 1, 2 and 4 players and a lazy bot loses ([BALANCE.md](BALANCE.md)); no humans have tested it yet |
 
 ## 3. Decisions from the planning interview
@@ -136,21 +136,21 @@ Found while tuning, for later phases:
 
 **Goal:** 3–4 distinct races, each with a full tower roster.
 
-- [ ] Race framework: a `RaceDefinition` resource (builder model, tower tree, race-specific upgrades), race selection in the lobby, and catalog validation for races.
-- [ ] Branching upgrade trees, replacing the current two linear tiers.
-- [ ] About 8–10 towers per race, escalating from mundane to absurd, and covering ground, air, splash, slow and support roles plus detection. Each race ships with placeholder art first and final art from the modeler. The existing Bolt, Cannon and Frost towers get folded into a race or retired.
+- [x] Race framework: a `RaceDefinition` resource (builder model, the towers its builder builds), a race picker in the lobby (Steam member data `race`, remembered in settings, shown on the roster), per-peer races in `RunState` and the snapshot, host validation that a builder only builds its own race's towers, and catalog validation for races (every tower in exactly one race, every race can detect). Race-specific run upgrades exist for Bugs (Pheromone Trails, Swarm Tactics), and offers are race-aware.
+- [x] Classic Wintermaul upgrade trees replace the two linear tiers: an upgrade turns a tower into another tower (paying that tower's cost), and some towers branch (the Guy With a Sword becomes a Crossbow Enthusiast or a Knight on a Budget). Sell value follows the gold invested.
+- [x] 9–11 towers per race, escalating from mundane to absurd and covering ground, air, splash, slow, armor piercing and detection. All content lives in `tools/race_content.py`; `tools/generate_races.py` writes the resources and `tools/blender/race_towers.py` the placeholder models (37 new towers and three new builders). Final art from the modeler is still to come. Bolt, Cannon, Frost and the Nosy Neighbor were folded in: Humans, Orcs, Elves and Humans respectively, keeping their IDs.
 
-| Race | Early towers | Mid towers | Late towers |
-|---|---|---|---|
-| **Humans** | A guy with a sword | A car full of people with machine guns | A streamer at a computer hurling insults |
-| **Orcs** | An orc with an axe | Makeshift cars with guns bolted on | An orc riding a giant lizard |
-| **Elves** | Archers | Hippogryph riders | Ents and water summons |
-| **Race 4** (name TBD) | Ninjas | Samurai | An AI chip maker |
+| Race | Tier 1 (builder) | Upgrades | Ultimate | Detection |
+|---|---|---|---|---|
+| **Humans** | Guy With a Sword, Nosy Neighbor | Crossbow Enthusiast → Musketeer; Knight on a Budget → Minivan of Uncles; Neighborhood Watch → HOA President | Rage Streamer (magic splash) | Nosy Neighbor line |
+| **Orcs** | Orc With an Axe, Junk Cannon, Sniffer Boar | Axe Juggler → Lizard Rider; Scrap Mortar → Battle Wagon or Flak Goblin (anti-air); Truffle Hog of War | Big Lizard Energy, War Rig | Sniffer Boar line |
+| **Elves** | Elf Archer, Water Spirit, Sapling | Ranger → Hippogryph Rider, or Owl Post; Tide Caller → Water Elemental; Treant → Ancient Ent | Water Elemental (area slow), Ancient Ent | Owl Post |
+| **Bugs** | Worker Ant (5 gold), Dung Beetle, Firefly, Mosquito | Soldier Ant → Army Ant Platoon; Stag Beetle → Rhino Beetle; Lantern Bug; Horsefly | The Hive Queen (the only Bug splash) | Firefly line |
 
-Race 4 keeps its ninja, samurai and AI chip maker towers, but its name and framing must not be based on a real ethnicity. Point the joke at the absurdity instead, for example a mega-corporation ninja clan. Real brand and platform names (such as Twitch) are avoided in tower names; use generic stand-ins like "streamer".
-- [ ] Balance each race against the Phase 3 harness.
+Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash until the Hive Queen. Real brand names are avoided (the Rage Streamer is a "streamer").
+- [ ] Balance each race against the Phase 3 harness: first pass done (see [BALANCE.md](BALANCE.md)); needs playtests.
 
-**Exit:** 3–4 races can each finish a classic run, and no race dominates in playtests.
+**Exit:** 3–4 races can each finish a classic run, and no race dominates in playtests. The harness has each race finishing solo; playtests are still to come.
 
 ### Phase 5: Roguelike layer, retuned (about 2–3 weeks)
 
@@ -193,14 +193,14 @@ Race 4 keeps its ninja, samurai and AI chip maker towers, but its name and frami
 ## 6. Open questions
 
 - **Solo and small lobbies:** for now solo controls all nine positions with one builder at double speed (Phase 2). Revisit after Playtest gate A: several builders, merged or disabled positions, or AI help are still options, and Phase 6 has to settle 2–4 player lobbies too.
-- **Race 4's name and framing** (see Phase 4), and whether races share any towers.
+- ~~Race 4's name and framing~~: Bugs, a cheap mazing race. Races share no towers.
 - **Final game name.**
 
 ## 7. Asset spec for the modeler
 
 These conventions keep placeholder and final models interchangeable. The placeholder scripts in `tools/blender/` follow them and are working examples.
 
-- **Format:** `.glb` (glTF binary) exported from Blender with +Y up (the exporter default). One file per tower, creep or builder. A tower tier can have its own file (`TowerUpgradeTier.visual_scene`); otherwise it reuses the base model.
+- **Format:** `.glb` (glTF binary) exported from Blender with +Y up (the exporter default). One file per tower, creep or builder; every tower in an upgrade tree is its own tower with its own file.
 - **Where:** `assets/models/towers/`, `assets/models/creeps/` and `assets/models/builders/`. File names use the content ID in snake_case (for example `human_swordsman.glb`).
 - **Scale:** 1 Blender unit = 1 map tile. Towers are 2×2 tiles, so a tower fits a 2×2-unit square, base included. Creeps are about half a tile across. The game does not rescale models, so author them at size.
 - **Pivot:** the object origin is at the center of the footprint, on the ground (z = 0).

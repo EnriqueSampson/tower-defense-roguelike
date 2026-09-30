@@ -1,43 +1,18 @@
-[gd_resource type="Resource" script_class="TowerDefinition" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
-[ext_resource type="Script" path="res://scripts/data/tower_upgrade_tier.gd" id="2_tier"]
-[ext_resource type="PackedScene" uid="uid://4f2werr63qd3" path="res://assets/models/towers/human_nosy_neighbor.glb" id="3_model"]
-
-[sub_resource type="Resource" id="tier_1"]
-script = ExtResource("2_tier")
-tier_name = "Neighborhood Watch"
-cost = 45
-damage_multiplier = 1.8
-range_bonus = 28.0
-cooldown_multiplier = 0.9
-splash_radius_bonus = 0.0
-slow_factor_bonus = 0.0
-slow_duration_bonus = 0.0
-armor_pierce_bonus = 0
-
-[sub_resource type="Resource" id="tier_2"]
-script = ExtResource("2_tier")
-tier_name = "HOA President"
-cost = 90
-damage_multiplier = 1.8
-range_bonus = 28.0
-cooldown_multiplier = 0.9
-splash_radius_bonus = 0.0
-slow_factor_bonus = 0.0
-slow_duration_bonus = 0.0
-armor_pierce_bonus = 1
+[ext_resource type="PackedScene" uid="uid://4f2werr63qd3" path="res://assets/models/towers/human_nosy_neighbor.glb" id="2_model"]
 
 [resource]
 script = ExtResource("1_tower")
 id = "sentry"
 display_name = "Nosy Neighbor"
 role = "Detection"
-description = "A retiree with binoculars who sees everything. Reveals invisible creeps nearby so every tower can hit them, and scolds anything in range for a little damage."
+description = "A retiree with binoculars who sees everything. Reveals invisible creeps nearby so every tower can hit them."
 primary_color = Color(0.55, 0.42, 0.3, 1)
-accent_color = Color(0.55, 0.85, 1, 1)
+accent_color = Color(0.55, 0.85, 1.0, 1)
 footprint = Vector2i(2, 2)
-visual_scene = ExtResource("3_model")
+visual_scene = ExtResource("2_model")
 cost = 40
 damage = 3
 attack_range = 224.0
@@ -52,5 +27,6 @@ can_target_air = true
 is_magic = false
 detection_range = 336.0
 default_targeting = 0
-upgrade_tiers = Array[ExtResource("2_tier")]([SubResource("tier_1"), SubResource("tier_2")])
+tier = 1
+upgrade_options = PackedStringArray("human_watch")
 sell_refund_percent = 70

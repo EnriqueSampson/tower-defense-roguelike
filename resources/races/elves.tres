@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="RaceDefinition" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/race_definition.gd" id="1_race"]
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="2_tower"]
+[ext_resource type="PackedScene" uid="uid://ghfc8l78dvti" path="res://assets/models/builders/elf_wisp.glb" id="3_builder"]
+[ext_resource type="Resource" path="res://resources/towers/elf_archer.tres" id="t_0"]
+[ext_resource type="Resource" path="res://resources/towers/frost_tower.tres" id="t_1"]
+[ext_resource type="Resource" path="res://resources/towers/elf_sapling.tres" id="t_2"]
+
+[resource]
+script = ExtResource("1_race")
+id = "elves"
+display_name = "Elves"
+description = "Range and control. Archers, hippogryph riders, water spirits that slow, and ancient ents. Detection: the Owl Post."
+color = Color(0.55, 0.85, 0.75, 1)
+builder_scene = ExtResource("3_builder")
+towers = Array[ExtResource("2_tower")]([ExtResource("t_0"), ExtResource("t_1"), ExtResource("t_2")])

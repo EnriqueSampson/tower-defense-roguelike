@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://obf8ef347c0x" path="res://assets/models/towers/elf_hippogryph.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "elf_hippogryph"
+display_name = "Hippogryph Rider"
+role = "Long range"
+description = "Half horse, half eagle, fully judgmental. The longest bow range there is."
+primary_color = Color(0.75, 0.7, 0.6, 1)
+accent_color = Color(0.9, 1.0, 0.8, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 110
+damage = 40
+attack_range = 392.0
+attack_cooldown = 0.45
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 0.0
+default_targeting = 0
+tier = 3
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

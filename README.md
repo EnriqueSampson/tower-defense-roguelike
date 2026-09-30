@@ -57,7 +57,8 @@ project.godot              Autoloads: Steamworks, SteamSession, GameSettings, Au
 export_presets.cfg         macOS + Windows export presets
 resources/
   content_catalog.tres     Registry of every shipped tower, wave, and upgrade
-  towers/                  TowerDefinition resources (bolt, cannon, frost) with upgrade tiers
+  towers/                  TowerDefinition resources for all four races (generated; see tools/race_content.py)
+  races/                   RaceDefinition resources: Humans, Orcs, Elves, Bugs
   creeps/                  CreepDefinition resources (grunt, runner, brute, mender, warlord boss)
   waves/                   Ten WaveDefinition resources built from spawn groups
   upgrades/                17 RunUpgradeDefinition resources (tower / economy / defense / tradeoff)
@@ -89,7 +90,7 @@ docs/                      Roadmap, architecture, release checklist, playtest te
 
 ## Adding content
 
-- **Tower**: create a `TowerDefinition` `.tres` in `resources/towers/`, give it a unique `id`, add tiers, and list it in `resources/content_catalog.tres`. Towers draw themselves from `primary_color`/`accent_color`; no controller edits are required.
+- **Tower**: add an entry to `TOWERS` in `tools/race_content.py` (race, tier, stats, `options` for its upgrade branches and a model recipe), list it in its parent's `options` or its race's `roots`, then run `python3 tools/generate_races.py` and `python tools/blender/race_towers.py <id>`. `ContentCatalog.validate()` (run by the test suite) checks the trees.
 - **Creep**: create a `CreepDefinition` and reference it from a `WaveSpawnGroup`.
 - **Wave**: create a `WaveDefinition` with ordered spawn groups and append it to the catalog (`number` must increase).
 - **Run upgrade**: create a `RunUpgradeDefinition`, set typed effects and offer rules (`requires_tags`, `excludes_tags`), and append it to the catalog.

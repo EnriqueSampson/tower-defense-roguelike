@@ -10,7 +10,7 @@ script = ExtResource("2_group")
 creep = ExtResource("creep_imp")
 count = 40
 spawn_interval = 0.18
-health_multiplier = 47.41
+health_multiplier = 73.95
 bounty_multiplier = 4.55
 delay_before = 0.0
 
@@ -19,7 +19,7 @@ script = ExtResource("2_group")
 creep = ExtResource("creep_mender")
 count = 6
 spawn_interval = 0.9
-health_multiplier = 47.41
+health_multiplier = 73.95
 bounty_multiplier = 4.55
 delay_before = 1.0
 

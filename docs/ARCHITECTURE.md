@@ -20,8 +20,9 @@ This document freezes the invariants that the MVP depends on. Change them delibe
 | `shared_lives`, `team_gold` | Shared economy and defense |
 | `lane_queued`, `lane_spawned` | Per-position spawn bookkeeping |
 | `active_creeps` | `creep_id -> {position, definition_id, health_multiplier}` |
-| `towers` | `tower_id -> {id, definition_id, cell, tier, position, targeting}`; `cell` is the footprint anchor (top-left cell of the tower's `TowerDefinition.footprint`, 2×2 for shipped towers). Work in progress adds `build_remaining`/`build_total`/`build_paid` (construction) or `upgrade_remaining`/`upgrade_total`/`upgrade_paid` (timed upgrade); the host counts them down in `_tick_construction` |
+| `towers` | `tower_id -> {id, definition_id, cell, position, targeting, invested}`; an upgrade replaces `definition_id` with the chosen option from the tower's upgrade tree and adds its price to `invested` (which sets the sell value); `cell` is the footprint anchor (top-left cell of the tower's `TowerDefinition.footprint`, 2×2 for shipped towers). Work in progress adds `build_remaining`/`build_total`/`build_paid` (construction) or `upgrade_to`/`upgrade_remaining`/`upgrade_total`/`upgrade_paid` (timed upgrade); the host counts them down in `_tick_construction` |
 | `position_owners` | `position_index -> peer_id` (0 = unfilled, host controls) |
+| `peer_races` | `peer_id -> race_id` picked in the lobby (Steam member data `race`); unknown or missing picks fall back to the catalog's first race. Replicated as `races` in the state snapshot |
 | `run_seed` | Host-generated seed for deterministic upgrade offers |
 | `applied_upgrades`, `pending_offer` | Ordered upgrade IDs; offers pause the build timer |
 | `elapsed_seconds`, `stats` | Run duration and results counters |
@@ -64,7 +65,7 @@ Every gameplay value (paths, snapshots, targeting, splash) uses `Vector2` sim pi
 | Position | `0..8` internally, displayed as `Position 1..9`; classic order `1/2/3`, `6/5/4`, `7/9/8` | `ClassicWintermaulLayout` |
 | Tower instance | `int` allocated by `RunState.allocate_tower_id()` | host |
 | Creep instance | `int` allocated by `RunState.allocate_creep_id()` | host |
-| Tower / creep / wave / upgrade definitions | `String id` on the resource; never rename after shipping | `ContentCatalog` |
+| Tower / creep / wave / upgrade / race definitions | `String id` on the resource; never rename after shipping (the original `bolt`, `cannon`, `frost` and `sentry` IDs survive inside their races) | `ContentCatalog` |
 | Run | `run_seed` (`int`) | host |
 
 ## 6. Build permission policy
@@ -83,11 +84,11 @@ Every client intent carries the sender peer ID (`multiplayer.get_remote_sender_i
 
 | Request | Checks |
 | --- | --- |
-| Build order | phase allows building; definition ID exists; requester has a builder; the placement checks below pass; requester controls the position; team gold covers the modified cost. Nothing is spent yet. A plain order replaces the queue, a shift order appends |
+| Build order | phase allows building; definition ID exists; requester has a builder; the tower is one of the requester's race roots (`RaceDefinition.towers`, else `WRONG_RACE`); the placement checks below pass; requester controls the position; team gold covers the modified cost. Nothing is spent yet. A plain order replaces the queue, a shift order appends |
 | Construction start (builder arrives within `BUILDER_REACH_CELLS`) | the full place-tower check again, since the maze, creeps or gold may have changed; failure drops the order with a reason to its owner and spends nothing |
-| Place tower | phase allows building; definition ID exists; every footprint cell in bounds, buildable, inside one position, unoccupied, and free of creeps; the footprint as a whole does not seal any required route or active creep segment; requester controls the position; team gold covers the modified cost. Builder orders start the tower under construction (it holds its footprint but does not attack) |
+| Place tower | phase allows building; definition ID exists; race root as above; every footprint cell in bounds, buildable, inside one position, unoccupied, and free of creeps; the footprint as a whole does not seal any required route or active creep segment; requester controls the position; team gold covers the modified cost. Builder orders start the tower under construction (it holds its footprint but does not attack) |
 | Move / Stop order | requester has a builder; move target inside the world rect. Builders walk anywhere and never touch the path grid |
-| Upgrade tower | phase; tower exists; requester controls its position; not under construction or already upgrading; a next tier exists; gold covers the modified cost. Paid up front; the tower keeps its old tier until the timer ends |
+| Upgrade tower (`tower_id`, `target_id`) | phase; tower exists; requester controls its position; not under construction or already upgrading; `target_id` is one of the tower's `upgrade_options`; gold covers the target's modified cost. Paid up front; the tower keeps fighting as itself until the timer ends, then becomes the target |
 | Sell tower | phase; tower exists; requester controls its position; exactly-once (second sell finds no record). Selling during construction cancels it for a full refund; selling mid-upgrade also returns the upgrade payment |
 | Set targeting | tower exists; mode is valid; requester controls its position |
 | Choose upgrade | requester is the host; upgrade is in the pending offer; not already applied |
@@ -97,12 +98,19 @@ Typed RPC parameters reject malformed payloads at the transport layer before the
 
 ## 8. Run upgrades
 
-- Offers are rolled after waves whose `offers_upgrade_after` flag is set (waves 2, 4, 6, 8) with `UpgradeOffer.roll(pool, modifiers, seed, wave_index)`. The same seed, wave, and owned upgrades always yield the same offer.
+- Offers are rolled after waves whose `offers_upgrade_after` flag is set (every third level) with `UpgradeOffer.roll(pool, modifiers, seed, wave_index, count, available_lines)`. The same seed, wave, owned upgrades and races always yield the same offer; upgrades for tower lines no race in the run can build are left out.
 - Rules: an upgrade is never offered twice; `excludes_tags` removes mutually exclusive tradeoffs once one is owned; `requires_tags` gates upgrades behind an owned tag.
 - The build countdown pauses while an offer is open. The host makes the single team choice; clients see the same cards read-only.
-- `RunModifiers` never mutates resources. It layers multipliers on `TowerDefinition.stats_for_tier()` output and is rebuilt from the ID list on every peer.
+- `RunModifiers` never mutates resources. It layers multipliers on `TowerDefinition.stats()` output (tower-specific upgrades by line) and is rebuilt from the ID list on every peer.
 
-## 9. Special creeps (Phase 3)
+## 9. Races and upgrade trees (Phase 4)
+
+- `RaceDefinition` lists the tier-1 towers its builder builds and the builder model. Each `TowerDefinition` names the towers it can upgrade into (`upgrade_options`, one tier up); a tower with several options branches, as in classic Wintermaul.
+- `ContentCatalog.validate()` checks that options name known towers one tier up, trees never merge, every tower belongs to exactly one race, every race can detect invisible creeps, and tower-specific run upgrades name a line root.
+- A tower's *line* is the root of its tree (`ContentCatalog.line_of`). Run upgrades that name a tower apply to its whole line, and offers only include lines some race in the run can build.
+- Content comes from `tools/race_content.py` (stats, trees, model recipes) through `tools/generate_races.py` (resources) and `tools/blender/race_towers.py` (placeholder models).
+
+## 10. Special creeps (Phase 3)
 
 | Trait | Rule |
 | --- | --- |
@@ -113,7 +121,7 @@ Typed RPC parameters reject malformed payloads at the transport layer before the
 
 Levels scale creep health by `HEALTH_GROWTH` and regular bounties by `BOUNTY_GROWTH` per level (`tools/generate_waves.py`); `WaveDefinition.build_seconds` sets the build time before a level (boss levels get longer).
 
-## 10. Known limitations (documented, not bugs)
+## 11. Known limitations (documented, not bugs)
 
 - Clients may briefly show a creep alive after the host killed it (≤ one creep snapshot interval).
 - Position ownership maps Steam IDs to peer IDs at run start; peers that have not finished the transport handshake resolve to host control until the next roster refresh.

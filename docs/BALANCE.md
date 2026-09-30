@@ -6,7 +6,8 @@ How the 30-level run is tuned and what the harness says about it. Update the tab
 
 | Knob | Where | Now |
 | --- | --- | --- |
-| Creep health per level | `HEALTH_GROWTH` in `tools/generate_waves.py` | ×1.16 per level (level 30 ≈ 74× level 1) |
+| Creep health per level | `HEALTH_GROWTH` in `tools/generate_waves.py` | ×1.18 per level (level 30 ≈ 122× level 1) |
+| Tower stats and trees | `tools/race_content.py`, then `python3 tools/generate_races.py` | see the file |
 | Boss health per level | `BOSS_HEALTH_GROWTH` (on top of each boss's own health) | ×1.03 per level |
 | Bounty per level | `BOUNTY_GROWTH` (regular creeps only; bosses keep their own bounty) | ×1.06 per level |
 | Build time | `BalanceConfig.BUILD_DURATION`; boss levels `BOSS_BUILD_SECONDS` | 25 s; 35 s |
@@ -20,14 +21,16 @@ Rerun `python3 tools/generate_waves.py` after changing a curve; never hand-edit 
 `tests/balance_harness.gd` plays a whole run with bots that only build through builder orders, and prints one line per level (leaks, lives, gold at the start, gold earned, towers, gold invested, level length). `--out=report.json` also writes it as JSON.
 
 ```sh
-godot --headless --fixed-fps 20 --path . --script res://tests/balance_harness.gd -- --players=1 --strategy=maze --seed=42
+godot --headless --fixed-fps 20 --path . --script res://tests/balance_harness.gd -- --players=1 --strategy=maze --race=orcs --seed=42
 ```
+
+`--race` sets every bot's race, or `mixed` deals the four races out in catalog order.
 
 `--fixed-fps 20` advances every frame by 0.05 s of game time as fast as the machine can go: a full run takes about 5 minutes of real time for about 50 minutes of game time, and results do not depend on the machine.
 
 Strategies:
 
-- **maze** (the competent player): greedy mazing. Each tower goes on or beside the current creep path in the bot's home position (Position 9 for the host, which every creep crosses; its roster position for anyone else), nearest the exit first, so creeps keep detouring. It builds Bolt, Bolt, Frost, Bolt, Cannon, Nosy Neighbor in turn and makes every third purchase an upgrade.
+- **maze** (the competent player): greedy mazing. Each tower goes on or beside the current creep path in the bot's home position (Position 9 for the host, which every creep crosses; its roster position for anyone else), nearest the exit first, so creeps keep detouring. It builds its race's generalist every other time and the other tier-1 towers (detection included) in turn, and makes every third purchase an upgrade, alternating between branches of the tree.
 - **lazy** (the floor): towers beside Position 9's original route only, no mazing, then upgrades.
 
 The bots always take the first offered run upgrade.
@@ -40,18 +43,26 @@ The bots always take the first offered run upgrade.
 
 ## Results (seed 42, September 30, 2026)
 
-| Players | Strategy | Result | Lives left | Levels that leaked |
-| --- | --- | --- | --- | --- |
-| 1 | maze | Victory | 9 / 20 | 10 (1), 15 (5), 30 (5) |
-| 2 | maze | Victory | 9 / 20 | 10 (3), 15 (4), 29 (1), 30 (3) |
-| 4 | maze | Victory | 6 / 20 | 14 (4), 15 (3), 20 (1), 21 (1), 29 (5) |
-| 1 | lazy | Defeat at level 22 | 0 | 20–22 |
+Races, solo, maze bot, growth 1.18:
 
-Tuning history: growth 1.14 let the lazy wall reach level 28 and the maze bot coast; 1.17 beat the maze bot at level 28.
+| Race | Result | Lives left | Levels that leaked |
+| --- | --- | --- | --- |
+| Humans | Victory | 20 / 20 | 15 (5) |
+| Orcs | Victory | 22 / 20 | 15 (3) |
+| Elves | Victory | 17 / 20 | 10 (4), 15 (4) |
+| Bugs | Victory | 19 / 20 | 15 (6) |
+| Humans, lazy bot | Defeat at level 28 | 0 | 20 (4), 23 (11), 28 (10) |
+
+Lives can end above 20 through the Reinforced Gate run upgrade. A mixed four-player lobby (one bot of each race) won with 10 lives left at growth 1.16.
+
+Tuning history:
+- Before races (three towers with linear tiers): growth 1.14 let the lazy wall reach level 28 and the maze bot coast; 1.17 beat the maze bot at level 28; 1.16 was chosen.
+- With races and upgrade trees the bots got stronger. First pass at 1.16: Humans 20 lives, Bugs 18, Elves 6, Orcs lost at level 29 (no air coverage once the axe line became the ground-only Lizard Rider). The Lizard line now hits air, the Minivan and Musketeer lost some damage, Elves' Ranger, Hippogryph and Owl hit harder, and the Ancient Ent now hits air. Growth rose to 1.18.
 
 ## Known gaps
 
-- **Late gold piles up.** Once the home position is full (about 340 towers, around level 18), the bots max every upgrade and still bank 10–30k gold. The game needs gold sinks: Phase 4's larger race rosters and branching upgrade trees.
-- **Bosses are the difficulty spikes,** especially the air boss on level 15 (only Bolt, Frost and the Nosy Neighbor can hit it) and the final boss. That is intended, but check it in playtests.
+- **The bots find it comfortable.** Every race wins solo and only the level-15 air boss reliably costs lives. Humans may find it harder (bots maze perfectly and never misclick), so hold further difficulty changes until Playtest gate A.
+- **Late gold still piles up.** Once the home position is full (about 330 towers, level 11–18 depending on the race; Bugs fill it first because their towers are cheap), the bots max every upgrade and bank gold. Ultimates absorb more than the old tiers did, but more sinks (Phase 5 run events, or pricier ultimates) are worth considering.
+- **Bosses are the difficulty spikes,** especially the air boss on level 15 (only towers that hit air can touch it) and the final boss. That is intended, but check it in playtests.
 - The bots never sell, never move their maze, and pick run upgrades blindly, so they are a floor, not a ceiling, for what players can do.
 - Nine-player lobbies are not covered yet (Phase 6).

@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://dq381yggoewmu" path="res://assets/models/towers/bug_horsefly.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "bug_horsefly"
+display_name = "Horsefly"
+role = "Control"
+description = "The mosquito's big cousin who does CrossFit. Stronger magic slow."
+primary_color = Color(0.3, 0.35, 0.3, 1)
+accent_color = Color(0.8, 0.9, 0.3, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 35
+damage = 5
+attack_range = 252.0
+attack_cooldown = 0.7
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.3
+slow_duration = 2.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = true
+detection_range = 0.0
+default_targeting = 0
+tier = 2
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://yw8dofp85f8k" path="res://assets/models/towers/orc_mortar.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "orc_mortar"
+display_name = "Scrap Mortar"
+role = "Area damage"
+description = "Lobs a bucket of bolts in a high arc. Longer range, bigger splash. Ground only."
+primary_color = Color(0.4, 0.33, 0.26, 1)
+accent_color = Color(0.95, 0.6, 0.3, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 70
+damage = 30
+attack_range = 280.0
+attack_cooldown = 2.0
+projectile_speed = 360.0
+splash_radius = 56.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 1
+can_target_ground = true
+can_target_air = false
+is_magic = false
+detection_range = 0.0
+default_targeting = 2
+tier = 2
+upgrade_options = PackedStringArray("orc_wagon", "orc_flak")
+sell_refund_percent = 70

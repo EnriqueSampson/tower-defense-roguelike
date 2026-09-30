@@ -7,7 +7,7 @@ extends Control
 signal tower_palette_selected(definition_id: String)
 signal launch_requested
 signal ready_requested
-signal upgrade_requested(tower_id: int)
+signal upgrade_requested(tower_id: int, target_id: String)
 signal sell_requested(tower_id: int)
 signal targeting_requested(tower_id: int, mode: int)
 signal offer_chosen(upgrade_id: String)
@@ -26,7 +26,11 @@ const MESSAGE_DURATION := 2.5
 ## WC3 command-card grid hotkeys, row by row (QWER / ASDF / ZXCV).
 const CARD_KEYS: Array[Key] = [KEY_Q, KEY_W, KEY_E, KEY_R, KEY_A, KEY_S, KEY_D, KEY_F, KEY_Z, KEY_X, KEY_C, KEY_V]
 const CARD_SLOT_SIZE := Vector2(66, 44)
+## Upgrade branches take the top row (Q W E), as many as the tree offers.
 const SLOT_UPGRADE := 0
+const MAX_UPGRADE_OPTIONS := 3
+## Build card: the race's towers fill every slot but Stop (S) and Cancel (V).
+const BUILD_SLOTS: Array[int] = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10]
 const SLOT_FIRST_TARGETING := 4
 const SLOT_SELL := 10
 ## Row two, column two: the S hotkey, where WC3 puts Stop.
@@ -47,10 +51,12 @@ var _gold := 0
 var _modifiers: RunModifiers
 ## Selected-tower state shown on the command card.
 var _tower_definition: TowerDefinition
-var _tower_tier := 0
+## The local player's race: its towers fill the build card.
+var _race: RaceDefinition
+## [{definition: TowerDefinition, cost: int}] upgrade branches of the shown tower
+var _tower_options: Array[Dictionary] = []
 var _tower_targeting := 0
 var _tower_can_control := false
-var _upgrade_cost := -1
 var _sell_value := 0
 var _tower_building := false
 var _tower_upgrading := false
@@ -213,12 +219,13 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 	position_label.text = _position_summary(controllable, owners, is_host)
 
 	_selected_definition_id = str(context.get("selected_definition", ""))
+	_race = context.get("race") as RaceDefinition
 	_gold = snapshot["gold"]
 	_modifiers = modifiers
 	_refresh_card()
 	if not _selected_definition_id.is_empty():
 		var selected := _catalog.get_tower(_selected_definition_id)
-		var stats := modifiers.modify_stats(selected.stats_for_tier(0), selected.id)
+		var stats := modifiers.modify_stats(selected.stats(), _catalog.line_of(selected.id))
 		palette_description.text = "%s  ·  %s\n%s\nDamage %d   Range %.0f   Cooldown %.2fs%s%s" % [
 			selected.display_name,
 			selected.role,
@@ -321,13 +328,13 @@ func _on_palette_button_pressed(definition_id: String) -> void:
 	tower_palette_selected.emit(_selected_definition_id)
 
 
-func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictionary, upgrade_cost: int, sell_value: int, can_control: bool, gold: int) -> void:
+## `options` are the tower's upgrade branches: [{definition, cost}].
+func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictionary, options: Array[Dictionary], sell_value: int, can_control: bool, gold: int) -> void:
 	_shown_tower_id = int(record["id"])
 	_tower_definition = definition
-	_tower_tier = int(record["tier"])
 	_tower_targeting = int(record["targeting"])
 	_tower_can_control = can_control
-	_upgrade_cost = upgrade_cost
+	_tower_options = options
 	_sell_value = sell_value
 	_tower_building = float(record.get("build_remaining", 0.0)) > 0.0
 	_tower_upgrading = float(record.get("upgrade_remaining", 0.0)) > 0.0
@@ -335,8 +342,8 @@ func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictiona
 	_creep_definition = null
 	tower_panel.visible = true
 	idle_info.visible = false
-	_set_portrait(definition.display_name, definition.primary_color, definition.accent_color, definition.visual_scene_for_tier(_tower_tier), &"idle")
-	tower_name.text = "%s  ·  %s  ·  P%d" % [definition.display_name, definition.tier_name(_tower_tier), int(record["position"]) + 1]
+	_set_portrait(definition.display_name, definition.primary_color, definition.accent_color, definition.visual_scene, &"idle")
+	tower_name.text = "%s  ·  Tier %d  ·  P%d" % [definition.display_name, definition.tier, int(record["position"]) + 1]
 	var lines := PackedStringArray([
 		"Damage %d    Range %.0f    Cooldown %.2fs" % [stats["damage"], stats["range"], stats["cooldown"]],
 	])
@@ -357,11 +364,12 @@ func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictiona
 		traits.append("Detects invisible within %.0f" % stats["detection_range"])
 	if not traits.is_empty():
 		lines.append("  ·  ".join(traits))
-	lines.append("Target: %s    Invested %d g" % [TowerTargeting.mode_name(_tower_targeting), definition.total_invested(_tower_tier)])
+	lines.append("Target: %s    Invested %d g" % [TowerTargeting.mode_name(_tower_targeting), int(record.get("invested", 0))])
 	if _tower_building:
 		lines.insert(0, "Under construction  ·  %d%%" % roundi(100.0 * (1.0 - float(record["build_remaining"]) / maxf(float(record.get("build_total", 1.0)), 0.01))))
 	elif _tower_upgrading:
-		lines.insert(0, "Upgrading to %s  ·  %d%%" % [definition.tier_name(_tower_tier + 1), roundi(100.0 * (1.0 - float(record["upgrade_remaining"]) / maxf(float(record.get("upgrade_total", 1.0)), 0.01)))])
+		var target := _catalog.get_tower(str(record.get("upgrade_to", "")))
+		lines.insert(0, "Upgrading to %s  ·  %d%%" % [target.display_name if target else "?", roundi(100.0 * (1.0 - float(record["upgrade_remaining"]) / maxf(float(record.get("upgrade_total", 1.0)), 0.01)))])
 	tower_stats.text = "\n".join(lines)
 	_refresh_card()
 	if not can_control:
@@ -548,27 +556,42 @@ func _card_state_signature() -> String:
 	if _creep_definition != null and _shown_tower_id == 0:
 		return "creep"
 	if _shown_tower_id != 0 and _tower_definition != null:
-		return "tower|%d|%d|%d|%s|%d|%d|%s|%s|%s" % [_shown_tower_id, _tower_tier, _tower_targeting, _tower_can_control, _upgrade_cost, _sell_value, _upgrade_cost >= 0 and _gold >= _upgrade_cost, _tower_building, _tower_upgrading]
+		var option_parts := PackedStringArray()
+		for option in _tower_options:
+			option_parts.append("%s:%d:%s" % [(option["definition"] as TowerDefinition).id, option["cost"], _gold >= int(option["cost"])])
+		return "tower|%d|%s|%d|%s|%s|%d|%s|%s" % [_shown_tower_id, _tower_definition.id, _tower_targeting, _tower_can_control, ",".join(option_parts), _sell_value, _tower_building, _tower_upgrading]
 	if _catalog == null:
 		return "empty"
-	var parts := PackedStringArray(["build", _selected_definition_id])
-	for definition in _catalog.towers:
+	var parts := PackedStringArray(["build", _selected_definition_id, _race.id if _race else ""])
+	for definition in _build_roster():
 		var cost := _modifiers.build_cost(definition.cost) if _modifiers else definition.cost
 		parts.append("%d:%s" % [cost, _gold >= cost])
 	return "|".join(parts)
 
 
+## Towers the local builder can build: its race's roots.
+func _build_roster() -> Array[TowerDefinition]:
+	if _race != null:
+		return _race.towers
+	var fallback := _catalog.default_race()
+	return fallback.towers if fallback != null else _catalog.towers
+
+
+## A short slot label: slots fit about seven characters, so long names show
+## their first word ("Nosy Neighbor" -> "Nosy").
+static func _short_name(definition: TowerDefinition) -> String:
+	var short_name := definition.display_name.replace(" Tower", "")
+	return short_name.get_slice(" ", 0) if short_name.length() > 9 else short_name
+
+
 func _fill_build_card() -> void:
-	for index in range(mini(_catalog.towers.size(), SLOT_FIRST_TARGETING)):
-		var definition: TowerDefinition = _catalog.towers[index]
+	var roster := _build_roster()
+	for index in range(mini(roster.size(), BUILD_SLOTS.size())):
+		var definition: TowerDefinition = roster[index]
 		var cost := _modifiers.build_cost(definition.cost) if _modifiers else definition.cost
-		var short_name := definition.display_name.replace(" Tower", "")
-		if short_name.length() > 9:
-			# Slots fit about seven characters: "Nosy Neighbor" shows as "Nosy".
-			short_name = short_name.get_slice(" ", 0)
-		var label := "%s\n%dg" % [short_name, cost]
+		var label := "%s\n%dg" % [_short_name(definition), cost]
 		var tooltip := "%s  ·  %d gold\n%s\n%s" % [definition.display_name, cost, definition.role, definition.description]
-		_set_card_slot(index, label, tooltip, _on_palette_button_pressed.bind(definition.id), _gold >= cost, definition.id == _selected_definition_id, definition.accent_color.lightened(0.25))
+		_set_card_slot(BUILD_SLOTS[index], label, tooltip, _on_palette_button_pressed.bind(definition.id), _gold >= cost, definition.id == _selected_definition_id, definition.accent_color.lightened(0.25))
 	if not _selected_definition_id.is_empty():
 		_set_card_slot(SLOT_CANCEL, "Cancel", "Stop placing", _on_palette_button_pressed.bind(_selected_definition_id))
 	else:
@@ -578,11 +601,16 @@ func _fill_build_card() -> void:
 func _fill_tower_card() -> void:
 	if _tower_building or _tower_upgrading:
 		_set_card_slot(SLOT_UPGRADE, "Building" if _tower_building else "Upgrading", "Wait for the current work to finish", Callable(), false)
-	elif _upgrade_cost >= 0:
-		_set_card_slot(SLOT_UPGRADE, "Upgrade\n%dg" % _upgrade_cost, "Upgrade to %s for %d gold" % [_tower_definition.tier_name(_tower_tier + 1), _upgrade_cost],
-			func() -> void: upgrade_requested.emit(_shown_tower_id), _tower_can_control and _gold >= _upgrade_cost)
+	elif _tower_options.is_empty():
+		_set_card_slot(SLOT_UPGRADE, "Final\nform", "This tower has no further upgrades", Callable(), false)
 	else:
-		_set_card_slot(SLOT_UPGRADE, "Max\ntier", "This tower is fully upgraded", Callable(), false)
+		# Each branch of the upgrade tree gets its own slot, as in Wintermaul.
+		for index in range(mini(_tower_options.size(), MAX_UPGRADE_OPTIONS)):
+			var option: TowerDefinition = _tower_options[index]["definition"]
+			var cost := int(_tower_options[index]["cost"])
+			var tooltip := "Upgrade into %s for %d gold\n%s\n%s" % [option.display_name, cost, option.role, option.description]
+			_set_card_slot(SLOT_UPGRADE + index, "%s\n%dg" % [_short_name(option), cost], tooltip,
+				upgrade_requested.emit.bind(_shown_tower_id, option.id), _tower_can_control and _gold >= cost, false, option.accent_color.lightened(0.25))
 	for mode in range(mini(TowerTargeting.Mode.size(), 4)):
 		_set_card_slot(SLOT_FIRST_TARGETING + mode, TARGETING_SHORT_NAMES[mode], "Target the %s creep in range" % TowerTargeting.mode_name(mode).to_lower(),
 			func() -> void: targeting_requested.emit(_shown_tower_id, mode), _tower_can_control, mode == _tower_targeting)

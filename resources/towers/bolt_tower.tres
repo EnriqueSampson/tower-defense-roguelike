@@ -1,43 +1,18 @@
-[gd_resource type="Resource" script_class="TowerDefinition" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
-[ext_resource type="Script" path="res://scripts/data/tower_upgrade_tier.gd" id="2_tier"]
-[ext_resource type="PackedScene" uid="uid://736sj1vhlc1v" path="res://assets/models/towers/human_swordsman.glb" id="3_model"]
-
-[sub_resource type="Resource" id="tier_1"]
-script = ExtResource("2_tier")
-tier_name = "Mk II"
-cost = 40
-damage_multiplier = 1.6
-range_bonus = 21.0
-cooldown_multiplier = 0.92
-splash_radius_bonus = 0.0
-slow_factor_bonus = 0.0
-slow_duration_bonus = 0.0
-armor_pierce_bonus = 0
-
-[sub_resource type="Resource" id="tier_2"]
-script = ExtResource("2_tier")
-tier_name = "Mk III"
-cost = 80
-damage_multiplier = 1.6
-range_bonus = 27.0
-cooldown_multiplier = 0.9
-splash_radius_bonus = 0.0
-slow_factor_bonus = 0.0
-slow_duration_bonus = 0.0
-armor_pierce_bonus = 1
+[ext_resource type="PackedScene" uid="uid://736sj1vhlc1v" path="res://assets/models/towers/human_swordsman.glb" id="2_model"]
 
 [resource]
 script = ExtResource("1_tower")
 id = "bolt"
-display_name = "Bolt Tower"
+display_name = "Guy With a Sword"
 role = "Generalist"
-description = "Reliable single-target damage with a fast fire rate. Good against runners and menders."
-primary_color = Color(0.192, 0.373, 0.345, 1)
-accent_color = Color(0.894, 0.725, 0.31, 1)
+description = "A guy. A sword. A dream. Reliable single-target damage against anything, flying or not."
+primary_color = Color(0.19, 0.37, 0.35, 1)
+accent_color = Color(0.89, 0.73, 0.31, 1)
 footprint = Vector2i(2, 2)
-visual_scene = ExtResource("3_model")
+visual_scene = ExtResource("2_model")
 cost = 25
 damage = 5
 attack_range = 280.0
@@ -47,6 +22,11 @@ splash_radius = 0.0
 slow_factor = 0.0
 slow_duration = 0.0
 armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 0.0
 default_targeting = 0
-upgrade_tiers = Array[ExtResource("2_tier")]([SubResource("tier_1"), SubResource("tier_2")])
+tier = 1
+upgrade_options = PackedStringArray("human_crossbow", "human_knight")
 sell_refund_percent = 70

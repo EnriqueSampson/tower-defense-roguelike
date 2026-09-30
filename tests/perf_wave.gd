@@ -72,12 +72,15 @@ func _start() -> void:
 func _place_towers(target: int) -> int:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 424242
-	var ids := ["bolt", "cannon", "frost"]
+	# One tier-1 tower from each race; the host takes each tower's race in turn.
+	var ids := ["bolt", "cannon", "frost", "bug_ant"]
+	var catalog: ContentCatalog = _game.get("CATALOG")
 	var placed := 0
 	var attempts := 0
 	while placed < target and attempts < target * 40:
 		attempts += 1
 		var cell := Vector2i(rng.randi_range(0, WintermaulMap.GRID_SIZE.x - 2), rng.randi_range(0, WintermaulMap.GRID_SIZE.y - 2))
+		_state.peer_races[1] = catalog.race_of_tower(ids[placed % ids.size()])
 		if _game.call("_try_place_tower", ids[placed % ids.size()], cell) == WintermaulMap.Placement.OK:
 			placed += 1
 	return placed

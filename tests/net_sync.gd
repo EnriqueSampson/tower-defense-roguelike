@@ -89,11 +89,15 @@ func _on_client_connected(peer_id: int) -> void:
 	state.team_gold = 1000
 	# Position 1 belongs to the client; the host keeps the other eight.
 	state.position_owners[0] = peer_id
+	# The client plays Elves (as if picked in the lobby); the host plays Humans
+	# whatever this machine's saved race preference is.
+	state.peer_races[1] = "humans"
+	state.peer_races[peer_id] = "elves"
 	_game.call("_ensure_builders")
 	_game.call("_sync_builder_view")
 	_game.call("_mark_dirty")
 	_game.call("_try_order_build", 1, "bolt", P9_OPEN, false)
-	_game.call("_try_order_build", 1, "cannon", P9_OPEN + Vector2i(4, 0), true)
+	_game.call("_try_order_build", 1, "sentry", P9_OPEN + Vector2i(4, 0), true)
 
 
 func _host_step() -> void:
@@ -123,7 +127,8 @@ func _compare_build_state() -> void:
 	_check(int(client["gold"]) == int(host["gold"]), "client gold matches the host (%d vs %d)" % [client["gold"], host["gold"]])
 	_check(state.get_tower(_tower_id_at(P2_OPEN)).is_empty(), "the client could not build in a host position")
 	var client_tower := state.get_tower(_tower_id_at(P1_OPEN + Vector2i(4, 0)))
-	_check(not client_tower.is_empty() and int(client_tower["tier"]) == 1, "the client's builder built and upgraded its tower")
+	_check(not client_tower.is_empty() and client_tower["definition_id"] == "elf_tide", "the client's builder built an Elf tower and upgraded it along its tree")
+	_check(int(client["race"]) == 1, "the client sees its own race (Elves) from the snapshot")
 	var host_builders: Dictionary = host["builders"]
 	var client_builders: Dictionary = client["builders"]
 	_check(host_builders.keys().size() == 2 and client_builders.keys() == host_builders.keys(), "both peers see both builders (%s vs %s)" % [host_builders.keys(), client_builders.keys()])
@@ -182,11 +187,11 @@ func _client_step(delta: float) -> void:
 	if _game == null:
 		return
 	if _once("client_build", 2.0):
-		_game.call("_on_palette_selected", "bolt")
+		_game.call("_on_palette_selected", "elf_archer")
 		_game.call("_on_build_cell_requested", P1_OPEN)
 	if _once("client_build_other", 2.5):
 		# Not the client's position: the host must reject it.
-		_game.call("_on_palette_selected", "bolt")
+		_game.call("_on_palette_selected", "elf_archer")
 		_game.call("_on_build_cell_requested", P2_OPEN)
 	if _once("client_build_second", 4.5):
 		_game.call("_on_palette_selected", "frost")
@@ -194,7 +199,7 @@ func _client_step(delta: float) -> void:
 	if _once("client_upgrade", 8.5):
 		for record in (_game.get("_latest_snapshot") as Dictionary).get("towers", []):
 			if record["cell"] == P1_OPEN + Vector2i(4, 0):
-				_game.call("_on_upgrade_requested", int(record["id"]))
+				_game.call("_on_upgrade_requested", int(record["id"]), "elf_tide")
 	if _once("client_move", 9.0):
 		_game.call("_clear_selection")
 		_game.call("_on_move_requested", _client_move_target(), false)
@@ -222,7 +227,7 @@ func _digest() -> Dictionary:
 	var map := _game.get_node(MAP_PATH) as WintermaulMap
 	var towers: Array = []
 	for record in snapshot.get("towers", []):
-		towers.append([int(record["id"]), record["definition_id"], record["cell"].x, record["cell"].y, int(record["tier"]), float(record.get("build_remaining", 0.0)) > 0.0])
+		towers.append([int(record["id"]), record["definition_id"], record["cell"].x, record["cell"].y, int(record.get("invested", 0)), float(record.get("build_remaining", 0.0)) > 0.0])
 	var map_towers: Array = []
 	for child in map.get_node("Towers").get_children():
 		if child is Tower and not child.is_queued_for_deletion():
@@ -237,7 +242,9 @@ func _digest() -> Dictionary:
 	for creep_id in _creep_positions():
 		var point: Vector2 = _creep_positions()[creep_id]
 		creeps[creep_id] = [point.x, point.y]
-	return {"gold": int(snapshot.get("gold", -1)), "towers": towers, "map_towers": map_towers, "builders": builders, "creeps": creeps}
+	var races: Dictionary = snapshot.get("races", {})
+	var elves := 1 if str(races.get(_game.multiplayer.get_unique_id(), "")) == "elves" else 0
+	return {"race": elves, "gold": int(snapshot.get("gold", -1)), "towers": towers, "map_towers": map_towers, "builders": builders, "creeps": creeps}
 
 
 func _creep_positions() -> Dictionary:
