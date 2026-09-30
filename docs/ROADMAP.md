@@ -69,7 +69,7 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 - [ ] Play 3+ full solo runs of the current build and record what feels wrong (use [PLAYTEST_FEEDBACK_TEMPLATE.md](PLAYTEST_FEEDBACK_TEMPLATE.md)). This is the baseline for every later change.
 - [x] Set up the Blender MCP for placeholder models (Blender 4.5 LTS, the last release for Intel Macs).
 - [x] Add a model hook: `visual_scene` on `TowerDefinition`, `TowerUpgradeTier` and `CreepDefinition`, falling back to today's procedural meshes when it is empty (`ActorModel` helpers).
-- [ ] Write an asset spec for the modeler (§7). Conventions are settled; polygon and texture budgets wait for the Phase 1 performance check.
+- [x] Write an asset spec for the modeler (§7): format, scale, pivot, facing, the `Turret` node, animation names, materials, and the draw-call and triangle budget from the Phase 1 performance check.
 - [x] Put one placeholder tower and one creep through the whole pipeline: `tools/blender/human_swordsman.py` and `grunt.py` → `assets/models/*.glb` → Bolt and Grunt resources → in game.
 
 **Exit:** One tower and one creep render from `.glb` files, the other content still renders procedurally, and nothing else changes.
