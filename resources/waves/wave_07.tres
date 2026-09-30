@@ -9,7 +9,7 @@ script = ExtResource("2_group")
 creep = ExtResource("creep_gargoyle")
 count = 8
 spawn_interval = 0.8
-health_multiplier = 2.57
+health_multiplier = 2.44
 bounty_multiplier = 1.42
 delay_before = 0.0
 

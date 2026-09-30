@@ -13,10 +13,11 @@ extends SceneTree
 ## Options:
 ##   --players=N       lobby size 1-9 (default 1). Each player gets a builder
 ##                     and a share of the nine positions, as a lobby would.
-##   --strategy=NAME   maze (default): greedy mazing on each player's
-##                     positions, Position 9 first; lazy: towers beside
-##                     Position 9's route only (the floor a run should punish).
-##                     Both mix in a detection tower every sixth build.
+##   --strategy=NAME   maze (default): greedy mazing in each player's home
+##                     position (Position 9 for the host); lazy: towers beside
+##                     Position 9's route only, no mazing. Both mix in a
+##                     detection tower every sixth build and an upgrade every
+##                     third purchase.
 ##   --waves=N         stop after N levels.
 ##   --seed=N          run seed (upgrade offers).
 ##   --out=PATH        also write the report as JSON.
@@ -43,6 +44,10 @@ var _catalog: ContentCatalog
 ## peer id -> Array[Vector2i] of candidate anchors, best first.
 var _candidates: Dictionary = {}
 var _ordered := 0
+## peer id -> towers ordered plus upgrades bought
+var _purchases: Dictionary = {}
+## peer id -> towers ordered
+var _built_by: Dictionary = {}
 var _levels: Array[Dictionary] = []
 var _level_start := {}
 var _last_wave := -1
@@ -132,24 +137,38 @@ func _ready_up_when_built() -> void:
 		_game.call("_on_ready_pressed")
 
 
-## One decision per builder per frame: order the next tower once it is free,
-## otherwise put spare gold into upgrades.
+## One decision per builder per frame: once it is free, every UPGRADE_EVERY-th
+## purchase is an upgrade, the rest are new towers; spare gold also goes
+## into upgrades.
+const UPGRADE_EVERY := 3
+
+
 func _play(peer_id: int) -> void:
 	if not _builders.get_orders(peer_id).is_empty():
 		return
-	var definition_id := MIX[_ordered % MIX.size()]
+	var purchases: int = _purchases.get(peer_id, 0)
+	if purchases % UPGRADE_EVERY == UPGRADE_EVERY - 1:
+		if _upgrade_cheapest(peer_id):
+			_purchases[peer_id] = purchases + 1
+			return
+	# Each builder walks the mix on its own, so every player builds detection.
+	var built: int = _built_by.get(peer_id, 0)
+	var definition_id := MIX[built % MIX.size()]
 	var cost: int = (_game.get("modifiers") as RunModifiers).build_cost(_catalog.get_tower(definition_id).cost)
 	if _state.team_gold >= cost:
 		var site := _next_site(peer_id, definition_id)
 		if site.x >= 0:
 			if _game.call("_try_order_build", peer_id, definition_id, site, false) == WintermaulMap.Placement.OK:
 				_ordered += 1
+				_built_by[peer_id] = built + 1
+				_purchases[peer_id] = purchases + 1
 			return
 	if _out_of_sites(peer_id) or _state.team_gold >= UPGRADE_RESERVE + cost:
-		_upgrade_cheapest(peer_id)
+		if _upgrade_cheapest(peer_id):
+			_purchases[peer_id] = purchases + 1
 
 
-func _upgrade_cheapest(peer_id: int) -> void:
+func _upgrade_cheapest(peer_id: int) -> bool:
 	var modifiers: RunModifiers = _game.get("modifiers")
 	var best_id := 0
 	var best_cost := 1 << 30
@@ -160,26 +179,24 @@ func _upgrade_cheapest(peer_id: int) -> void:
 		if cost >= 0 and cost < best_cost:
 			best_cost = cost
 			best_id = int(record["id"])
-	if best_id != 0 and _state.team_gold >= best_cost:
-		_game.call("_try_upgrade_tower", best_id, peer_id)
+	return best_id != 0 and _state.team_gold >= best_cost and _game.call("_try_upgrade_tower", best_id, peer_id)
 
 
 # --- Strategies ---------------------------------------------------------------
 #
 # maze: greedy mazing. Each tower goes on (or right beside) the current creep
-#   path of one of the builder's positions, so creeps detour around it; the
-#   placement probe refuses anything that would seal the route. Positions take
-#   turns in visits of SITES_PER_VISIT towers, Position 9 first (every creep
-#   passes through it).
+#   path of the builder's home position, so creeps detour around it; the
+#   placement probe refuses anything that would seal the route. Home is
+#   Position 9 for the host (every creep passes through it) and the roster
+#   position for everyone else; other owned positions only once home is full.
 # lazy: towers beside Position 9's original route only, no mazing. The floor a
 #   run should punish.
 
-const SITES_PER_VISIT := 4
 ## How far (cells) from the current path a maze tower may stand.
 const MAZE_REACH := 2
 const MAX_PROBES := 60
 
-## peer id -> {positions: Array[int], visit: int, placed: int, exhausted: {}}
+## peer id -> {positions: Array[int] (home first), exhausted: {}}
 var _plans: Dictionary = {}
 ## position index -> Array[Vector2i] of tower anchors fully inside it
 var _anchors: Dictionary = {}
@@ -187,13 +204,16 @@ var _anchors: Dictionary = {}
 
 func _candidates_for(peer_id: int) -> Array:
 	var positions: Array[int] = []
-	for position_index in [8, 0, 1, 2, 3, 4, 5, 6, 7]:
+	var home := ClassicWintermaulLayout.PLAYER_COUNT - 1 if peer_id == HOST else peer_id - HOST
+	for position_index in [home, 8, 0, 1, 2, 3, 4, 5, 6, 7]:
+		if positions.has(position_index):
+			continue
 		if not BuildPermissionPolicy.can_control(peer_id, position_index, _state.position_owners):
 			continue
 		if _options["strategy"] == "lazy" and position_index != ClassicWintermaulLayout.PLAYER_COUNT - 1:
 			continue
 		positions.append(position_index)
-	_plans[peer_id] = {"positions": positions, "visit": 0, "placed": 0, "exhausted": {}}
+	_plans[peer_id] = {"positions": positions, "exhausted": {}}
 	return _route_anchors(ClassicWintermaulLayout.PLAYER_COUNT - 1) if _options["strategy"] == "lazy" else []
 
 
@@ -215,20 +235,13 @@ func _next_site(peer_id: int, definition_id: String) -> Vector2i:
 				return cell
 		return Vector2i(-1, -1)
 	var plan: Dictionary = _plans[peer_id]
-	var positions: Array = plan["positions"]
-	for attempt in range(positions.size()):
-		var position_index: int = positions[int(plan["visit"]) % positions.size()]
-		if not (plan["exhausted"] as Dictionary).has(position_index):
-			var site := _maze_site(position_index, footprint)
-			if site.x >= 0:
-				plan["placed"] = int(plan["placed"]) + 1
-				if int(plan["placed"]) >= SITES_PER_VISIT:
-					plan["placed"] = 0
-					plan["visit"] = int(plan["visit"]) + 1
-				return site
-			plan["exhausted"][position_index] = true
-		plan["placed"] = 0
-		plan["visit"] = int(plan["visit"]) + 1
+	for position_index: int in plan["positions"]:
+		if (plan["exhausted"] as Dictionary).has(position_index):
+			continue
+		var site := _maze_site(position_index, footprint)
+		if site.x >= 0:
+			return site
+		plan["exhausted"][position_index] = true
 	return Vector2i(-1, -1)
 
 
@@ -342,7 +355,10 @@ func _invested() -> int:
 func _finish() -> void:
 	var results := _state.results()
 	var stats: Dictionary = results["stats"]
-	var only_builder: bool = _ordered == int(stats["towers_built"])
+	# Orders can fail on arrival (another builder spent the gold, a creep
+	# stepped on the site), so built <= ordered; more would mean a tower
+	# appeared without a builder order.
+	var only_builder: bool = int(stats["towers_built"]) <= _ordered
 	var report := {
 		"players": int(_options["players"]),
 		"strategy": _options["strategy"],

@@ -15,7 +15,7 @@ definition, so their groups use BOSS_HEALTH_GROWTH, a gentler curve.
 import re
 from pathlib import Path
 
-HEALTH_GROWTH = 1.17
+HEALTH_GROWTH = 1.16
 BOSS_HEALTH_GROWTH = 1.03
 BOUNTY_GROWTH = 1.06
 DEFAULT_BUILD_SECONDS = 0  # 0 = BalanceConfig.BUILD_DURATION

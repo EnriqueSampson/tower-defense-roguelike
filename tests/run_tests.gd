@@ -102,6 +102,7 @@ func _run_tests() -> void:
 	_test_invisible_creeps_and_detection()
 	_test_splitters()
 	_test_level_pacing()
+	_test_starting_gold_scales_with_players()
 	# Builder
 	_test_builder_orders_and_construction()
 	_test_builder_stop_and_trip()
@@ -1174,6 +1175,12 @@ func _test_splitters() -> void:
 	_check(not looped.is_valid(), "a creep cannot split into itself")
 	steam_session.set("is_solo_session", false)
 	game.queue_free()
+
+
+func _test_starting_gold_scales_with_players() -> void:
+	_check(BalanceConfig.starting_gold(1) == BalanceConfig.STARTING_GOLD, "solo starts with the base team gold")
+	_check(BalanceConfig.starting_gold(4) == BalanceConfig.STARTING_GOLD + 3 * BalanceConfig.STARTING_GOLD_PER_EXTRA_PLAYER, "each extra player adds starting gold")
+	_check(BalanceConfig.starting_gold(20) == BalanceConfig.starting_gold(ClassicWintermaulLayout.PLAYER_COUNT), "starting gold caps at a full lobby")
 
 
 func _test_level_pacing() -> void:

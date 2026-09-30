@@ -4,6 +4,9 @@ extends RefCounted
 ## Central tuning knobs recorded from playtests. Content lives in resources;
 ## these are run-wide constants that are not tower or creep specific.
 const STARTING_GOLD := 120
+## Team gold is shared, so each extra player adds starting gold for their
+## first towers (a Phase 6 retune will scale income too).
+const STARTING_GOLD_PER_EXTRA_PLAYER := 60
 const STARTING_LIVES := 20
 const BUILD_DURATION := 25.0
 ## Wave 1 waits for every player to ready up, falling back to this timeout.
@@ -37,6 +40,10 @@ static func player_scale(player_count: int, max_players := ClassicWintermaulLayo
 	var clamped := clampi(player_count, 1, max_players)
 	var t := float(clamped - 1) / float(maxi(1, max_players - 1))
 	return lerpf(MIN_PLAYER_SCALE, MAX_PLAYER_SCALE, t)
+
+
+static func starting_gold(player_count: int) -> int:
+	return STARTING_GOLD + STARTING_GOLD_PER_EXTRA_PLAYER * (clampi(player_count, 1, ClassicWintermaulLayout.PLAYER_COUNT) - 1)
 
 
 static func construction_seconds(gold_cost: int) -> float:

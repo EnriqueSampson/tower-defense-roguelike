@@ -130,6 +130,7 @@ func _home_position_index() -> int:
 
 func _initialize_host_run() -> void:
 	run_state.run_seed = randi()
+	run_state.team_gold = BalanceConfig.starting_gold(SteamSession.player_count())
 	run_state.roguelike_enabled = SteamSession.roguelike_enabled
 	run_state.position_owners = _resolve_position_owners()
 	if multiplayer.has_multiplayer_peer():

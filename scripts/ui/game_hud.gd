@@ -562,7 +562,11 @@ func _fill_build_card() -> void:
 	for index in range(mini(_catalog.towers.size(), SLOT_FIRST_TARGETING)):
 		var definition: TowerDefinition = _catalog.towers[index]
 		var cost := _modifiers.build_cost(definition.cost) if _modifiers else definition.cost
-		var label := "%s\n%dg" % [definition.display_name.replace(" Tower", ""), cost]
+		var short_name := definition.display_name.replace(" Tower", "")
+		if short_name.length() > 9:
+			# Slots fit about seven characters: "Nosy Neighbor" shows as "Nosy".
+			short_name = short_name.get_slice(" ", 0)
+		var label := "%s\n%dg" % [short_name, cost]
 		var tooltip := "%s  ·  %d gold\n%s\n%s" % [definition.display_name, cost, definition.role, definition.description]
 		_set_card_slot(index, label, tooltip, _on_palette_button_pressed.bind(definition.id), _gold >= cost, definition.id == _selected_definition_id, definition.accent_color.lightened(0.25))
 	if not _selected_definition_id.is_empty():
