@@ -28,8 +28,8 @@ godot --headless --path . --script res://tests/run_tests.gd
 # Two-process host/client sync check over local ENet (no Steam needed)
 godot --headless --path . --script res://tests/net_sync.gd
 
-# A full solo run played only through builder orders (about 2 minutes at 8x)
-godot --headless --path . --script res://tests/solo_builder_run.gd -- --fast
+# Balance harness: bots play a whole run through builder orders and report each level
+godot --headless --fixed-fps 20 --path . --script res://tests/balance_harness.gd -- --players=1 --strategy=maze
 
 # Windowed smoke run: boots a solo game, builds, launches a wave, saves /tmp/wintermaul_smoke.png
 godot --path . --script res://tests/visual_smoke.gd
@@ -82,7 +82,7 @@ scripts/
   pathfinding/             path_grid.gd (four-direction AStarGrid2D with anti-block probes)
   ui/                      game_hud.gd
 tests/                     run_tests.gd (headless suite), net_sync.gd (two-process sync check),
-                           solo_builder_run.gd (scripted solo run), perf_wave.gd, visual_smoke.gd
+                           balance_harness.gd (scripted runs), perf_wave.gd, visual_smoke.gd
 tools/                     Generators used to author wave and upgrade resources
 docs/                      Roadmap, architecture, release checklist, playtest template, licenses
 ```

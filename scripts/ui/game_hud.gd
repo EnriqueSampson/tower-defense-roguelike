@@ -346,6 +346,17 @@ func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictiona
 		lines.append("Slow %d%% for %.1fs" % [roundi(float(stats["slow_factor"]) * 100.0), stats["slow_duration"]])
 	if int(stats.get("armor_pierce", 0)) > 0:
 		lines.append("Armor pierce %d" % stats["armor_pierce"])
+	var traits := PackedStringArray()
+	if not bool(stats.get("targets_air", true)):
+		traits.append("Ground only")
+	elif not bool(stats.get("targets_ground", true)):
+		traits.append("Air only")
+	if bool(stats.get("magic", false)):
+		traits.append("Magic (no effect on magic immune)")
+	if float(stats.get("detection_range", 0.0)) > 0.0:
+		traits.append("Detects invisible within %.0f" % stats["detection_range"])
+	if not traits.is_empty():
+		lines.append("  ·  ".join(traits))
 	lines.append("Target: %s    Invested %d g" % [TowerTargeting.mode_name(_tower_targeting), definition.total_invested(_tower_tier)])
 	if _tower_building:
 		lines.insert(0, "Under construction  ·  %d%%" % roundi(100.0 * (1.0 - float(record["build_remaining"]) / maxf(float(record.get("build_total", 1.0)), 0.01))))

@@ -20,6 +20,7 @@ var _spawn_queues: Array[Array] = []
 var _spawn_timers := PackedFloat32Array()
 var _creep_bounties: Dictionary = {}
 var _creep_is_boss: Dictionary = {}
+var _creep_bounty_multipliers: Dictionary = {}
 var _latest_snapshot: Dictionary = {}
 var _selected_definition_id := ""
 var _selected_tower_id := 0
@@ -213,7 +214,7 @@ func is_waiting_for_players() -> bool:
 
 
 func _start_build_phase() -> void:
-	build_countdown = BalanceConfig.build_duration_for_wave(run_state.current_wave_index)
+	build_countdown = BalanceConfig.build_duration_for_wave(run_state.current_wave_index, CATALOG.waves[run_state.current_wave_index])
 	_spawn_timers.fill(0.0)
 	_mark_dirty()
 
@@ -258,17 +259,38 @@ func _spawn_entry(position_index: int, entry: Dictionary) -> void:
 	var health := maxi(1, roundi(definition.health * health_multiplier))
 	if not run_state.register_spawn(position_index, creep_id, definition.id, health_multiplier):
 		return
-	_creep_bounties[creep_id] = modifiers.bounty(definition.bounty)
+	var bounty_multiplier := float(entry.get("bounty_multiplier", 1.0))
+	_creep_bounties[creep_id] = modifiers.bounty(roundi(definition.bounty * bounty_multiplier))
+	_creep_bounty_multipliers[creep_id] = bounty_multiplier
 	_creep_is_boss[creep_id] = definition.is_boss
-	_spawn_creep_visual.rpc(creep_id, position_index, definition.id, health, modifiers.creep_speed_multiplier())
+	_spawn_creep_visual.rpc(creep_id, position_index, definition.id, health, modifiers.creep_speed_multiplier(), {})
 
 
+## A splitter died: its children appear where it fell, on the same stage.
+func _spawn_split_children(parent: CreepDefinition, position_index: int, health_multiplier: float, bounty_multiplier: float, start: Dictionary) -> void:
+	var child := parent.split_into
+	var health := maxi(1, roundi(child.health * health_multiplier))
+	for index in range(parent.split_count):
+		var creep_id := run_state.allocate_creep_id()
+		if not run_state.register_split(position_index, creep_id, child.id, health_multiplier):
+			return
+		_creep_bounties[creep_id] = modifiers.bounty(roundi(child.bounty * bounty_multiplier))
+		_creep_bounty_multipliers[creep_id] = bounty_multiplier
+		_creep_is_boss[creep_id] = child.is_boss
+		var spread := start.duplicate()
+		# Fan the children out a little so they read as several units.
+		var offset := Vector2.RIGHT.rotated(TAU * index / parent.split_count) * WintermaulMap.TILE_SIZE * 0.35
+		spread["start_position"] = (start["start_position"] as Vector2) + offset
+		_spawn_creep_visual.rpc(creep_id, position_index, child.id, health, modifiers.creep_speed_multiplier(), spread)
+
+
+## `start` is empty for normal spawns, or a split child's start (see spawn_creep).
 @rpc("authority", "call_local", "reliable")
-func _spawn_creep_visual(creep_id: int, position_index: int, definition_id: String, health: int, speed_multiplier: float) -> void:
+func _spawn_creep_visual(creep_id: int, position_index: int, definition_id: String, health: int, speed_multiplier: float, start: Dictionary) -> void:
 	var definition := CATALOG.get_creep(definition_id)
 	if definition == null:
 		return
-	wintermaul_map.spawn_creep(creep_id, position_index, definition, health, speed_multiplier)
+	wintermaul_map.spawn_creep(creep_id, position_index, definition, health, speed_multiplier, start)
 
 
 func _on_creep_route_finished(creep_id: int) -> void:
@@ -276,6 +298,7 @@ func _on_creep_route_finished(creep_id: int) -> void:
 		if run_state.phase != RunStateModel.Phase.WAVE or not run_state.resolve_creep(creep_id, true):
 			return
 		_creep_bounties.erase(creep_id)
+		_creep_bounty_multipliers.erase(creep_id)
 		_creep_is_boss.erase(creep_id)
 		_remove_creep_visual.rpc(creep_id, false)
 		_play_event.rpc("leak")
@@ -286,13 +309,19 @@ func _on_creep_route_finished(creep_id: int) -> void:
 
 func _on_creep_killed(creep_id: int) -> void:
 	if multiplayer.is_server():
+		var record: Dictionary = run_state.active_creeps.get(creep_id, {})
 		if run_state.phase != RunStateModel.Phase.WAVE or not run_state.resolve_creep(creep_id, false):
 			return
+		var definition := CATALOG.get_creep(str(record.get("definition_id", "")))
+		var fell_at := wintermaul_map.last_creep_route(creep_id)
+		if definition != null and definition.splits() and not fell_at.is_empty():
+			_spawn_split_children(definition, int(record["position"]), float(record.get("health_multiplier", 1.0)), float(_creep_bounty_multipliers.get(creep_id, 1.0)), fell_at)
 		var bounty := int(_creep_bounties.get(creep_id, 0))
 		run_state.award_gold(bounty)
 		if bool(_creep_is_boss.get(creep_id, false)):
 			run_state.stats["boss_kills"] += 1
 		_creep_bounties.erase(creep_id)
+		_creep_bounty_multipliers.erase(creep_id)
 		_creep_is_boss.erase(creep_id)
 		_remove_creep_visual.rpc(creep_id, true)
 		_show_bounty.rpc(creep_id, bounty)

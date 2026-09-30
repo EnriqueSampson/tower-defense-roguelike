@@ -67,10 +67,10 @@ func validate() -> Array[String]:
 			problems.append("wave %s is out of order" % wave.id)
 		previous_number = wave.number
 		for group in wave.spawn_groups:
-			var creep := group.creep
-			if creep_ids.has(creep.id) and creep_ids[creep.id] != creep:
-				problems.append("creep id %s maps to two definitions" % creep.id)
-			creep_ids[creep.id] = creep
+			for creep in _with_splits(group.creep):
+				if creep_ids.has(creep.id) and creep_ids[creep.id] != creep:
+					problems.append("creep id %s maps to two definitions" % creep.id)
+				creep_ids[creep.id] = creep
 	for upgrade in upgrades:
 		if upgrade == null or not upgrade.is_valid():
 			problems.append("invalid upgrade definition")
@@ -95,7 +95,16 @@ func _ensure_indexes() -> void:
 		_wave_index[wave.id] = wave
 		for group in wave.spawn_groups:
 			if group != null and group.creep != null:
-				_creep_index[group.creep.id] = group.creep
+				for creep in _with_splits(group.creep):
+					_creep_index[creep.id] = creep
 	for upgrade in upgrades:
 		if upgrade != null:
 			_upgrade_index[upgrade.id] = upgrade
+
+
+## A creep and the creep it splits into (split children never split again).
+static func _with_splits(creep: CreepDefinition) -> Array[CreepDefinition]:
+	var result: Array[CreepDefinition] = [creep]
+	if creep.split_into != null:
+		result.append(creep.split_into)
+	return result

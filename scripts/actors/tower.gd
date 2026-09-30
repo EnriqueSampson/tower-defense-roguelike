@@ -111,6 +111,10 @@ func attack_range() -> float:
 	return float(stats.get("range", definition.attack_range if definition else 100.0))
 
 
+func detection_range() -> float:
+	return float(stats.get("detection_range", 0.0))
+
+
 func damage() -> int:
 	return int(stats.get("damage", 1))
 
@@ -138,7 +142,8 @@ func _process(delta: float) -> void:
 	_cooldown_remaining = maxf(0.0, _cooldown_remaining - delta)
 	if _cooldown_remaining > 0.0 or not is_instance_valid(_map):
 		return
-	var target := TowerTargeting.select(_map.get_active_creeps(), plane_position, attack_range(), targeting)
+	var target := TowerTargeting.select(_map.get_active_creeps(), plane_position, attack_range(), targeting,
+		bool(stats.get("targets_ground", true)), bool(stats.get("targets_air", true)), bool(stats.get("magic", false)))
 	if target == null:
 		_cooldown_remaining = RETARGET_INTERVAL * (0.75 + 0.5 * fposmod(tower_id * 0.618, 1.0))
 		return

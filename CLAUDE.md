@@ -16,7 +16,7 @@ Current direction and phase order are in `docs/ROADMAP.md`: a commercial Early A
 godot --path .                                               # run the game
 godot --headless --path . --script res://tests/run_tests.gd  # full regression suite; exit code = failure count
 godot --headless --path . --script res://tests/net_sync.gd   # host + spawned client over local ENet; exit code = failure count
-godot --headless --path . --script res://tests/solo_builder_run.gd -- --fast  # full solo run through builder orders only
+godot --headless --fixed-fps 20 --path . --script res://tests/balance_harness.gd -- --players=1 --strategy=maze  # scripted full run, per-level report
 godot --path . --script res://tests/visual_smoke.gd          # windowed smoke run, writes /tmp/wintermaul_smoke.png
 godot --headless --path . --import                           # refresh class cache after adding a class_name script
 blender -b --python tools/blender/<model>.py                  # regenerate a placeholder .glb into assets/models/, then --import
@@ -41,7 +41,9 @@ The full contract is in `docs/ARCHITECTURE.md`. Read it before changing networki
 - **HUD.** `game_hud.gd` finds its widgets by unique name (`%Name`), so the WC3 layout in `Game.tscn` (top bar, multiboard, bottom console) can be rearranged freely. The command card is 12 slots built in code; `_fill_build_card` and `_fill_tower_card` decide what each slot shows, and its grid position sets the hotkey (QWER/ASDF/ZXCV), so the camera pans with the arrow keys only. `Minimap` draws from `WintermaulMap.build_minimap_image()`. `WC3Theme` styles everything.
 - **Terrain and lighting.** `TerrainBuilder` turns wall cells into cliff meshes and pines. The ground is one lit quad with a baked texture plus a noise detail layer. Keep default back-face culling on lit meshes: with culling disabled, the Compatibility renderer flips the ground's normal and the sun stops lighting it. Vertex colors on terrain are authored in sRGB (`vertex_color_is_srgb`).
 - **Models.** `visual_scene` on `TowerDefinition` / `TowerUpgradeTier` / `CreepDefinition` points at a `.glb` under `assets/models/`; when empty, `Tower` / `RouteRunner` fall back to procedural meshes. `ActorModel` handles instancing, animations (`idle`/`attack`/`walk`), tint overlays and height. Models face +Z (−Y in Blender) with a `Turret` node for aiming; see the asset spec in `docs/ROADMAP.md` §7. `blender` means `/Applications/Blender.app/Contents/MacOS/Blender` (4.5 LTS).
-- `tools/generate_waves.py` and `tools/generate_upgrades.py` are one-off generators that write `.tres` files. Rerunning them overwrites hand edits in `resources/waves/` or `resources/upgrades/`.
+- `tools/generate_waves.py` owns the 30 levels: the level table plus the `HEALTH_GROWTH` / `BOUNTY_GROWTH` curves. It writes `resources/waves/` and the catalog's wave list, so tune there and rerun, never hand-edit wave files. Check changes with `tests/balance_harness.gd` (bots that build only through builder orders; `--fixed-fps` makes a 30-level run take minutes). `tools/generate_upgrades.py` is a one-off; rerunning it overwrites hand edits in `resources/upgrades/`.
+- **Special creeps** (air, magic immune, invisible with detection, splitters) are flags on `CreepDefinition`, matched by `can_target_air` / `can_target_ground` / `is_magic` / `detection_range` on `TowerDefinition`; see `docs/ARCHITECTURE.md` §9.
+- `bpy` (Blender 4.5 as a Python module, `pip install bpy==4.5.0` on Python 3.11) runs the `tools/blender/` scripts without the Blender app: `python tools/blender/<model>.py`.
 
 ## Versioning rules (enforced by tests and lobby matching)
 

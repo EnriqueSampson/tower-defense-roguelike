@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="WaveDefinition" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/wave_definition.gd" id="1_wave"]
+[ext_resource type="Script" path="res://scripts/data/wave_spawn_group.gd" id="2_group"]
+[ext_resource type="Resource" path="res://resources/creeps/slime.tres" id="creep_slime"]
+[ext_resource type="Resource" path="res://resources/creeps/runner.tres" id="creep_runner"]
+
+[sub_resource type="Resource" id="group_1"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_slime")
+count = 6
+spawn_interval = 1.0
+health_multiplier = 12.33
+bounty_multiplier = 2.54
+delay_before = 0.0
+
+[sub_resource type="Resource" id="group_2"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_runner")
+count = 10
+spawn_interval = 0.4
+health_multiplier = 12.33
+bounty_multiplier = 2.54
+delay_before = 1.0
+
+[resource]
+script = ExtResource("1_wave")
+id = "wave_17"
+number = 17
+title = "Hostile Takeover"
+spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1"), SubResource("group_2")])
+is_boss_wave = false
+offers_upgrade_after = false
+build_seconds = 0.0

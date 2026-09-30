@@ -42,6 +42,8 @@ func _draw() -> void:
 		var half := Vector2(tower.footprint) * WintermaulMap.TILE_SIZE * to_minimap * 0.5
 		draw_rect(Rect2(point - half, half * 2.0).grow(0.5), TOWER_COLOR)
 	for runner: RouteRunner in _map.get_active_creeps():
+		if runner.is_hidden():
+			continue
 		draw_rect(Rect2(area.position + runner.plane_position * to_minimap - Vector2(1.5, 1.5), Vector2(3, 3)), CREEP_COLOR)
 	if is_instance_valid(_camera):
 		var view_size := _camera.get_viewport().get_visible_rect().size

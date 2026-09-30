@@ -34,6 +34,7 @@ Host-only runtime that is *not* in `RunState`: spawn queues and timers, bounty l
 - Tower nodes, creep nodes, projectiles, and effects are presentation. They are created by RPC events and corrected by snapshots.
 - Clients simulate creep movement locally for smoothness; `RouteRunner.sync_authoritative()` corrects health, stage, slow, and position (smooth nudge under 1.5 tiles, snap and repath beyond that).
 - Clients walk a moving builder toward its replicated target at builder speed, glide onto the host position once it stops, and snap when drift passes 1.5 tiles (`Builder.apply_record`). Clients count construction and upgrade timers down locally between snapshots, for the progress bars only.
+- Invisible-creep detection is not replicated: every peer recomputes it each frame in `WintermaulMap.refresh_detection()` from the replicated tower stats (`detection_range`), so all peers reveal the same creeps. Undetected creeps are hidden and untargetable.
 - Clients never resolve damage. Projectiles on clients are visual only. A creep that reaches the gate on a client waits there until the host confirms the leak.
 - Clients run `RunModifiers.rebuild()` from the snapshot's upgrade list so previews and tower panels show host-equivalent numbers.
 
@@ -45,7 +46,7 @@ Host-only runtime that is *not* in `RunState`: spawn queues and timers, bounty l
 | `_apply_creep_snapshot` (creep presentation records) | unreliable ordered | every 0.15 s during waves, only when peers are connected |
 | `_apply_builder_snapshot` (`BuilderSystem.records()`: owner, position, current target, state, queued build sites) | unreliable ordered | every 0.15 s, only when peers are connected; the same records ride in the state snapshot as `builders` |
 | `_builder_started_build` | reliable event | when a builder starts construction (plays `build`) |
-| `_spawn_creep_visual`, `_remove_creep_visual`, `_spawn_tower_visual`, `_update_tower_visual`, `_remove_tower_visual`, `_clear_creeps_visual` | reliable events | on change |
+| `_spawn_creep_visual` (carries a `start` dictionary: empty for pad spawns, the fall point, stage and progress for a splitter's children), `_remove_creep_visual`, `_spawn_tower_visual`, `_update_tower_visual`, `_remove_tower_visual`, `_clear_creeps_visual` | reliable events | on change |
 | `_projectile_fired` | unreliable | per shot |
 | `_play_event`, `_show_notice`, `_show_bounty`, `_placement_feedback`, `_transaction_feedback` | reliable | on change |
 
@@ -90,7 +91,7 @@ Every client intent carries the sender peer ID (`multiplayer.get_remote_sender_i
 | Sell tower | phase; tower exists; requester controls its position; exactly-once (second sell finds no record). Selling during construction cancels it for a full refund; selling mid-upgrade also returns the upgrade payment |
 | Set targeting | tower exists; mode is valid; requester controls its position |
 | Choose upgrade | requester is the host; upgrade is in the pending offer; not already applied |
-| Creep resolution | `resolve_creep` erases the creep first so duplicate kill/leak reports are no-ops |
+| Creep resolution | `resolve_creep` erases the creep first so duplicate kill/leak reports are no-ops. A splitter's children are registered with `register_split` (outside the spawn queue) before the level can clear |
 
 Typed RPC parameters reject malformed payloads at the transport layer before these checks run.
 
@@ -101,8 +102,19 @@ Typed RPC parameters reject malformed payloads at the transport layer before the
 - The build countdown pauses while an offer is open. The host makes the single team choice; clients see the same cards read-only.
 - `RunModifiers` never mutates resources. It layers multipliers on `TowerDefinition.stats_for_tier()` output and is rebuilt from the ID list on every peer.
 
-## 9. Known limitations (documented, not bugs)
+## 9. Special creeps (Phase 3)
+
+| Trait | Rule |
+| --- | --- |
+| Air (`CreepDefinition.is_air`) | Flies straight between route checkpoints, never repaths, never blocks building. Only towers with `can_target_air` target or splash it |
+| Magic immune | Magic towers (`TowerDefinition.is_magic`, Frost) skip it and their impacts deal no damage or slow |
+| Invisible | Targetable only while inside some tower's `detection_range` (the Nosy Neighbor tower, or any tower with the Snitch Network upgrade). Splash still hits it, as in WC3 |
+| Splitter (`split_into` × `split_count`) | On death, children spawn where it fell on the same stage, with the parent's health and bounty multipliers. Children never split again |
+
+Levels scale creep health by `HEALTH_GROWTH` and regular bounties by `BOUNTY_GROWTH` per level (`tools/generate_waves.py`); `WaveDefinition.build_seconds` sets the build time before a level (boss levels get longer).
+
+## 10. Known limitations (documented, not bugs)
 
 - Clients may briefly show a creep alive after the host killed it (≤ one creep snapshot interval).
 - Position ownership maps Steam IDs to peer IDs at run start; peers that have not finished the transport handshake resolve to host control until the next roster refresh.
-- Air waves, host migration, late join, and permanent progression are deferred (see the roadmap).
+- Host migration, late join, and permanent progression are deferred (see the roadmap).

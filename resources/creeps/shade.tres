@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://dmyaaaw68wvc2" path="res://assets/models/creeps/shade.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_creep")
+id = "shade"
+display_name = "Remote Worker"
+role = "Invisible"
+description = "Technically present. Nobody has seen it in weeks. Towers need a detector nearby to target it."
+color = Color(0.28, 0.22, 0.4, 1)
+visual_scene = ExtResource("2_model")
+radius = 6.0
+health = 20
+speed = 3.8
+armor = 0
+bounty = 8
+regen_per_second = 0.0
+slow_immune = false
+is_boss = false
+is_air = false
+magic_immune = false
+invisible = true
+tags = PackedStringArray("ground", "invisible")

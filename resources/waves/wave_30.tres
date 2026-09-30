@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="WaveDefinition" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/wave_definition.gd" id="1_wave"]
+[ext_resource type="Script" path="res://scripts/data/wave_spawn_group.gd" id="2_group"]
+[ext_resource type="Resource" path="res://resources/creeps/golem.tres" id="creep_golem"]
+[ext_resource type="Resource" path="res://resources/creeps/the_board.tres" id="creep_the_board"]
+
+[sub_resource type="Resource" id="group_1"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_golem")
+count = 6
+spawn_interval = 1.2
+health_multiplier = 94.93
+bounty_multiplier = 5.42
+delay_before = 0.0
+
+[sub_resource type="Resource" id="group_2"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_the_board")
+count = 1
+spawn_interval = 1.0
+health_multiplier = 2.36
+bounty_multiplier = 1.0
+delay_before = 6.0
+
+[resource]
+script = ExtResource("1_wave")
+id = "wave_30"
+number = 30
+title = "The Board of Directors"
+spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1"), SubResource("group_2")])
+is_boss_wave = true
+offers_upgrade_after = false
+build_seconds = 35.0

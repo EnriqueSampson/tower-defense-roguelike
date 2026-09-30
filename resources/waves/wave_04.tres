@@ -10,7 +10,8 @@ script = ExtResource("2_group")
 creep = ExtResource("creep_brute")
 count = 3
 spawn_interval = 1.4
-health_multiplier = 1.0
+health_multiplier = 1.6
+bounty_multiplier = 1.19
 delay_before = 0.0
 
 [sub_resource type="Resource" id="group_2"]
@@ -18,7 +19,8 @@ script = ExtResource("2_group")
 creep = ExtResource("creep_grunt")
 count = 6
 spawn_interval = 0.7
-health_multiplier = 1.7
+health_multiplier = 1.6
+bounty_multiplier = 1.19
 delay_before = 1.5
 
 [resource]
@@ -28,4 +30,5 @@ number = 4
 title = "First Brutes"
 spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1"), SubResource("group_2")])
 is_boss_wave = false
-offers_upgrade_after = true
+offers_upgrade_after = false
+build_seconds = 0.0

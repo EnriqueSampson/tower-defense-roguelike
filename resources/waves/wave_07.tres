@@ -2,21 +2,23 @@
 
 [ext_resource type="Script" path="res://scripts/data/wave_definition.gd" id="1_wave"]
 [ext_resource type="Script" path="res://scripts/data/wave_spawn_group.gd" id="2_group"]
-[ext_resource type="Resource" path="res://resources/creeps/runner.tres" id="creep_runner"]
+[ext_resource type="Resource" path="res://resources/creeps/gargoyle.tres" id="creep_gargoyle"]
 
 [sub_resource type="Resource" id="group_1"]
 script = ExtResource("2_group")
-creep = ExtResource("creep_runner")
-count = 12
-spawn_interval = 0.4
-health_multiplier = 2.0
+creep = ExtResource("creep_gargoyle")
+count = 8
+spawn_interval = 0.8
+health_multiplier = 2.57
+bounty_multiplier = 1.42
 delay_before = 0.0
 
 [resource]
 script = ExtResource("1_wave")
 id = "wave_07"
 number = 7
-title = "Rush"
+title = "Frequent Flyers"
 spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1")])
 is_boss_wave = false
 offers_upgrade_after = false
+build_seconds = 0.0

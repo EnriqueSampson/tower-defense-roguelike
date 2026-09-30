@@ -95,6 +95,19 @@ func register_spawn(lane_id: int, creep_id: int, definition_id := "", health_mul
 	return true
 
 
+## Registers a creep born mid-wave (a splitter's child). It never counts
+## against the position's spawn queue but must be resolved like any other.
+func register_split(lane_id: int, creep_id: int, definition_id: String, health_multiplier := 1.0) -> bool:
+	if phase != Phase.WAVE or lane_id < 0 or lane_id >= position_count or active_creeps.has(creep_id):
+		return false
+	active_creeps[creep_id] = {
+		"position": lane_id,
+		"definition_id": definition_id,
+		"health_multiplier": health_multiplier,
+	}
+	return true
+
+
 ## Resolves a creep exactly once. Returns false for unknown or already
 ## resolved creeps so duplicate kill/leak reports cannot double count.
 func resolve_creep(creep_id: int, leaked: bool) -> bool:

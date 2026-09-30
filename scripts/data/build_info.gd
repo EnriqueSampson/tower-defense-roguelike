@@ -6,7 +6,7 @@ extends RefCounted
 const VERSION := "0.2.0"
 ## Bump whenever RPC signatures, snapshot fields, or content IDs change in a way
 ## that older clients cannot interpret. Lobbies only match equal protocols.
-const PROTOCOL_VERSION := "5"
+const PROTOCOL_VERSION := "6"
 const GAME_TAG := "wintermaul_td_roguelike_mvp"
 const MAP_ID := "wintermaul_mvp"
 

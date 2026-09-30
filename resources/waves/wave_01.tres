@@ -10,6 +10,7 @@ creep = ExtResource("creep_grunt")
 count = 5
 spawn_interval = 0.8
 health_multiplier = 1.0
+bounty_multiplier = 1.0
 delay_before = 0.0
 
 [resource]
@@ -20,3 +21,4 @@ title = "Scouts"
 spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1")])
 is_boss_wave = false
 offers_upgrade_after = false
+build_seconds = 0.0

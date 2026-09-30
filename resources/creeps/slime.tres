@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://blm8ddxir31gs" path="res://assets/models/creeps/slime.glb" id="2_model"]
+[ext_resource type="Resource" path="res://resources/creeps/slimelet.tres" id="3_split"]
+
+[resource]
+script = ExtResource("1_creep")
+id = "slime"
+display_name = "Middle Management Slime"
+role = "Splitter"
+description = "When defeated, delegates itself into three smaller problems."
+color = Color(0.45, 0.85, 0.35, 1)
+visual_scene = ExtResource("2_model")
+radius = 7.0
+health = 30
+speed = 2.8
+armor = 0
+bounty = 6
+regen_per_second = 0.0
+slow_immune = false
+is_boss = false
+is_air = false
+magic_immune = false
+invisible = false
+split_into = ExtResource("3_split")
+split_count = 3
+tags = PackedStringArray("ground", "splitter")

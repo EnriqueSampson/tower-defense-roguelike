@@ -68,7 +68,7 @@ func _run_tests() -> void:
 	_test_leak_resolves_once()
 	_test_team_economy()
 	_test_snapshot_round_trip()
-	_test_ten_wave_victory_and_defeat_model()
+	_test_full_run_victory_and_defeat_model()
 	# Ownership and authority
 	_test_build_permission_policy()
 	_test_unauthorized_client_build_rejected()
@@ -96,6 +96,12 @@ func _run_tests() -> void:
 	_test_mid_wave_tower_placement()
 	_test_blocked_placement_preserves_gold()
 	_test_upgrade_and_sell_economy()
+	# Special creeps
+	_test_air_creeps()
+	_test_magic_immunity()
+	_test_invisible_creeps_and_detection()
+	_test_splitters()
+	_test_level_pacing()
 	# Builder
 	_test_builder_orders_and_construction()
 	_test_builder_stop_and_trip()
@@ -221,11 +227,15 @@ func _test_classic_layout_coordinates() -> void:
 
 func _test_content_catalog_validation() -> void:
 	_check(Catalog.validate().is_empty(), "shipped content catalog validates with unique ids")
-	_check(Catalog.towers.size() == 3, "catalog ships three base towers")
-	_check(Catalog.waves.size() == 10, "catalog ships a ten-wave run")
+	_check(Catalog.towers.size() == 4, "catalog ships three base towers and a detection tower")
+	_check(Catalog.waves.size() >= 30, "catalog ships a classic run of 30+ levels")
 	_check(Catalog.upgrades.size() >= 12 and Catalog.upgrades.size() <= 18, "catalog ships 12-18 run upgrades")
 	_check(Catalog.creeps().size() >= 4, "catalog references at least four creep roles")
-	_check(Catalog.waves[9].has_boss() and Catalog.waves[9].is_boss_wave, "wave ten is the boss wave")
+	var bosses_every_five := true
+	for wave in Catalog.waves:
+		bosses_every_five = bosses_every_five and (wave.number % 5 == 0) == wave.has_boss() and wave.has_boss() == wave.is_boss_wave
+	_check(bosses_every_five, "every fifth level, and only those, is a boss level")
+	_check(Catalog.waves[-1].has_boss(), "the run ends on a boss")
 	var roles: Dictionary = {}
 	for creep in Catalog.creeps():
 		roles[creep.role] = true
@@ -392,7 +402,7 @@ func _test_snapshot_round_trip() -> void:
 	_check(restored.allocate_tower_id() == 3, "snapshot restores id allocation so new ids never collide")
 
 
-func _test_ten_wave_victory_and_defeat_model() -> void:
+func _test_full_run_victory_and_defeat_model() -> void:
 	var state := RunStateModel.new(Catalog.waves.size(), BalanceConfig.STARTING_LIVES, BalanceConfig.STARTING_GOLD)
 	var creep_id := 1
 	var boss_seen := false
@@ -410,7 +420,7 @@ func _test_ten_wave_victory_and_defeat_model() -> void:
 				creep_id += 1
 		_check(state.is_wave_clear(), "wave %s clears when every queued creep resolves" % wave.number)
 		state.advance_after_clear()
-	_check(state.phase == RunStateModel.Phase.VICTORY and boss_seen, "ten cleared waves including the boss end in victory")
+	_check(state.phase == RunStateModel.Phase.VICTORY and boss_seen, "every cleared level including the bosses ends in victory")
 
 	var doomed := RunStateModel.new(Catalog.waves.size(), 3, BalanceConfig.STARTING_GOLD)
 	doomed.begin_wave(PackedInt32Array([3, 0, 0, 0, 0, 0, 0, 0, 0]))
@@ -1052,6 +1062,132 @@ func _test_upgrade_and_sell_economy() -> void:
 	game.queue_free()
 
 
+# --- Special creeps -------------------------------------------------------------
+
+func _test_air_creeps() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	var gargoyle := Catalog.get_creep("gargoyle")
+	_check(gargoyle != null and gargoyle.is_air and "Air" in gargoyle.trait_summary(), "the catalog ships an air creep")
+	var flyer := map.spawn_creep(8101, 0, gargoyle)
+	var walker := map.spawn_creep(8102, 0, Grunt)
+	_check(flyer.position.y > 1.0 and is_zero_approx(walker.position.y), "air creeps fly above the ground")
+	var points: PackedVector2Array = flyer.get("_points")
+	_check(points.size() == 2 and points[1] == map.grid_to_world(flyer.get_current_target()), "air creeps fly straight to the next checkpoint")
+	var start := flyer.plane_position
+	walker.queue_free()
+	var cell := map.world_to_grid(start)
+	var anchor := cell - Vector2i(1, 1)
+	var result := map.evaluate_placement(anchor, Bolt.footprint)
+	_check(result != WintermaulMap.Placement.CREEP_ON_CELL, "air creeps never block building under them")
+	var cannon_stats := Cannon.stats_for_tier(0)
+	_check(not cannon_stats["targets_air"] and Bolt.stats_for_tier(0)["targets_air"], "Cannon is ground only; Bolt hits air")
+	flyer.plane_position = Vector2(400, 400)
+	_check(TowerTargeting.select([flyer], Vector2(400, 420), 100.0, TowerTargeting.Mode.FIRST, true, false) == null, "ground-only towers ignore flyers")
+	_check(TowerTargeting.select([flyer], Vector2(400, 420), 100.0, TowerTargeting.Mode.FIRST, true, true) == flyer, "towers that hit air target flyers")
+	var ground := map.spawn_creep(8103, 0, Grunt)
+	ground.plane_position = Vector2(410, 400)
+	var hits := CombatResolver.resolve_impact([flyer, ground], {"damage": 5, "splash_radius": 60.0, "targets_air": false}, Vector2(405, 400), ground)
+	_check(hits.size() == 1 and hits[0]["creep"] == ground, "ground splash never reaches flyers")
+	map.queue_free()
+
+
+func _test_magic_immunity() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	var golem := map.spawn_creep(8201, 0, Catalog.get_creep("golem"))
+	_check(golem.magic_immune and Frost.is_magic and Frost.stats_for_tier(0)["magic"], "golems are magic immune and Frost is magic")
+	var before := golem.health
+	var frost_hit := CombatResolver.resolve_impact([golem], {"damage": 50, "magic": true, "slow_factor": 0.5, "slow_duration": 2.0}, golem.plane_position, golem)
+	_check(golem.health == before and not golem.is_slowed() and frost_hit[0]["damage"] == 0, "magic attacks neither damage nor slow magic-immune creeps")
+	_check(TowerTargeting.select([golem], golem.plane_position, 50.0, TowerTargeting.Mode.FIRST, true, true, true) == null, "magic towers do not waste shots on immune creeps")
+	CombatResolver.resolve_impact([golem], {"damage": 50}, golem.plane_position, golem)
+	_check(golem.health < before, "physical attacks still hurt magic-immune creeps")
+	map.queue_free()
+
+
+func _test_invisible_creeps_and_detection() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	var shade := map.spawn_creep(8301, 8, Catalog.get_creep("shade"))
+	shade.plane_position = map.grid_to_world(P9_OPEN + Vector2i(0, 6))
+	map.refresh_detection()
+	_check(shade.is_hidden() and not shade.visible, "invisible creeps are hidden without a detector")
+	_check(TowerTargeting.select([shade], shade.plane_position, 100.0, TowerTargeting.Mode.FIRST) == null, "towers cannot target undetected invisible creeps")
+	var bolt := map.spawn_tower(8310, P9_OPEN, Bolt)
+	map.refresh_detection()
+	_check(shade.is_hidden(), "ordinary towers do not detect")
+	var sentry := Catalog.get_tower("sentry")
+	_check(sentry != null and sentry.detection_range > 0.0, "the catalog ships a detection tower")
+	map.spawn_tower(8311, P9_OPEN + Vector2i(-4, 0), sentry)
+	map.refresh_detection()
+	_check(not shade.is_hidden() and shade.visible, "a detection tower reveals invisible creeps in range")
+	_check(TowerTargeting.select([shade], shade.plane_position, 100.0, TowerTargeting.Mode.FIRST) == shade, "revealed creeps can be targeted by any tower")
+	shade.plane_position = map.grid_to_world(P9_OPEN + Vector2i(0, 40))
+	map.refresh_detection()
+	_check(shade.is_hidden(), "leaving detection range hides the creep again")
+	var modifiers := RunModifiers.new(Catalog)
+	modifiers.apply(Catalog.get_upgrade("snitch_network"))
+	var bolt_stats := modifiers.modify_stats(Bolt.stats_for_tier(0), "bolt")
+	_check(is_equal_approx(bolt_stats["detection_range"], bolt_stats["range"]), "the Snitch Network upgrade gives every tower detection over its range")
+	bolt.apply_stats(0, bolt.targeting, bolt_stats)
+	shade.plane_position = bolt.plane_position + Vector2(40, 0)
+	map.remove_tower(8311)
+	map.refresh_detection()
+	_check(not shade.is_hidden(), "towers with the detection upgrade reveal nearby invisible creeps")
+	map.queue_free()
+
+
+func _test_splitters() -> void:
+	var steam_session := root.get_node("SteamSession")
+	steam_session.set("is_solo_session", true)
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	var map := game.get_node(MAP_PATH) as WintermaulMap
+	var slime := Catalog.get_creep("slime")
+	_check(slime.splits() and Catalog.get_creep("slimelet") == slime.split_into, "the catalog indexes a splitter's children")
+	state.begin_wave(PackedInt32Array([1, 0, 0, 0, 0, 0, 0, 0, 0]))
+	game.call("_spawn_entry", 0, {"creep_id": "slime", "health_multiplier": 2.0, "bounty_multiplier": 1.5, "delay": 0.0})
+	var parent: RouteRunner = map.get_active_creeps()[0]
+	for step in range(40):
+		parent._process(0.1)
+	var fell_at := parent.plane_position
+	var stage := parent.get_stage_index()
+	var gold := state.team_gold
+	parent.take_damage(100000, 100)
+	var children := map.get_active_creeps()
+	_check(children.size() == slime.split_count and state.active_creeps.size() == slime.split_count, "a splitter's death spawns and registers its children")
+	var placed := true
+	for child: RouteRunner in children:
+		placed = placed and child.definition_id == "slimelet" and child.plane_position.distance_to(fell_at) < WintermaulMap.TILE_SIZE and child.get_stage_index() == stage
+		placed = placed and child.max_health == roundi(slime.split_into.health * 2.0)
+	_check(placed, "children appear where the parent fell, on its stage, with its health multiplier")
+	_check(state.team_gold == gold + roundi(slime.bounty * 1.5) and not state.is_wave_clear(), "the parent pays its bounty and the wave waits for the children")
+	for child: RouteRunner in children:
+		child.take_damage(100000, 100)
+	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 1 and state.team_gold == gold + roundi(slime.bounty * 1.5) + slime.split_count * roundi(slime.split_into.bounty * 1.5), "killing every child clears the level and pays scaled bounties")
+	var looped := CreepDefinition.new()
+	looped.id = "loop"
+	looped.split_into = looped
+	looped.split_count = 2
+	_check(not looped.is_valid(), "a creep cannot split into itself")
+	steam_session.set("is_solo_session", false)
+	game.queue_free()
+
+
+func _test_level_pacing() -> void:
+	var boss_wave: WaveDefinition = Catalog.waves[4]
+	_check(boss_wave.has_boss() and BalanceConfig.build_duration_for_wave(4, boss_wave) > BalanceConfig.BUILD_DURATION, "boss levels give extra build time")
+	_check(is_equal_approx(BalanceConfig.build_duration_for_wave(1, Catalog.waves[1]), BalanceConfig.BUILD_DURATION), "ordinary levels use the default build time")
+	_check(is_equal_approx(BalanceConfig.build_duration_for_wave(0, Catalog.waves[0]), BalanceConfig.WAVE_ONE_READY_TIMEOUT), "level one still waits for ready-up")
+	var early: WaveDefinition = Catalog.waves[1]
+	var late: WaveDefinition = Catalog.waves[25]
+	_check(late.spawn_groups[0].health_multiplier > early.spawn_groups[0].health_multiplier * 10.0 and late.spawn_groups[0].bounty_multiplier > early.spawn_groups[0].bounty_multiplier, "creep health and bounty scale up across the run")
+	var queue := late.build_spawn_queue(0)
+	_check(is_equal_approx(float(queue[0]["bounty_multiplier"]), late.spawn_groups[0].bounty_multiplier), "spawn queues carry the bounty multiplier")
+
+
 # --- Builder --------------------------------------------------------------------
 
 func _run_builders(game: Node, seconds: float) -> void:
@@ -1260,7 +1396,7 @@ func _test_controller_wave_loop_with_offer() -> void:
 	var state: RunState = game.get("run_state")
 	var map := game.get_node(MAP_PATH) as WintermaulMap
 	var starting_lives := state.shared_lives
-	for wave_number in range(1, 3):
+	for wave_number in range(1, 4):
 		game.call("_begin_wave")
 		_check(state.phase == RunStateModel.Phase.WAVE and state.current_wave_index == wave_number - 1, "controller begins wave %d" % wave_number)
 		var guard := 0
@@ -1273,9 +1409,9 @@ func _test_controller_wave_loop_with_offer() -> void:
 				break
 		_check(state.active_creeps.is_empty() and state.shared_lives == starting_lives, "wave %d clears through kills without leaks" % wave_number)
 		game.call("_finish_creep_resolution")
-	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 2, "two cleared waves return to build for wave three")
+	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 3, "three cleared waves return to build for wave four")
 	_check(state.stats["kills"] > 0 and state.team_gold > BalanceConfig.STARTING_GOLD, "kills award team gold and count toward results")
-	_check(state.has_pending_offer() and state.pending_offer.size() == BalanceConfig.OFFER_CHOICE_COUNT, "clearing wave two offers a team upgrade")
+	_check(state.has_pending_offer() and state.pending_offer.size() == BalanceConfig.OFFER_CHOICE_COUNT, "clearing wave three offers a team upgrade")
 	var countdown_before: float = game.get("build_countdown")
 	game.call("_process", 1.0)
 	_check(is_equal_approx(game.get("build_countdown"), countdown_before), "the build countdown pauses while an offer is open")
@@ -1449,7 +1585,7 @@ func _test_controller_roguelike_toggle_suppresses_offer() -> void:
 	var state: RunState = game.get("run_state")
 	var map := game.get_node(MAP_PATH) as WintermaulMap
 	_check(not state.roguelike_enabled, "host run picks up the disabled roguelike flag from the session")
-	for wave_number in range(1, 3):
+	for wave_number in range(1, 4):
 		game.call("_begin_wave")
 		var guard := 0
 		while state.is_wave_clear() == false and guard < 400:
@@ -1460,8 +1596,8 @@ func _test_controller_roguelike_toggle_suppresses_offer() -> void:
 			if state.phase != RunStateModel.Phase.WAVE:
 				break
 		game.call("_finish_creep_resolution")
-	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 2, "two cleared waves return to build for wave three with roguelike disabled")
-	_check(not state.has_pending_offer(), "clearing wave two does not offer an upgrade when roguelike is disabled")
+	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 3, "three cleared waves return to build for wave four with roguelike disabled")
+	_check(not state.has_pending_offer(), "clearing wave three does not offer an upgrade when roguelike is disabled")
 	steam_session.set("is_solo_session", false)
 	steam_session.set("roguelike_enabled", true)
 	game.queue_free()

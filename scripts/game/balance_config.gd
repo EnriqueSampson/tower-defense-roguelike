@@ -48,5 +48,7 @@ static func builder_speed_pixels(is_solo: bool) -> float:
 	return cells * MapProjection.TILE_SIZE
 
 
-static func build_duration_for_wave(wave_index: int) -> float:
-	return WAVE_ONE_READY_TIMEOUT if wave_index == 0 else BUILD_DURATION
+static func build_duration_for_wave(wave_index: int, wave: WaveDefinition = null) -> float:
+	if wave_index == 0:
+		return WAVE_ONE_READY_TIMEOUT
+	return wave.build_seconds if wave != null and wave.build_seconds > 0.0 else BUILD_DURATION

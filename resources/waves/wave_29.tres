@@ -1,0 +1,44 @@
+[gd_resource type="Resource" script_class="WaveDefinition" load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/wave_definition.gd" id="1_wave"]
+[ext_resource type="Script" path="res://scripts/data/wave_spawn_group.gd" id="2_group"]
+[ext_resource type="Resource" path="res://resources/creeps/brute.tres" id="creep_brute"]
+[ext_resource type="Resource" path="res://resources/creeps/shade.tres" id="creep_shade"]
+[ext_resource type="Resource" path="res://resources/creeps/gargoyle.tres" id="creep_gargoyle"]
+
+[sub_resource type="Resource" id="group_1"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_brute")
+count = 10
+spawn_interval = 0.9
+health_multiplier = 81.13
+bounty_multiplier = 5.11
+delay_before = 0.0
+
+[sub_resource type="Resource" id="group_2"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_shade")
+count = 8
+spawn_interval = 0.8
+health_multiplier = 81.13
+bounty_multiplier = 5.11
+delay_before = 1.0
+
+[sub_resource type="Resource" id="group_3"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_gargoyle")
+count = 8
+spawn_interval = 0.7
+health_multiplier = 81.13
+bounty_multiplier = 5.11
+delay_before = 1.0
+
+[resource]
+script = ExtResource("1_wave")
+id = "wave_29"
+number = 29
+title = "Full Assault"
+spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1"), SubResource("group_2"), SubResource("group_3")])
+is_boss_wave = false
+offers_upgrade_after = false
+build_seconds = 0.0

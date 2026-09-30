@@ -22,6 +22,13 @@ extends Resource
 @export_range(0.0, 0.9, 0.01) var slow_factor := 0.0
 @export_range(0.0, 20.0, 0.1) var slow_duration := 0.0
 @export_range(0, 100, 1) var armor_pierce := 0
+## Air creeps can only be hit by towers with `can_target_air`.
+@export var can_target_ground := true
+@export var can_target_air := true
+## Magic attacks do nothing to magic-immune creeps.
+@export var is_magic := false
+## Reveals invisible creeps within this radius (sim pixels) for every tower.
+@export_range(0.0, 1000.0, 1.0) var detection_range := 0.0
 @export var default_targeting := TowerTargeting.Mode.FIRST
 @export var upgrade_tiers: Array[TowerUpgradeTier] = []
 @export_range(0, 100, 1) var sell_refund_percent := 70
@@ -37,6 +44,7 @@ func is_valid() -> bool:
 		and attack_cooldown > 0.0
 		and footprint.x >= 1
 		and footprint.y >= 1
+		and (can_target_ground or can_target_air)
 		and sell_refund_percent >= 0
 		and sell_refund_percent <= 100
 	)
@@ -108,4 +116,8 @@ func stats_for_tier(tier: int) -> Dictionary:
 		"slow_duration": effective_slow_duration,
 		"armor_pierce": effective_pierce,
 		"projectile_speed": projectile_speed,
+		"targets_ground": can_target_ground,
+		"targets_air": can_target_air,
+		"magic": is_magic,
+		"detection_range": detection_range,
 	}

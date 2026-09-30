@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://mmi0m2fc4jpt" path="res://assets/models/creeps/phantom_auditor.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_creep")
+id = "phantom_auditor"
+display_name = "The Phantom Auditor"
+role = "Invisible boss"
+description = "You will not see it coming. You will see the report. Detection required."
+color = Color(0.55, 0.6, 0.7, 1)
+visual_scene = ExtResource("2_model")
+radius = 11.0
+health = 3200
+speed = 2.0
+armor = 3
+bounty = 300
+regen_per_second = 0.0
+slow_immune = false
+is_boss = true
+is_air = false
+magic_immune = false
+invisible = true
+tags = PackedStringArray("ground", "boss", "invisible")
