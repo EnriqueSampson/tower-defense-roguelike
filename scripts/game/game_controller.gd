@@ -11,6 +11,9 @@ const FINAL_POSITION_INDEX := POSITION_COUNT - 1
 const STATE_SNAPSHOT_INTERVAL := 0.5
 const CREEP_SNAPSHOT_INTERVAL := 0.15
 const HOST_PEER_ID := BuildPermissionPolicy.HOST_PEER_ID
+## Chat flood guard: at most CHAT_BURST lines per player every CHAT_WINDOW s.
+const CHAT_BURST := 5
+const CHAT_WINDOW := 4.0
 
 var run_state: RunState
 var modifiers: RunModifiers
@@ -36,6 +39,8 @@ var _creep_snapshot_timer := 0.0
 var _state_dirty := true
 var _authority_lost := false
 var _run_ended_announced := false
+## Host only: peer id -> times (s) of their recent chat lines.
+var _chat_times: Dictionary = {}
 
 @onready var wintermaul_map: WintermaulMap = %WintermaulMap
 @onready var battlefield_camera: BattlefieldCamera = %BattlefieldCamera
@@ -97,6 +102,7 @@ func _ready() -> void:
 	hud.ready_requested.connect(_on_ready_pressed)
 	hud.builder_stop_requested.connect(_on_builder_stop_requested)
 	hud.gold_send_requested.connect(_on_send_gold_requested)
+	hud.chat_submitted.connect(_on_chat_submitted)
 
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
@@ -1075,6 +1081,114 @@ func _try_send_gold(from_peer: int, to_peer: int, amount: int) -> bool:
 		_show_notice.rpc_id(to_peer, text, false)
 	_mark_dirty()
 	return true
+
+
+# --- Chat ----------------------------------------------------------------------
+
+func _on_chat_submitted(text: String) -> void:
+	if multiplayer.is_server():
+		_handle_chat(HOST_PEER_ID, text)
+	else:
+		_request_chat.rpc_id(HOST_PEER_ID, text)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_chat(text: String) -> void:
+	if not multiplayer.is_server():
+		return
+	_handle_chat(multiplayer.get_remote_sender_id(), text)
+
+
+## Host: runs a slash command for `peer_id`, or relays a chat line to all.
+func _handle_chat(peer_id: int, text: String) -> void:
+	var line := ChatCommands.clean(text)
+	if line.is_empty() or _chat_flooding(peer_id):
+		return
+	if ChatCommands.is_command(line):
+		_run_chat_command(peer_id, line)
+	else:
+		_chat_line.rpc(peer_id, line)
+
+
+func _chat_flooding(peer_id: int) -> bool:
+	var now := Time.get_ticks_msec() / 1000.0
+	var recent: Array = (_chat_times.get(peer_id, []) as Array).filter(func(at: float) -> bool: return now - at < CHAT_WINDOW)
+	if recent.size() >= CHAT_BURST:
+		_chat_times[peer_id] = recent
+		return true
+	recent.append(now)
+	_chat_times[peer_id] = recent
+	return false
+
+
+func _run_chat_command(peer_id: int, line: String) -> void:
+	match ChatCommands.command_name(line):
+		"give":
+			var names := _account_names()
+			var parsed := ChatCommands.parse_give(ChatCommands.arguments(line), names, run_state.position_owners)
+			if parsed.has("error"):
+				_system_line_to(peer_id, str(parsed["error"]))
+			elif int(parsed["peer"]) == peer_id:
+				_system_line_to(peer_id, "You can't send gold to yourself.")
+			elif run_state.gold_of(peer_id) < int(parsed["amount"]):
+				_system_line_to(peer_id, "You only have %d gold." % run_state.gold_of(peer_id))
+			elif _try_send_gold(peer_id, int(parsed["peer"]), int(parsed["amount"])):
+				_system_line_to(peer_id, "Sent %d gold to %s." % [int(parsed["amount"]), names[int(parsed["peer"])]])
+			else:
+				_system_line_to(peer_id, "Could not send gold.")
+		"gold":
+			var names := _account_names()
+			var parts := PackedStringArray()
+			for account in names:
+				parts.append("%s %d" % [names[account], run_state.gold_of(int(account))])
+			_system_line_to(peer_id, "Gold: " + ",  ".join(parts))
+		"help":
+			_system_line_to(peer_id, ChatCommands.HELP)
+		_:
+			_system_line_to(peer_id, "Unknown command. Try /help")
+
+
+## peer id -> display name for every player with a gold account.
+func _account_names() -> Dictionary:
+	var names := {}
+	var roster_names := SteamSession.get_peer_names()
+	for peer_id in run_state.peer_gold:
+		names[int(peer_id)] = _player_name(int(peer_id), roster_names)
+	return names
+
+
+func _player_name(peer_id: int, roster_names: Dictionary) -> String:
+	if roster_names.has(peer_id):
+		return str(roster_names[peer_id])
+	return "Host" if peer_id == HOST_PEER_ID else "Player %d" % peer_id
+
+
+## A player's chat colour: the colour of the first position they control.
+func _player_color(peer_id: int) -> Color:
+	var positions := BuildPermissionPolicy.controlled_positions(peer_id, run_state.position_owners, HOST_PEER_ID)
+	return ClassicWintermaulLayout.PLAYER_COLORS[positions[0]] if not positions.is_empty() else Color("d5e2dd")
+
+
+@rpc("authority", "call_local", "reliable")
+func _chat_line(peer_id: int, text: String) -> void:
+	var name := _player_name(peer_id, SteamSession.get_peer_names())
+	if peer_id == multiplayer.get_unique_id():
+		name += " (you)"
+	hud.add_chat_line(name, _player_color(peer_id), text)
+	AudioDirector.play("ui_confirm")
+
+
+## A line from the System (command replies now, the announcer later).
+@rpc("authority", "call_local", "reliable")
+func _system_line(text: String) -> void:
+	hud.add_chat_line("System", GameHud.SYSTEM_COLOR, text)
+
+
+func _system_line_to(peer_id: int, text: String) -> void:
+	if peer_id == multiplayer.get_unique_id():
+		_system_line(text)
+	elif multiplayer.has_multiplayer_peer() and multiplayer.get_peers().has(peer_id):
+		_system_line.rpc_id(peer_id, text)
 
 
 @rpc("authority", "call_local", "reliable")

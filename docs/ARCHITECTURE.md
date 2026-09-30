@@ -51,6 +51,7 @@ Host-only runtime that is *not* in `RunState`: spawn queues and timers, bounty l
 | `_builder_started_build` | reliable event | when a builder starts construction (plays `build`) |
 | `_spawn_creep_visual` (carries a `start` dictionary: empty for pad spawns, the fall point, stage, progress and spawner for a splitter's children; a pad spawn's spawner is `creep_id % spawner count` on every peer, and the spawner picks the route, since twin spawners can take different sides of a fork), `_remove_creep_visual`, `_spawn_tower_visual`, `_update_tower_visual`, `_remove_tower_visual`, `_clear_creeps_visual` | reliable events | on change |
 | `_projectile_fired` | unreliable | per shot |
+| `_chat_line` (speaker peer, text) to everyone, `_system_line` (text) to one peer (slash-command replies, later the announcer) | reliable | on chat. Clients send `_request_chat`; the host trims and caps it (`ChatCommands`), drops floods (5 lines per 4 s per player) and runs slash commands (`/give`, `/gold`, `/help`) itself |
 | `_play_event`, `_show_notice`, `_show_bounty`, `_placement_feedback`, `_transaction_feedback` | reliable | on change |
 
 Reconciliation (`WintermaulMap.reconcile_towers` / `reconcile_creeps`) adds missing entities, updates changed ones, and removes entities absent from the authoritative record, keyed by stable ID.

@@ -138,15 +138,17 @@ func get_edge_direction(mouse_position: Vector2, area_rect: Rect2) -> Vector2:
 
 func _process(delta: float) -> void:
 	var direction := Vector2.ZERO
-	# Arrow keys only, as in WC3: letter keys belong to the command card.
-	if Input.is_key_pressed(KEY_LEFT):
-		direction.x -= 1.0
-	if Input.is_key_pressed(KEY_RIGHT):
-		direction.x += 1.0
-	if Input.is_key_pressed(KEY_UP):
-		direction.y -= 1.0
-	if Input.is_key_pressed(KEY_DOWN):
-		direction.y += 1.0
+	# Arrow keys only, as in WC3: letter keys belong to the command card. They
+	# move the caret instead while a text field (chat) has focus.
+	if not get_tree().root.gui_get_focus_owner() is LineEdit:
+		if Input.is_key_pressed(KEY_LEFT):
+			direction.x -= 1.0
+		if Input.is_key_pressed(KEY_RIGHT):
+			direction.x += 1.0
+		if Input.is_key_pressed(KEY_UP):
+			direction.y -= 1.0
+		if Input.is_key_pressed(KEY_DOWN):
+			direction.y += 1.0
 	if _can_edge_pan():
 		direction += get_edge_direction(get_window().get_mouse_position(), _edge_pan_area.get_global_rect())
 	if direction != Vector2.ZERO:

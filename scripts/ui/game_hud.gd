@@ -19,6 +19,8 @@ signal selection_cleared
 signal builder_stop_requested
 ## Send `amount` of your gold to another player.
 signal gold_send_requested(to_peer: int, amount: int)
+## A chat line or slash command typed by the local player.
+signal chat_submitted(text: String)
 
 const RunStateModel = preload("res://scripts/game/run_state.gd")
 const COLOR_OK := Color("8ed8c6")
@@ -44,6 +46,13 @@ const SLOT_CANCEL := 11
 const TARGETING_SHORT_NAMES: Array[String] = ["First", "Last", "Strong", "Near"]
 ## Quick amounts on the multiboard's Send Gold buttons.
 const SEND_GOLD_AMOUNTS: Array[int] = [25, 100]
+const SYSTEM_COLOR := Color("f0d868")
+## Chat lines fade after this long unless the chat box is open.
+const CHAT_LINE_SECONDS := 12.0
+const CHAT_VISIBLE_LINES := 8
+const CHAT_HISTORY := 60
+## The console is 176 px tall; the chat log sits just above it.
+const CHAT_BOTTOM_OFFSET := -186.0
 
 var _catalog: ContentCatalog
 var _card_slots: Array[Button] = []
@@ -89,6 +98,11 @@ var _offer_ids: Array[String] = []
 ## a balance or name changes.
 var _players_list: VBoxContainer
 var _players_signature := ""
+## Chat: [{text (BBCode), plain, time}] oldest first.
+var _chat_lines: Array[Dictionary] = []
+var _chat_log: VBoxContainer
+var _chat_input: LineEdit
+var _chat_refresh_timer := 0.0
 
 @onready var phase_label: Label = %PhaseLabel
 @onready var wave_label: Label = %WaveLabel
@@ -172,6 +186,7 @@ func _ready() -> void:
 	placement_hint.text = ""
 	_build_position_rows()
 	_build_players_list()
+	_build_chat()
 
 
 func setup(catalog: ContentCatalog) -> void:
@@ -193,6 +208,10 @@ func _process(delta: float) -> void:
 		_message_timer -= delta
 		if _message_timer <= 0.0:
 			placement_hint.text = ""
+	_chat_refresh_timer -= delta
+	if _chat_refresh_timer <= 0.0:
+		_chat_refresh_timer = 0.5
+		_refresh_chat()
 
 
 # --- State display ------------------------------------------------------------
@@ -361,7 +380,7 @@ func _update_player_rows(snapshot: Dictionary, context: Dictionary) -> void:
 		var label := Label.new()
 		label.add_theme_font_size_override("font_size", 12)
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var name := "YOU" if int(peer_id) == local_peer else str(names.get(int(peer_id), "HOST" if int(peer_id) == BuildPermissionPolicy.HOST_PEER_ID else "ALLY"))
+		var name := "YOU" if int(peer_id) == local_peer else str(names.get(int(peer_id), "Host" if int(peer_id) == BuildPermissionPolicy.HOST_PEER_ID else "Player %d" % int(peer_id)))
 		label.text = "%-10s %5dg" % [name.left(10), int(gold[peer_id])]
 		label.add_theme_color_override("font_color", Color("f0d868") if int(peer_id) == local_peer else Color("d5e2dd"))
 		row.add_child(label)
@@ -727,10 +746,121 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		toggle_settings()
 		get_viewport().set_input_as_handled()
 		return
+	if event.keycode in [KEY_ENTER, KEY_KP_ENTER]:
+		open_chat()
+		get_viewport().set_input_as_handled()
+		return
 	var index := CARD_KEYS.find(event.keycode)
 	if index >= 0 and not _card_slots[index].disabled and _card_actions[index].is_valid():
 		_card_actions[index].call()
 		get_viewport().set_input_as_handled()
+
+
+# --- Chat ----------------------------------------------------------------------
+
+func _build_chat() -> void:
+	var box := VBoxContainer.new()
+	box.name = "Chat"
+	box.anchor_top = 1.0
+	box.anchor_bottom = 1.0
+	box.offset_left = 12.0
+	box.offset_right = 560.0
+	box.offset_top = CHAT_BOTTOM_OFFSET - 230.0
+	box.offset_bottom = CHAT_BOTTOM_OFFSET
+	box.alignment = BoxContainer.ALIGNMENT_END
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(box)
+	_chat_log = VBoxContainer.new()
+	_chat_log.alignment = BoxContainer.ALIGNMENT_END
+	_chat_log.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chat_log.add_theme_constant_override("separation", 1)
+	box.add_child(_chat_log)
+	_chat_input = LineEdit.new()
+	_chat_input.max_length = ChatCommands.MAX_MESSAGE_LENGTH
+	_chat_input.placeholder_text = "Say something  ·  /give 50 Name  ·  /help"
+	_chat_input.visible = false
+	_chat_input.text_submitted.connect(_on_chat_input_submitted)
+	_chat_input.gui_input.connect(_on_chat_input_gui_input)
+	box.add_child(_chat_input)
+
+
+func open_chat() -> void:
+	_chat_input.visible = true
+	_chat_input.grab_focus()
+	_refresh_chat()
+
+
+func close_chat() -> void:
+	_chat_input.clear()
+	_chat_input.release_focus()
+	_chat_input.visible = false
+	_refresh_chat()
+
+
+func is_chat_open() -> bool:
+	return _chat_input.visible
+
+
+func _on_chat_input_submitted(text: String) -> void:
+	var line := ChatCommands.clean(text)
+	close_chat()
+	if not line.is_empty():
+		chat_submitted.emit(line)
+
+
+func _on_chat_input_gui_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		close_chat()
+		_chat_input.accept_event()
+
+
+## Adds a line to the chat log. `text` is shown literally (no BBCode).
+func add_chat_line(speaker: String, color: Color, text: String) -> void:
+	var bbcode := "[color=#%s]%s:[/color] %s" % [color.to_html(false), _escape_bbcode(speaker), _escape_bbcode(text)]
+	_chat_lines.append({"text": bbcode, "plain": "%s: %s" % [speaker, text], "time": Time.get_ticks_msec() / 1000.0})
+	if _chat_lines.size() > CHAT_HISTORY:
+		_chat_lines.remove_at(0)
+	_refresh_chat()
+
+
+## Plain-text chat history, oldest first (tests and the end screen).
+func chat_history() -> PackedStringArray:
+	var lines := PackedStringArray()
+	for line in _chat_lines:
+		lines.append(str(line["plain"]))
+	return lines
+
+
+func _refresh_chat() -> void:
+	if _chat_log == null:
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	var shown: Array[String] = []
+	for index in range(_chat_lines.size() - 1, -1, -1):
+		var line := _chat_lines[index]
+		if shown.size() >= CHAT_VISIBLE_LINES or (not is_chat_open() and now - float(line["time"]) > CHAT_LINE_SECONDS):
+			break
+		shown.push_front(str(line["text"]))
+	var rows := _chat_log.get_children()
+	for index in range(maxi(rows.size(), shown.size())):
+		var row: RichTextLabel = rows[index] if index < rows.size() else null
+		if row == null:
+			row = RichTextLabel.new()
+			row.bbcode_enabled = true
+			row.fit_content = true
+			row.scroll_active = false
+			row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			row.add_theme_font_size_override("normal_font_size", 13)
+			row.add_theme_constant_override("outline_size", 4)
+			row.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+			_chat_log.add_child(row)
+		row.visible = index < shown.size()
+		if row.visible and row.text != shown[index]:
+			row.text = shown[index]
+
+
+static func _escape_bbcode(text: String) -> String:
+	return text.replace("[", "[lb]")
 
 
 func show_placement_message(text: String, is_error: bool) -> void:

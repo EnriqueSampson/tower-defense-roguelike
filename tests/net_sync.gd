@@ -128,7 +128,12 @@ func _compare_build_state() -> void:
 	_check(client["towers"] == host["towers"], "client tower records match the host\n  host   %s\n  client %s" % [host["towers"], client["towers"]])
 	_check(client["map_towers"] == host["map_towers"], "client tower nodes match the host's (%s vs %s)" % [client["map_towers"], host["map_towers"]])
 	_check(client["gold"] == host["gold"] and (host["gold"] as Dictionary).size() == 2, "client sees every player's gold as the host has it (%s vs %s)" % [client["gold"], host["gold"]])
-	_check(int(state.stats["gold_sent"]) == 40, "the client sent 40 gold to the host and an overdraft was refused (sent %d)" % int(state.stats["gold_sent"]))
+	_check(int(state.stats["gold_sent"]) == 50, "the client sent 40 gold by button and 10 by /give, and an overdraft was refused (sent %d)" % int(state.stats["gold_sent"]))
+	var host_chat: PackedStringArray = _game.get_node("%Hud").call("chat_history")
+	_check(host_chat.has("Player %d: gg" % _client_peer), "the host sees the client's chat line (%s)" % host_chat)
+	var client_chat: Array = client.get("chat", [])
+	_check(client_chat.has("Player %d (you): gg" % _client_peer) and client_chat.any(func(line: String) -> bool: return line.begins_with("System: Sent 10 gold")), "the client sees its own line and a private System reply to /give (%s)" % [client_chat])
+	_check(not host_chat.has("System: Sent 10 gold to Host."), "System replies go only to the player who ran the command")
 	_check(state.get_tower(_tower_id_at(P2_OPEN)).is_empty(), "the client could not build in a host position")
 	var client_tower := state.get_tower(_tower_id_at(P1_OPEN + Vector2i(4, 0)))
 	_check(not client_tower.is_empty() and client_tower["definition_id"] == "elf_tide", "the client's builder built an Elf tower and upgraded it along its tree")
@@ -209,6 +214,10 @@ func _client_step(delta: float) -> void:
 		_game.call("_on_send_gold_requested", 1, 40)
 		# More than the client has: the host must refuse it.
 		_game.call("_on_send_gold_requested", 1, 999999)
+	if _once("client_chat", 8.9):
+		_game.call("_on_chat_submitted", "gg")
+		# Position 2 is the host's: the host gets 10 more gold.
+		_game.call("_on_chat_submitted", "/give 10 p2")
 	if _once("client_move", 9.0):
 		_game.call("_clear_selection")
 		_game.call("_on_move_requested", _client_move_target(), false)
@@ -255,7 +264,7 @@ func _digest() -> Dictionary:
 		creeps[creep_id] = [point.x, point.y]
 	var races: Dictionary = snapshot.get("races", {})
 	var elves := 1 if str(races.get(_game.multiplayer.get_unique_id(), "")) == "elves" else 0
-	return {"race": elves, "gold": snapshot.get("gold", {}), "towers": towers, "map_towers": map_towers, "builders": builders, "creeps": creeps}
+	return {"race": elves, "gold": snapshot.get("gold", {}), "chat": Array(_game.get_node("%Hud").call("chat_history")), "towers": towers, "map_towers": map_towers, "builders": builders, "creeps": creeps}
 
 
 func _creep_positions() -> Dictionary:

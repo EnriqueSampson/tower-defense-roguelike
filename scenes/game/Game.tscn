@@ -631,6 +631,7 @@ SELECT     Left-click a tower: Q upgrades, A S D F set its target (first / last 
 PAN        Arrow keys, middle-drag, the screen edge, or click and drag on the minimap (bottom left).
 ZOOM       Mouse wheel.
 MENU       F10 opens the menu.
+CHAT       Enter to talk, Esc to cancel. /give 50 Name (or p3) sends gold; the +25 / +100 buttons on the scoreboard do too.
 GOAL       Creeps leaving Positions 1-8 relay into Position 9. Only creeps crossing the final gate cost shared lives.
 UPGRADES   After selected waves the team picks one run upgrade; the wave timer pauses until the host chooses."
 autowrap_mode = 2

@@ -70,6 +70,8 @@ func _run_tests() -> void:
 	_test_build_phase_policy()
 	_test_leak_resolves_once()
 	_test_team_economy()
+	_test_chat_commands()
+	_test_chat_relay_and_give()
 	_test_snapshot_round_trip()
 	_test_full_run_victory_and_defeat_model()
 	# Ownership and authority
@@ -468,6 +470,46 @@ func _test_team_economy() -> void:
 	var restored_team := RunStateModel.new()
 	restored_team.restore(team.snapshot(0.0))
 	_check(restored_team.peer_gold == team.peer_gold, "snapshots carry every player's gold")
+
+
+func _test_chat_commands() -> void:
+	var names := {1: "Carl", 2: "Donut", 3: "Dora"}
+	var owners := PackedInt32Array([1, 2, 3, 0, 0, 0, 0, 0, 0])
+	_check(ChatCommands.clean("   hi  ") == "hi" and ChatCommands.clean("x".repeat(500)).length() == ChatCommands.MAX_MESSAGE_LENGTH, "chat lines are trimmed and capped")
+	_check(ChatCommands.is_command("/give 5 Carl") and ChatCommands.command_name("/GIVE 5 Carl") == "give" and ChatCommands.arguments("/give  5 Carl ") == "5 Carl", "slash commands split into a name and arguments")
+	_check(ChatCommands.parse_give("50 donut", names, owners) == {"peer": 2, "amount": 50}, "/give takes an amount then a name, ignoring case")
+	_check(ChatCommands.parse_give("Carl 25", names, owners) == {"peer": 1, "amount": 25}, "/give also takes the name first")
+	_check(ChatCommands.parse_give("10 p3", names, owners) == {"peer": 3, "amount": 10} and ChatCommands.parse_give("10 p5", names, owners) == {"peer": 1, "amount": 10}, "p<N> names the player controlling Position N (the host for empty ones)")
+	_check(ChatCommands.parse_give("10 Do", names, owners).has("error") and ChatCommands.parse_give("10 Don", names, owners) == {"peer": 2, "amount": 10}, "a name prefix must match exactly one player")
+	_check(ChatCommands.parse_give("Carl", names, owners).has("error") and ChatCommands.parse_give("0 Carl", names, owners).has("error") and ChatCommands.parse_give("10 p12", names, owners).has("error"), "/give rejects missing or zero amounts and unknown positions")
+
+
+func _test_chat_relay_and_give() -> void:
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	# Untyped: typing it GameHud would compile the HUD before the autoloads exist.
+	var hud: Node = game.get_node("%Hud")
+	state.position_owners[1] = 2
+	state.open_accounts([2], 200)
+	game.call("_handle_chat", 1, "  gg [b]everyone[/b]  ")
+	var history: PackedStringArray = hud.chat_history()
+	_check(history.size() == 1 and history[0] == "Host (you): gg [b]everyone[/b]", "a chat line reaches the log with the speaker's name, shown literally")
+	game.call("_handle_chat", 1, "/give 30 p2")
+	_check(state.gold_of(2) == 130 and state.gold_of(1) == 70 and hud.chat_history()[-1].begins_with("System: Sent 30 gold"), "/give sends gold and the System confirms it")
+	game.call("_handle_chat", 1, "/give 9999 p2")
+	_check(state.gold_of(1) == 70 and hud.chat_history()[-1] == "System: You only have 70 gold.", "/give refuses more gold than you have")
+	game.call("_handle_chat", 1, "/give 5 p1")
+	_check(hud.chat_history()[-1] == "System: You can't send gold to yourself.", "/give refuses sending to yourself")
+	game.call("_handle_chat", 1, "/dance")
+	_check(hud.chat_history()[-1] == "System: Unknown command. Try /help", "unknown commands point to /help")
+	game.set("_chat_times", {})
+	var burst: int = game.get_script().get_script_constant_map()["CHAT_BURST"]
+	var before: int = hud.chat_history().size()
+	for index in range(10):
+		game.call("_handle_chat", 1, "spam %d" % index)
+	_check(hud.chat_history().size() - before == burst, "the host drops chat floods past %d lines" % burst)
+	game.queue_free()
 
 
 func _test_snapshot_round_trip() -> void:

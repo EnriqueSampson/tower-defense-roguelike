@@ -132,7 +132,7 @@ Found while testing, for later phases:
 
 - [ ] Main menu and lobby finder redesign with Dungeon Crawler Carl theming.
 - [x] Gold per player: `RunState.peer_gold` holds one account per player. Starting gold is split evenly; each bounty is split into nine position shares paid to each position's controller, so the host earns the shares of the positions it covers; build, upgrade and sell use the requester's account; a leaver's gold goes to the host. The top bar shows your gold, and the multiboard shows everyone's with +25 / +100 Send Gold buttons (host-validated `_request_send_gold`). Protocol 10.
-- [ ] In-game chat (Enter to talk, lobby-wide), with a gold command (for example `/give 50 Name`) beside the HUD's Send Gold.
+- [x] In-game chat: Enter to talk, Esc to cancel; the log fades above the console, names in each player's position colour. The host relays lines (trimmed, capped at 200 characters, flood-limited) and runs slash commands: `/give 50 Name` (or `p3` for Position 3's player, amount and name in either order), `/gold`, `/help`, with private System replies. The System line is the hook for the announcer. Protocol 11.
 - [ ] The System announcer: reactive, sarcastic lines for run events.
 - [ ] End-of-run awards on the end screen.
 - [ ] Broadcast prototype: a ratings meter with System call-outs for a few flair events, whose milestones trigger the existing upgrade offers.
