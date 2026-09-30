@@ -28,5 +28,5 @@ is_magic = false
 detection_range = 0.0
 default_targeting = 0
 tier = 2
-upgrade_options = PackedStringArray("human_minivan")
+upgrade_options = PackedStringArray("human_minivan", "human_paladin")
 sell_refund_percent = 70

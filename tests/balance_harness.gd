@@ -21,6 +21,10 @@ extends SceneTree
 ##   --race=ID         every bot's race (humans, orcs, elves, bugs), or
 ##                     "mixed" to deal the races out in catalog order.
 ##                     Default: the catalog's default race.
+##   --midpoint=WHAT   the halfway choice every bot makes: relic (default;
+##                     then builds its race ultimate as soon as it can
+##                     afford it) or race (recruits the next race in catalog
+##                     order and mixes its towers in).
 ##   --waves=N         stop after N levels.
 ##   --seed=N          run seed (upgrade offers).
 ##   --out=PATH        also write the report as JSON.
@@ -35,7 +39,7 @@ const REAL_TIMEOUT_MSEC := 1800000
 const UPGRADE_RESERVE := 150
 const HOST := 1
 
-var _options := {"players": 1, "strategy": "maze", "race": "", "waves": 0, "seed": 0, "out": "", "quiet": false}
+var _options := {"players": 1, "strategy": "maze", "race": "", "midpoint": "relic", "waves": 0, "seed": 0, "out": "", "quiet": false}
 var _game: Node
 var _map: WintermaulMap
 var _state: RunState
@@ -117,7 +121,10 @@ func _assign_races(players: int) -> void:
 ## generalist (first root) every other time.
 func _next_definition(peer_id: int, built: int) -> String:
 	var race := _catalog.get_race(_state.race_of(peer_id))
-	var roots := race.towers
+	var roots: Array[TowerDefinition] = race.towers.duplicate()
+	var bonus := _catalog.get_race(_state.bonus_race_of(peer_id))
+	if bonus != null:
+		roots.append_array(bonus.towers)
 	if built % 2 == 0:
 		return roots[0].id
 	return roots[(built / 2) % roots.size()].id
@@ -134,6 +141,8 @@ func _process(_delta: float) -> bool:
 	if _state.phase in [RunState.Phase.VICTORY, RunState.Phase.DEFEAT] or (int(_options["waves"]) > 0 and _state.current_wave_index >= int(_options["waves"])):
 		_finish()
 		return false
+	for peer_id in _state.midpoint_pending.duplicate():
+		_choose_midpoint(peer_id)
 	if _state.has_pending_offer():
 		_game.call("_try_choose_upgrade", _state.pending_offer[0], HOST)
 	for peer_id in _builders.builders:
@@ -163,8 +172,67 @@ func _ready_up_when_built() -> void:
 const UPGRADE_EVERY := 3
 
 
+func _choose_midpoint(peer_id: int) -> void:
+	if _options["midpoint"] == "race":
+		var own := _state.race_of(peer_id)
+		var index := 0
+		for race_index in range(_catalog.races.size()):
+			if _catalog.races[race_index].id == own:
+				index = race_index
+		var recruit := _catalog.races[(index + 1) % _catalog.races.size()].id
+		_game.call("_try_choose_midpoint", peer_id, "race", recruit)
+		_log_event("P%d recruits %s" % [peer_id, recruit])
+	else:
+		_game.call("_try_choose_midpoint", peer_id, "relic")
+		_log_event("P%d takes a Relic" % peer_id)
+
+
+## With a Relic and the gold, a bot builds its race ultimate, selling its
+## cheapest tower in the home position when there is no room left.
+func _try_build_ultimate(peer_id: int) -> bool:
+	if _state.relics_of(peer_id) <= 0:
+		return false
+	var ultimate := _catalog.get_race(_state.race_of(peer_id)).ultimate
+	var cost := (_game.get("modifiers") as RunModifiers).build_cost(ultimate.cost)
+	if _state.team_gold < cost:
+		return true
+	var site := _next_site(peer_id, ultimate.id)
+	if site.x < 0:
+		site = _make_room(peer_id, ultimate.footprint)
+	if site.x >= 0 and _game.call("_try_order_build", peer_id, ultimate.id, site, false) == WintermaulMap.Placement.OK:
+		_ordered += 1
+		_log_event("P%d builds %s" % [peer_id, ultimate.display_name])
+	return true
+
+
+func _make_room(peer_id: int, footprint: Vector2i) -> Vector2i:
+	var cheapest := {}
+	for record in _state.tower_records():
+		if record.has("build_remaining") and float(record["build_remaining"]) > 0.0 or record.has("upgrade_to"):
+			continue
+		if not BuildPermissionPolicy.can_control(peer_id, int(record["position"]), _state.position_owners):
+			continue
+		if cheapest.is_empty() or int(record["invested"]) < int(cheapest["invested"]):
+			cheapest = record
+	if cheapest.is_empty() or not _game.call("_try_sell_tower", int(cheapest["id"]), peer_id):
+		return Vector2i(-1, -1)
+	var cell: Vector2i = cheapest["cell"]
+	return cell if _map.evaluate_placement(cell, footprint) == WintermaulMap.Placement.OK else Vector2i(-1, -1)
+
+
+var _events: Array[String] = []
+
+
+func _log_event(text: String) -> void:
+	_events.append("L%02d %s" % [_state.current_wave_index + 1, text])
+	if not _options["quiet"]:
+		print("  ", _events[-1])
+
+
 func _play(peer_id: int) -> void:
 	if not _builders.get_orders(peer_id).is_empty():
+		return
+	if _try_build_ultimate(peer_id):
 		return
 	var purchases: int = _purchases.get(peer_id, 0)
 	if purchases % UPGRADE_EVERY == UPGRADE_EVERY - 1:
@@ -401,6 +469,8 @@ func _finish() -> void:
 		"kills": stats["kills"],
 		"towers_built": stats["towers_built"],
 		"all_by_builder": only_builder,
+		"midpoint": _options["midpoint"],
+		"events": _events,
 		"upgrades": results["upgrades"],
 		"game_seconds": snappedf(float(results["duration"]), 0.1),
 		"levels": _levels,

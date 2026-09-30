@@ -31,6 +31,7 @@ enum Placement {
 	LOCKED,
 	NO_TOWER_SELECTED,
 	WRONG_RACE,
+	NEEDS_RELIC,
 }
 
 const RouteRunnerScene = preload("res://scripts/actors/route_runner.gd")
@@ -54,6 +55,10 @@ var _routes: Array[PackedVector2Array] = []
 var _spawner_routes: Array[Array] = []
 var _spawner_cells: Array[Array] = []
 var _route_targets: Array[Array] = []
+## Flight paths, fixed at load: lane -> [stage 0 by spawn cell (Dictionary),
+## stage 1 corners, ...]. Corners of the shortest route on the empty map,
+## so flyers follow each lane's corridors and checkpoints but ignore mazes.
+var _air_routes: Array[Array] = []
 var _required_segments: Array[Dictionary] = []
 var _terrain_cells: Dictionary = {}
 var _build_cells: Dictionary = {}
@@ -757,6 +762,8 @@ static func placement_text(result: int) -> String:
 			return "Select a tower from the palette"
 		Placement.WRONG_RACE:
 			return "Your builder cannot build that"
+		Placement.NEEDS_RELIC:
+			return "Needs a Relic (the halfway choice)"
 	return "Unknown"
 
 
@@ -797,19 +804,52 @@ func _ensure_map_data() -> void:
 	_path_grid = PathGridModel.new(GRID_SIZE, traversable_cells, route_starts, GOAL_CELL)
 
 	# Initial shortest routes are presentation hints; creeps repath as mazes grow.
+	# The same empty-map segments become the flight paths of air creeps.
 	for lane_id in range(_positions.size()):
 		var lane_routes: Array = []
+		var air_stages: Array = [{}]
 		for spawn_cell in _spawner_cells[lane_id]:
 			var route := PackedVector2Array([spawn_cell])
 			var cursor: Vector2i = spawn_cell
-			for target in _route_targets[lane_id]:
+			for stage_index in range(_route_targets[lane_id].size()):
+				var target: Vector2i = _route_targets[lane_id][stage_index]
 				var segment := _path_grid.get_path(cursor, target)
 				for point_index in range(1, segment.size()):
 					route.append(segment[point_index])
+				if stage_index == 0:
+					air_stages[0][spawn_cell] = _corner_points(segment)
+				elif air_stages.size() <= stage_index:
+					air_stages.append(_corner_points(segment))
 				cursor = target
 			lane_routes.append(route)
 		_spawner_routes.append(lane_routes)
 		_routes.append(lane_routes[0])
+		_air_routes.append(air_stages)
+
+
+## World-space corners of a grid path (the turns plus both ends).
+func _corner_points(cells: Array[Vector2i]) -> PackedVector2Array:
+	var corners := PackedVector2Array()
+	for index in range(cells.size()):
+		if index == 0 or index == cells.size() - 1:
+			corners.append(grid_to_world(cells[index]))
+			continue
+		if cells[index] - cells[index - 1] != cells[index + 1] - cells[index]:
+			corners.append(grid_to_world(cells[index]))
+	return corners
+
+
+## Flight path of an air creep for one stage of its lane: the corners of the
+## empty-map route into the stage's checkpoint. Stage 0 depends on the spawn
+## pad the creep started from.
+func get_air_route(lane_id: int, stage_index: int, spawn_cell: Vector2i) -> PackedVector2Array:
+	_ensure_map_data()
+	if lane_id < 0 or lane_id >= _air_routes.size() or stage_index < 0 or stage_index >= _air_routes[lane_id].size():
+		return PackedVector2Array()
+	var stage: Variant = _air_routes[lane_id][stage_index]
+	if stage is Dictionary:
+		return stage.get(spawn_cell, stage.values()[0])
+	return stage
 
 
 func grid_to_world(cell: Vector2i) -> Vector2:

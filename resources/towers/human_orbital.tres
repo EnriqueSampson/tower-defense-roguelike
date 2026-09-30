@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://ciowo0gfwxspo" path="res://assets/models/towers/human_orbital.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "human_orbital"
+display_name = "Orbital Selfie Stick"
+role = "Race ultimate"
+description = "A satellite that finds your best angle, then fires a beam through it. Huge range and splash. One per Relic."
+primary_color = Color(0.35, 0.4, 0.55, 1)
+accent_color = Color(0.6, 0.95, 1.0, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 700
+damage = 420
+attack_range = 504.0
+attack_cooldown = 2.2
+projectile_speed = 1600.0
+splash_radius = 89.6
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 0.0
+default_targeting = 2
+tier = 5
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

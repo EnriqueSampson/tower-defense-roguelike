@@ -28,5 +28,5 @@ is_magic = false
 detection_range = 0.0
 default_targeting = 0
 tier = 1
-upgrade_options = PackedStringArray("elf_treant")
+upgrade_options = PackedStringArray("elf_treant", "elf_thornbush")
 sell_refund_percent = 70

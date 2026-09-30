@@ -28,5 +28,5 @@ is_magic = false
 detection_range = 0.0
 default_targeting = 0
 tier = 1
-upgrade_options = PackedStringArray("orc_raider")
+upgrade_options = PackedStringArray("orc_raider", "orc_shaman")
 sell_refund_percent = 70

@@ -11,6 +11,8 @@ signal upgrade_requested(tower_id: int, target_id: String)
 signal sell_requested(tower_id: int)
 signal targeting_requested(tower_id: int, mode: int)
 signal offer_chosen(upgrade_id: String)
+## Halfway choice: "relic" (race_id empty) or "race" with the recruited race.
+signal midpoint_chosen(choice: String, race_id: String)
 signal return_requested
 signal selection_cleared
 ## WC3 Stop (S): clears the local builder's order queue.
@@ -53,6 +55,12 @@ var _modifiers: RunModifiers
 var _tower_definition: TowerDefinition
 ## The local player's race: its towers fill the build card.
 var _race: RaceDefinition
+## Second race recruited at the halfway point (null until then).
+var _bonus_race: RaceDefinition
+var _relics := 0
+var _midpoint_overlay: Control
+var _midpoint_cards: HBoxContainer
+var _midpoint_signature := ""
 ## [{definition: TowerDefinition, cost: int}] upgrade branches of the shown tower
 var _tower_options: Array[Dictionary] = []
 var _tower_targeting := 0
@@ -148,6 +156,7 @@ func _ready() -> void:
 	shadows_check.toggled.connect(func(pressed: bool) -> void: GameSettings.set_shadows(pressed))
 	tower_panel.visible = false
 	offer_overlay.visible = false
+	_build_midpoint_overlay()
 	end_overlay.visible = false
 	settings_overlay.visible = false
 	controls_overlay.visible = false
@@ -220,6 +229,8 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 
 	_selected_definition_id = str(context.get("selected_definition", ""))
 	_race = context.get("race") as RaceDefinition
+	_bonus_race = context.get("bonus_race") as RaceDefinition
+	_relics = int(context.get("relics", 0))
 	_gold = snapshot["gold"]
 	_modifiers = modifiers
 	_refresh_card()
@@ -562,7 +573,7 @@ func _card_state_signature() -> String:
 		return "tower|%d|%s|%d|%s|%s|%d|%s|%s" % [_shown_tower_id, _tower_definition.id, _tower_targeting, _tower_can_control, ",".join(option_parts), _sell_value, _tower_building, _tower_upgrading]
 	if _catalog == null:
 		return "empty"
-	var parts := PackedStringArray(["build", _selected_definition_id, _race.id if _race else ""])
+	var parts := PackedStringArray(["build", _selected_definition_id, _race.id if _race else "", _bonus_race.id if _bonus_race else "", str(_relics)])
 	for definition in _build_roster():
 		var cost := _modifiers.build_cost(definition.cost) if _modifiers else definition.cost
 		parts.append("%d:%s" % [cost, _gold >= cost])
@@ -570,18 +581,29 @@ func _card_state_signature() -> String:
 
 
 ## Towers the local builder can build: its race's roots.
+## Towers the local builder can build: its race's roots, then the recruited
+## race's, then the race ultimate (which needs a Relic).
 func _build_roster() -> Array[TowerDefinition]:
-	if _race != null:
-		return _race.towers
-	var fallback := _catalog.default_race()
-	return fallback.towers if fallback != null else _catalog.towers
+	var race := _race if _race != null else _catalog.default_race()
+	if race == null:
+		return _catalog.towers
+	var roster: Array[TowerDefinition] = race.towers.duplicate()
+	if _bonus_race != null and _bonus_race != race:
+		roster.append_array(_bonus_race.towers)
+	if race.ultimate != null:
+		roster.append(race.ultimate)
+	return roster
 
 
 ## A short slot label: slots fit about seven characters, so long names show
-## their first word ("Nosy Neighbor" -> "Nosy").
+## one word: the first, unless it is a filler like "The" or "Da", then the
+## last ("Nosy Neighbor" -> "Nosy", "The Hive Queen" -> "Queen").
 static func _short_name(definition: TowerDefinition) -> String:
 	var short_name := definition.display_name.replace(" Tower", "")
-	return short_name.get_slice(" ", 0) if short_name.length() > 9 else short_name
+	if short_name.length() <= 9:
+		return short_name
+	var first := short_name.get_slice(" ", 0)
+	return first if first.length() > 3 else short_name.get_slice(" ", short_name.get_slice_count(" ") - 1)
 
 
 func _fill_build_card() -> void:
@@ -591,7 +613,13 @@ func _fill_build_card() -> void:
 		var cost := _modifiers.build_cost(definition.cost) if _modifiers else definition.cost
 		var label := "%s\n%dg" % [_short_name(definition), cost]
 		var tooltip := "%s  ·  %d gold\n%s\n%s" % [definition.display_name, cost, definition.role, definition.description]
-		_set_card_slot(BUILD_SLOTS[index], label, tooltip, _on_palette_button_pressed.bind(definition.id), _gold >= cost, definition.id == _selected_definition_id, definition.accent_color.lightened(0.25))
+		var affordable := _gold >= cost
+		if _race != null and definition == _race.ultimate:
+			# The ultimate costs gold plus one Relic from the halfway choice.
+			label = "%s\n%dg+R" % [_short_name(definition), cost]
+			tooltip = "%s  ·  %d gold + 1 Relic (you have %d)\n%s\n%s" % [definition.display_name, cost, _relics, definition.role, definition.description]
+			affordable = affordable and _relics > 0
+		_set_card_slot(BUILD_SLOTS[index], label, tooltip, _on_palette_button_pressed.bind(definition.id), affordable, definition.id == _selected_definition_id, definition.accent_color.lightened(0.25))
 	if not _selected_definition_id.is_empty():
 		_set_card_slot(SLOT_CANCEL, "Cancel", "Stop placing", _on_palette_button_pressed.bind(_selected_definition_id))
 	else:
@@ -725,6 +753,81 @@ func toggle_settings() -> void:
 
 
 ## Closes the top-most dismissible overlay. Returns true when one was closed.
+# --- Halfway choice --------------------------------------------------------------
+
+## Built in code like the offer overlay: a Relic card for the race ultimate
+## beside one card per race the player could recruit.
+func _build_midpoint_overlay() -> void:
+	_midpoint_overlay = ColorRect.new()
+	_midpoint_overlay.name = "MidpointOverlay"
+	(_midpoint_overlay as ColorRect).color = Color(0.01, 0.02, 0.02, 0.8)
+	_midpoint_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_midpoint_overlay.visible = false
+	add_child(_midpoint_overlay)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_midpoint_overlay.add_child(center)
+	var panel := PanelContainer.new()
+	center.add_child(panel)
+	var margin := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 26)
+	panel.add_child(margin)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 14)
+	margin.add_child(column)
+	var title := Label.new()
+	title.text = "HALFWAY THERE"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(0.831, 0.952, 0.917))
+	column.add_child(title)
+	var subtitle := Label.new()
+	subtitle.text = "Take a Relic to build your race's ultimate tower once, or recruit a second race and build its towers too. The wave timer waits for everyone."
+	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	subtitle.custom_minimum_size = Vector2(760, 0)
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 13)
+	subtitle.add_theme_color_override("font_color", Color(0.706, 0.78, 0.761))
+	column.add_child(subtitle)
+	_midpoint_cards = HBoxContainer.new()
+	_midpoint_cards.add_theme_constant_override("separation", 12)
+	column.add_child(_midpoint_cards)
+
+
+func show_midpoint(own: RaceDefinition, recruitable: Array[RaceDefinition], ultimate_cost: int) -> void:
+	var signature := "%s|%d|%s" % [own.id if own else "", ultimate_cost, recruitable.map(func(race: RaceDefinition) -> String: return race.id)]
+	if _midpoint_overlay.visible and signature == _midpoint_signature:
+		return
+	_midpoint_signature = signature
+	for child in _midpoint_cards.get_children():
+		child.queue_free()
+	if own != null and own.ultimate != null:
+		var relic := _midpoint_card("TAKE A RELIC\n\n%s\n%d gold + 1 Relic\n\n%s" % [own.ultimate.display_name, ultimate_cost, own.ultimate.description], own.color)
+		relic.pressed.connect(func() -> void: midpoint_chosen.emit("relic", ""))
+		_midpoint_cards.add_child(relic)
+	for race in recruitable:
+		var card := _midpoint_card("RECRUIT %s\n\n%s" % [race.display_name.to_upper(), race.description], race.color)
+		card.pressed.connect(func() -> void: midpoint_chosen.emit("race", race.id))
+		_midpoint_cards.add_child(card)
+	_midpoint_overlay.visible = true
+
+
+func hide_midpoint() -> void:
+	if _midpoint_overlay != null and _midpoint_overlay.visible:
+		_midpoint_overlay.visible = false
+		_midpoint_signature = ""
+
+
+func _midpoint_card(text: String, color: Color) -> Button:
+	var card := Button.new()
+	card.custom_minimum_size = Vector2(190, 210)
+	card.text = text
+	card.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	card.add_theme_color_override("font_color", color.lightened(0.35))
+	return card
+
+
 func close_top_overlay() -> bool:
 	if controls_overlay.visible:
 		controls_overlay.visible = false

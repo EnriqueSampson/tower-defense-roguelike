@@ -28,5 +28,5 @@ is_magic = true
 detection_range = 0.0
 default_targeting = 0
 tier = 1
-upgrade_options = PackedStringArray("bug_horsefly")
+upgrade_options = PackedStringArray("bug_horsefly", "bug_dragonfly")
 sell_refund_percent = 70

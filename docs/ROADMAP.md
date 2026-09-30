@@ -24,7 +24,8 @@ A faithful co-op Wintermaul for modern players:
 - Host-authoritative co-op over Steam lobbies, plus solo on `OfflineMultiplayerPeer`. Nine positions, with the host controlling unfilled and disconnected positions.
 - A WC3-style builder per player: right-click to move, shift-queued build orders, Stop, construction over time, and cancel for a full refund. Solo uses one builder at double speed.
 - Mazing on a 144×160 grid (72×80 two-by-two towers, scaled to classic Wintermaul proportions): A* rerouting, anti-block placement, relay checkpoints into Position 9, and shared lives and gold.
-- Four builder races picked in the lobby (Humans, Orcs, Elves, Bugs) with 41 towers in classic Wintermaul upgrade trees (branching, up to four tiers), selling, and four target priorities.
+- Four builder races picked in the lobby (Humans, Orcs, Elves, Bugs) with 58 towers: classic Wintermaul upgrade trees (branching, up to four tiers) plus one Relic-gated ultimate per race, selling, and four target priorities.
+- A halfway choice after level 15: each player takes a Relic (their race's ultimate tower, for gold plus the Relic) or recruits a second race.
 - A classic 30-level run: 17 creeps including air, invisible, magic-immune, swarm and splitting creeps, with a boss every fifth level.
 - 18 seeded run upgrades, offered after every third level.
 - A data-driven content catalog: towers, creeps, waves and upgrades are `.tres` resources.
@@ -42,7 +43,7 @@ A faithful co-op Wintermaul for modern players:
 | Vision | Today |
 |---|---|
 | Final art | Placeholder `.glb` models from `tools/blender/` for every tower, creep and the builder |
-| 3–4 races with large tower rosters | 4 races, 9–11 towers each, placeholder art |
+| 3–4 races with large tower rosters | 4 races, 14–15 towers each including an ultimate, placeholder art |
 | Balanced for 1–4 players and solo | Balance-harness bots win with 1, 2 and 4 players and a lazy bot loses ([BALANCE.md](BALANCE.md)); no humans have tested it yet |
 
 ## 3. Decisions from the planning interview
@@ -84,6 +85,7 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 - [x] Position 9 spawns once, centred just below the chin and close to the relay and gate, as the single "Grey spawn" does in Wintermaul v.72.2 (v.73, X10.1 and Hb use two spawns). The old mouth channel is buildable ground.
 - [x] Map scale: measured the real Wintermaul map (84×84 playable tiles = 82×84 towers, lanes about 10 towers wide and 25 long, Northrend tileset) and scaled our own layout 2× to 144×160 cells (72×80 towers). The measurements are used for proportions only; no map data is copied.
 - [x] WC3-style UI: the battlefield fills the screen behind a top resource bar (Menu/F10, phase, wave, timer, lives, gold, Launch and Ready), a top-right multiboard (positions, owners, spawns, modifiers, seed), and a bottom console. The console holds a minimap (terrain, position tints, towers, creeps and the camera trapezoid; click or drag to move the camera), a portrait with the selected tower's stats or the wave preview, and a 4×3 command card with QWER/ASDF/ZXCV hotkeys. The camera pans with the arrow keys, as in WC3. The theme is procedural (`WC3Theme`) until authored UI art exists.
+- [x] Edge panning only at the real window edges, so moving the mouse onto the console, top bar or multiboard no longer nudges the camera (playtest feedback).
 - [x] UI polish: 3D model portraits in the console (the selected tower's or creep's model in its own small viewport, playing idle or walk); click a creep to inspect it (red WC3 selection circle, live health, armor, speed, bounty, traits and home position, cleared on death); a multiboard that folds to its title; and fixed two-line command-card slots so the console keeps one height in every mode.
 - [x] Terrain: a frozen Northrend look. Wall cells are raised, flat-shaded rock cliffs with uneven snowy tops (`TerrainBuilder`). The ground is lit snow with a tiling noise detail layer and a faint build grid, the outside is a dark abyss, and the sun casts shadows (2 splits). It holds 60 fps on the Iris 550 in the smoke run.
 - [x] Unit readability: a WC3-style green selection circle on the selected tower (inside its range ring), bordered health bars that scale with zoom within limits, lane-coloured blob discs under creeps (model creeps lost the procedural lane band), and a small tinted impact spark instead of a large white flash (the splash ring stays). Damage numbers are left out on purpose: with hundreds of towers they are noise, and WC3 tower defenses show only the gold bounty on kills, which we already do. Position 9's lane colour is grey, so its creep discs are the least distinct.
@@ -121,7 +123,7 @@ Found while testing, for later phases:
 **Goal:** A full-length Wintermaul run.
 
 - [x] 30 levels with a boss on every fifth (The Regional Manager, the Frost Warlord, the Wyrm of Unpaid Overtime, the Compliance Lich, the Phantom Auditor and the Board of Directors), generated by `tools/generate_waves.py` from a level table and health and bounty curves. Boss levels get 35 s of build time (`WaveDefinition.build_seconds`), and run-upgrade offers come after every third level. Overlapping levels (the next level spawning before this one is cleared) are not in; a level still ends when its creeps are gone.
-- [x] Air: flying creeps take a direct route between checkpoints and never block building. Towers have `can_target_air` / `can_target_ground` (Cannon is ground only).
+- [x] Air: flying creeps follow their lane's fixed flight path through every corridor and checkpoint (they used to cut straight across cliffs; fixed from playtest feedback), ignore mazes, and never block building. Towers have `can_target_air` / `can_target_ground` (Cannon is ground only).
 - [x] Special creeps: magic immunity (Frost is magic), fast swarms (Intern Imps), splitters (Middle Management Slime → three Delegated Slimelets; the final boss adjourns into five Directors), and invisible creeps. Towers can only target invisible creeps inside detection range, which currently comes from the Nosy Neighbor tower or the Snitch Network run upgrade; Phase 4 moves detection into each race. Placeholder models for every new creep and the tower come from `tools/blender/creeps_phase3.py` and `human_nosy_neighbor.py`.
 - [x] Balance tooling: `tests/balance_harness.gd` plays whole runs headless with bots that build only through builder orders (a greedy mazer and a lazy wall, 1–9 players) and reports leaks, lives and the gold curve per level; a full run takes about 5 minutes. See [BALANCE.md](BALANCE.md) for the knobs, targets and current results.
 
@@ -138,7 +140,7 @@ Found while tuning, for later phases:
 
 - [x] Race framework: a `RaceDefinition` resource (builder model, the towers its builder builds), a race picker in the lobby (Steam member data `race`, remembered in settings, shown on the roster), per-peer races in `RunState` and the snapshot, host validation that a builder only builds its own race's towers, and catalog validation for races (every tower in exactly one race, every race can detect). Race-specific run upgrades exist for Bugs (Pheromone Trails, Swarm Tactics), and offers are race-aware.
 - [x] Classic Wintermaul upgrade trees replace the two linear tiers: an upgrade turns a tower into another tower (paying that tower's cost), and some towers branch (the Guy With a Sword becomes a Crossbow Enthusiast or a Knight on a Budget). Sell value follows the gold invested.
-- [x] 9–11 towers per race, escalating from mundane to absurd and covering ground, air, splash, slow, armor piercing and detection. All content lives in `tools/race_content.py`; `tools/generate_races.py` writes the resources and `tools/blender/race_towers.py` the placeholder models (37 new towers and three new builders). Final art from the modeler is still to come. Bolt, Cannon, Frost and the Nosy Neighbor were folded in: Humans, Orcs, Elves and Humans respectively, keeping their IDs.
+- [x] 14–15 towers per race (September 30: +13 upgrade branches and a Relic-gated race ultimate each), escalating from mundane to absurd and covering ground, air, splash, slow, armor piercing and detection. All content lives in `tools/race_content.py`; `tools/generate_races.py` writes the resources and `tools/blender/race_towers.py` the placeholder models (37 new towers and three new builders). Final art from the modeler is still to come. Bolt, Cannon, Frost and the Nosy Neighbor were folded in: Humans, Orcs, Elves and Humans respectively, keeping their IDs.
 
 | Race | Tier 1 (builder) | Upgrades | Ultimate | Detection |
 |---|---|---|---|---|
@@ -147,7 +149,9 @@ Found while tuning, for later phases:
 | **Elves** | Elf Archer, Water Spirit, Sapling | Ranger → Hippogryph Rider, or Owl Post; Tide Caller → Water Elemental; Treant → Ancient Ent | Water Elemental (area slow), Ancient Ent | Owl Post |
 | **Bugs** | Worker Ant (5 gold), Dung Beetle, Firefly, Mosquito | Soldier Ant → Army Ant Platoon; Stag Beetle → Rhino Beetle; Lantern Bug; Horsefly | The Hive Queen (the only Bug splash) | Firefly line |
 
-Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash until the Hive Queen. Real brand names are avoided (the Rage Streamer is a "streamer").
+Added after the first playtest feedback: Humans gained the Ballista Guy, Paladin of Paperwork, Monster Truck Rally and Doorbell Camera Drone; Orcs the Shaman With Opinions → Witch Doctor (their first slows) and Boar Cavalry; Elves the Moon Well, Pond Kraken and Thornbush; Bugs the Stink Bug and Dragonfly → Murder Hornet. Race ultimates, one per Relic: Orbital Selfie Stick (Humans), Da Big Stompa (Orcs), The World Tree (Elves) and Locust Apocalypse (Bugs). Six more race-line run upgrades joined the pool.
+
+Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash except their ultimates (the Hive Queen and Locust Apocalypse). Real brand names are avoided (the Rage Streamer is a "streamer").
 - [ ] Balance each race against the Phase 3 harness: first pass done (see [BALANCE.md](BALANCE.md)); needs playtests.
 
 **Exit:** 3–4 races can each finish a classic run, and no race dominates in playtests. The harness has each race finishing solo; playtests are still to come.
@@ -156,7 +160,8 @@ Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash 
 
 **Goal:** Variety between runs that works with 30+ levels and multiple races.
 
-- [ ] Retune when offers appear and how large the upgrade pool is for long runs. Make offers race-aware.
+- [x] Halfway choice (added from playtest feedback): after level 15 every builder takes a Relic, a one-time resource that lets them build their race's unique ultimate for gold plus the Relic, or recruits a second race whose towers their builder can also build. The wave timer waits for everyone (60 s, then a Relic). See ARCHITECTURE.md §9.
+- [ ] Retune when offers appear and how large the upgrade pool is for long runs. Offers are already race-aware (Phase 4).
 - [ ] Optional run events or modifiers, only if Playtest gate A or B shows runs feel samey.
 - [ ] Decide about meta-progression. It stays deferred unless playtests ask for it.
 

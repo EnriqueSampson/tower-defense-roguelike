@@ -28,5 +28,5 @@ is_magic = false
 detection_range = 0.0
 default_targeting = 0
 tier = 3
-upgrade_options = PackedStringArray()
+upgrade_options = PackedStringArray("human_monster_truck")
 sell_refund_percent = 70

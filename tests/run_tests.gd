@@ -91,6 +91,7 @@ func _run_tests() -> void:
 	# Camera
 	_test_battlefield_camera_controls()
 	_test_solo_camera_startup_focus()
+	_test_edge_pan_only_at_window_edges()
 	_test_multiplayer_camera_startup_focus()
 	# Combat
 	_test_basic_tower_combat()
@@ -101,6 +102,7 @@ func _run_tests() -> void:
 	_test_upgrade_and_sell_economy()
 	# Special creeps
 	_test_air_creeps()
+	_test_air_creeps_follow_every_checkpoint()
 	_test_magic_immunity()
 	_test_invisible_creeps_and_detection()
 	_test_splitters()
@@ -110,6 +112,7 @@ func _run_tests() -> void:
 	_test_builder_orders_and_construction()
 	_test_builder_stop_and_trip()
 	_test_races_gate_building_and_offers()
+	_test_midpoint_choice()
 	_test_builder_reconciliation()
 	# Roguelike layer
 	_test_run_modifiers()
@@ -234,7 +237,7 @@ func _test_content_catalog_validation() -> void:
 	_check(Catalog.validate().is_empty(), "shipped content catalog validates with unique ids")
 	_check(Catalog.towers.size() >= 32, "catalog ships 8+ towers for each of four races")
 	_check(Catalog.waves.size() >= 30, "catalog ships a classic run of 30+ levels")
-	_check(Catalog.upgrades.size() >= 12 and Catalog.upgrades.size() <= 24, "catalog ships 12-24 run upgrades")
+	_check(Catalog.upgrades.size() >= 12 and Catalog.upgrades.size() <= 32, "catalog ships 12-32 run upgrades")
 	_check(Catalog.creeps().size() >= 4, "catalog references at least four creep roles")
 	var bosses_every_five := true
 	for wave in Catalog.waves:
@@ -347,7 +350,13 @@ func _test_upgrade_trees_and_races() -> void:
 			bug_splash.append(tower.id)
 		if tower.tier == 1:
 			cheapest = mini(cheapest, tower.cost)
-	_check(bug_splash == ["bug_queen"], "Bugs have no splash except the Hive Queen ultimate")
+	bug_splash.sort()
+	_check(bug_splash == ["bug_locusts", "bug_queen"], "Bugs splash only with their ultimates (the Hive Queen and Locust Apocalypse)")
+	var ultimates_ok := true
+	for race in Catalog.races:
+		ultimates_ok = ultimates_ok and race.ultimate != null and not race.ultimate.can_upgrade() and Catalog.race_of_tower(race.ultimate.id) == race.id and not race.has_root(race.ultimate.id)
+		_check(Catalog.race_towers(race).size() >= 12, "%s have 12+ towers including their ultimate" % race.display_name)
+	_check(ultimates_ok, "every race has its own unique ultimate outside its upgrade trees")
 	_check(cheapest <= 5 and cheapest < Bolt.cost, "Bugs build the cheapest maze towers")
 	var looped := ContentCatalog.new()
 	var a := TowerDefinition.new()
@@ -852,6 +861,20 @@ func _test_battlefield_camera_controls() -> void:
 	world.queue_free()
 
 
+func _test_edge_pan_only_at_window_edges() -> void:
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var camera := game.get_node(CAMERA_PATH) as BattlefieldCamera
+	var window := (game as Control).get_global_rect()
+	var console_top := (game.get_node("WorldClip") as Control).get_global_rect().end.y
+	var area: Control = camera.get("_edge_pan_area")
+	_check(area == game, "edge panning uses the whole window, not the battlefield view")
+	_check(camera.get_edge_direction(Vector2(window.get_center().x, console_top + 2.0), window) == Vector2.ZERO, "moving onto the console does not pan the camera")
+	_check(camera.get_edge_direction(Vector2(window.get_center().x, 20.0), window) == Vector2.ZERO, "hovering the top bar does not pan the camera")
+	_check(camera.get_edge_direction(Vector2(window.get_center().x, window.end.y - 1.0), window) == Vector2.DOWN, "the bottom window edge still pans down, as in WC3")
+	game.queue_free()
+
+
 func _test_solo_camera_startup_focus() -> void:
 	var steam_session := root.get_node("SteamSession")
 	steam_session.set("is_solo_session", true)
@@ -1123,7 +1146,7 @@ func _test_air_creeps() -> void:
 	var walker := map.spawn_creep(8102, 0, Grunt)
 	_check(flyer.position.y > 1.0 and is_zero_approx(walker.position.y), "air creeps fly above the ground")
 	var points: PackedVector2Array = flyer.get("_points")
-	_check(points.size() == 2 and points[1] == map.grid_to_world(flyer.get_current_target()), "air creeps fly straight to the next checkpoint")
+	_check(points.size() >= 2 and points[-1] == map.grid_to_world(flyer.get_current_target()), "air creeps fly toward their current checkpoint")
 	var start := flyer.plane_position
 	walker.queue_free()
 	var cell := map.world_to_grid(start)
@@ -1139,6 +1162,41 @@ func _test_air_creeps() -> void:
 	ground.plane_position = Vector2(410, 400)
 	var hits := CombatResolver.resolve_impact([flyer, ground], {"damage": 5, "splash_radius": 60.0, "targets_air": false}, Vector2(405, 400), ground)
 	_check(hits.size() == 1 and hits[0]["creep"] == ground, "ground splash never reaches flyers")
+	map.queue_free()
+
+
+func _test_air_creeps_follow_every_checkpoint() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	var gargoyle := Catalog.get_creep("gargoyle")
+	# A tower on lane 1's route must not bend the flight path.
+	map.spawn_tower(8150, P1_CREEP - Vector2i(1, 1), Bolt)
+	var all_lanes_ok := true
+	for lane in range(ClassicWintermaulLayout.PLAYER_COUNT):
+		var flyer := map.spawn_creep(8160 + lane, lane, gargoyle)
+		var targets := map.get_route_targets(lane)
+		var closest: Array[float] = []
+		for target in targets:
+			closest.append(INF)
+		var off_route := 0
+		var steps := 0
+		while not flyer.has_finished() and steps < 6000:
+			flyer._process(0.05)
+			for index in range(targets.size()):
+				closest[index] = minf(closest[index], flyer.plane_position.distance_to(map.grid_to_world(targets[index])))
+			if not ClassicWintermaulLayout.is_traversable(map.get_terrain(map.world_to_grid(flyer.plane_position))):
+				off_route += 1
+			steps += 1
+		var visited := flyer.has_finished()
+		for distance in closest:
+			visited = visited and distance < WintermaulMap.TILE_SIZE * 0.5
+		all_lanes_ok = all_lanes_ok and visited and off_route == 0
+		if not (visited and off_route == 0):
+			printerr("lane %d: closest %s, %d steps over walls or void" % [lane, closest, off_route])
+	_check(all_lanes_ok, "flyers from every position pass through each checkpoint and stay over their lanes")
+	var mid := map.spawn_creep(8190, 0, gargoyle, -1, 1.0, {"start_position": map.grid_to_world(map.get_route_targets(0)[0]) + Vector2(0, 40), "start_stage": 1})
+	var mid_points: PackedVector2Array = mid.get("_points")
+	_check(mid_points[-1] == map.grid_to_world(map.get_route_targets(0)[1]) and mid_points.size() >= 2, "mid-route flyers (split children) join their stage's flight path")
 	map.queue_free()
 
 
@@ -1335,6 +1393,58 @@ func _test_races_gate_building_and_offers() -> void:
 	state.peer_races[2] = "nonsense"
 	_check((game.call("_race_for", 2) as RaceDefinition).id == "humans", "unknown race picks fall back to the default race")
 	steam_session.set("local_race", previous_race)
+	steam_session.set("is_solo_session", false)
+	game.queue_free()
+
+
+func _test_midpoint_choice() -> void:
+	var steam_session := root.get_node("SteamSession")
+	steam_session.set("is_solo_session", true)
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	var map := game.get_node(MAP_PATH) as WintermaulMap
+	var humans := Catalog.get_race("humans")
+	var midpoint := BalanceConfig.midpoint_wave_index(state.wave_count)
+	_check(midpoint == 14, "the halfway choice comes after level 15 of 30")
+	state.team_gold = 5000
+	_check(game.call("_try_order_build", 1, humans.ultimate.id, P9_OPEN, false) == WintermaulMap.Placement.NEEDS_RELIC, "the race ultimate needs a Relic")
+	# Clear level 15.
+	state.current_wave_index = midpoint
+	state.begin_wave(PackedInt32Array([0, 0, 0, 0, 0, 0, 0, 0, 0]))
+	game.call("_finish_creep_resolution")
+	_check(state.phase == RunStateModel.Phase.BUILD and state.midpoint_pending == [1], "clearing level 15 asks every builder for the halfway choice")
+	var countdown: float = game.get("build_countdown")
+	game.call("_process", 1.0)
+	game.call("_on_launch_pressed")
+	_check(is_equal_approx(game.get("build_countdown"), countdown), "the build timer and Launch wait for the halfway choice")
+	_check(not game.call("_try_choose_midpoint", 1, "race", "humans"), "a player cannot recruit their own race")
+	_check(not game.call("_try_choose_midpoint", 1, "race", "ghosts"), "unknown races are rejected")
+	_check(game.call("_try_choose_midpoint", 1, "relic") and state.relics_of(1) == 1 and not state.has_midpoint_pending(), "taking a Relic ends the choice")
+	_check(not game.call("_try_choose_midpoint", 1, "relic"), "the choice happens once")
+	var snapshot: Dictionary = game.call("_make_state_snapshot")
+	_check(snapshot["relics"] == {1: 1} and snapshot["midpoint"] == [], "snapshots carry Relics and pending choices")
+	# Build the ultimate: gold and the Relic are paid when construction starts.
+	var gold := state.team_gold
+	_check(game.call("_try_place_tower", humans.ultimate.id, P9_OPEN, 1, 5.0) == WintermaulMap.Placement.OK, "a Relic unlocks the race ultimate")
+	_check(state.team_gold == gold - humans.ultimate.cost and state.relics_of(1) == 0, "the ultimate costs gold plus the Relic")
+	_check(game.call("_try_place_tower", humans.ultimate.id, P9_OPEN + Vector2i(4, 0), 1) == WintermaulMap.Placement.NEEDS_RELIC, "one Relic buys one ultimate")
+	var ultimate_id: int = state.tower_records()[-1]["id"]
+	_check(game.call("_try_sell_tower", ultimate_id) and state.relics_of(1) == 1 and state.team_gold == gold, "cancelling the ultimate's construction refunds gold and the Relic")
+	_check(game.call("_try_place_tower", humans.ultimate.id, P9_OPEN, 1) == WintermaulMap.Placement.OK and map.get_tower(state.tower_records()[-1]["id"]).definition == humans.ultimate, "the refunded Relic builds the ultimate again")
+	# Recruiting a second race.
+	state.midpoint_pending = [1]
+	state.peer_relics.clear()
+	_check(game.call("_try_choose_midpoint", 1, "race", "bugs") and state.bonus_race_of(1) == "bugs", "a player can recruit a second race")
+	_check(game.call("_try_place_tower", "bug_ant", P9_OPEN + Vector2i(0, 4), 1) == WintermaulMap.Placement.OK, "a recruited race's towers become buildable")
+	_check(game.call("_try_place_tower", "orc_axe", P9_OPEN + Vector2i(4, 4), 1) == WintermaulMap.Placement.WRONG_RACE, "other races stay locked")
+	_check(game.call("_try_place_tower", "bug_locusts", P9_OPEN + Vector2i(8, 4), 1) == WintermaulMap.Placement.WRONG_RACE, "a recruited race's ultimate stays locked")
+	_check((game.call("_available_lines") as PackedStringArray).has("bug_ant"), "offers include the recruited race's lines")
+	# Nobody chooses in time: everyone gets a Relic.
+	state.midpoint_pending = [1]
+	game.set("_midpoint_timer", 0.01)
+	game.call("_process", 0.1)
+	_check(not state.has_midpoint_pending() and state.relics_of(1) == 1, "an unanswered choice becomes a Relic when the timer runs out")
 	steam_session.set("is_solo_session", false)
 	game.queue_free()
 

@@ -92,6 +92,7 @@ def write_race(race):
     ]
     for index, tower_id in enumerate(roots):
         ext.append(f'[ext_resource type="Resource" path="res://resources/towers/{file_name(tower_id)}.tres" id="t_{index}"]')
+    ext.append(f'[ext_resource type="Resource" path="res://resources/towers/{file_name(race["ultimate"])}.tres" id="ultimate"]')
     refs = ", ".join(f'ExtResource("t_{index}")' for index in range(len(roots)))
     text = f'''[gd_resource type="Resource" script_class="RaceDefinition" load_steps={len(ext) + 1} format=3]
 
@@ -105,6 +106,7 @@ description = "{quote(race["description"])}"
 color = {color(race["color"])}
 builder_scene = ExtResource("3_builder")
 towers = Array[ExtResource("2_tower")]([{refs}])
+ultimate = ExtResource("ultimate")
 '''
     (RACES_DIR / f"{race['id']}.tres").write_text(text)
 

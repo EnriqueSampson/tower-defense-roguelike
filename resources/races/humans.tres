@@ -1,10 +1,11 @@
-[gd_resource type="Resource" script_class="RaceDefinition" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="RaceDefinition" load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/race_definition.gd" id="1_race"]
 [ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="2_tower"]
 [ext_resource type="PackedScene" uid="uid://dqkgpqxv3i2x" path="res://assets/models/builders/human_peasant.glb" id="3_builder"]
 [ext_resource type="Resource" path="res://resources/towers/bolt_tower.tres" id="t_0"]
 [ext_resource type="Resource" path="res://resources/towers/sentry_tower.tres" id="t_1"]
+[ext_resource type="Resource" path="res://resources/towers/human_orbital.tres" id="ultimate"]
 
 [resource]
 script = ExtResource("1_race")
@@ -14,3 +15,4 @@ description = "Generalists. Reliable single-target damage that escalates from a 
 color = Color(0.36, 0.56, 0.84, 1)
 builder_scene = ExtResource("3_builder")
 towers = Array[ExtResource("2_tower")]([ExtResource("t_0"), ExtResource("t_1")])
+ultimate = ExtResource("ultimate")

@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="RaceDefinition" load_steps=8 format=3]
+[gd_resource type="Resource" script_class="RaceDefinition" load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/race_definition.gd" id="1_race"]
 [ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="2_tower"]
@@ -7,6 +7,7 @@
 [ext_resource type="Resource" path="res://resources/towers/bug_beetle.tres" id="t_1"]
 [ext_resource type="Resource" path="res://resources/towers/bug_firefly.tres" id="t_2"]
 [ext_resource type="Resource" path="res://resources/towers/bug_mosquito.tres" id="t_3"]
+[ext_resource type="Resource" path="res://resources/towers/bug_locusts.tres" id="ultimate"]
 
 [resource]
 script = ExtResource("1_race")
@@ -16,3 +17,4 @@ description = "Dirt-cheap towers built for mazing: a Worker Ant costs 5 gold. Lo
 color = Color(0.85, 0.62, 0.2, 1)
 builder_scene = ExtResource("3_builder")
 towers = Array[ExtResource("2_tower")]([ExtResource("t_0"), ExtResource("t_1"), ExtResource("t_2"), ExtResource("t_3")])
+ultimate = ExtResource("ultimate")

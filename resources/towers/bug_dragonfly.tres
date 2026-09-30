@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://b4q8him7tvxbk" path="res://assets/models/towers/bug_dragonfly.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "bug_dragonfly"
+display_name = "Dragonfly"
+role = "Anti-air"
+description = "Eats mosquitoes for breakfast and gargoyles for lunch. Air only, fast and precise."
+primary_color = Color(0.2, 0.45, 0.5, 1)
+accent_color = Color(0.4, 0.9, 0.95, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 35
+damage = 10
+attack_range = 280.0
+attack_cooldown = 0.5
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = false
+can_target_air = true
+is_magic = false
+detection_range = 0.0
+default_targeting = 0
+tier = 2
+upgrade_options = PackedStringArray("bug_hornet")
+sell_refund_percent = 70

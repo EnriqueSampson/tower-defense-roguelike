@@ -73,6 +73,9 @@ def figure(spec, opts, s):
         pc.part("cylinder", "Cap", accent, turret, (0, -0.04 * s, 1.14 * s), scale=(0.19 * s, 0.19 * s, 0.05 * s), vertices=10)
     elif hat == "hood":
         pc.part("sphere", "Hood", clothes, turret, (0, 0.03 * s, 1.07 * s), scale=(0.21 * s, 0.21 * s, 0.19 * s), segments=10, ring_count=6)
+    elif hat == "mask":
+        pc.part("cube", "Mask", pc.material("Mask", (0.9, 0.85, 0.7)), turret, (0, -0.16 * s, 1.03 * s), scale=(0.15 * s, 0.03 * s, 0.18 * s))
+        pc.part("cube", "Feather", accent, turret, (0, 0, 1.28 * s), scale=(0.02 * s, 0.02 * s, 0.1 * s))
     elif hat == "bun":
         pc.part("sphere", "Bun", pc.material("Hair", (0.9, 0.9, 0.92)), turret, (0, 0.06 * s, 1.2 * s), scale=(0.1 * s, 0.1 * s, 0.1 * s), segments=8, ring_count=5)
     if opts.get("cape"):
@@ -99,6 +102,10 @@ def figure(spec, opts, s):
     elif weapon == "clipboard":
         pc.part("cube", "Clipboard", pc.material("Paper", (0.95, 0.94, 0.88)), arm, (0, -0.1 * s, -0.3 * s), scale=(0.12 * s, 0.01 * s, 0.16 * s))
         swing(arm, (0, 0, 0), (-60, 0, 0))
+    elif weapon == "staff":
+        pc.part("cylinder", "Staff", wood, arm, (0, -0.05 * s, -0.1 * s), scale=(0.025 * s, 0.025 * s, 0.4 * s), vertices=6)
+        pc.part("sphere", "Orb", pc.material("Orb", spec["colors"][1], emission=0.8), arm, (0, -0.05 * s, 0.32 * s), scale=(0.07 * s, 0.07 * s, 0.07 * s), segments=8, ring_count=5)
+        swing(arm, (0, 0, 0), (-45, 0, 0))
     elif weapon in ("axe", "axes"):
         count = 3 if weapon == "axes" else 1
         for index in range(count):
@@ -274,7 +281,50 @@ def water(spec, opts, s):
     pc.part("sphere", "Head", spirit, body, (0, 0, 0.82 * s), scale=(0.22 * s, 0.22 * s, 0.2 * s), segments=12, ring_count=8)
     pc.part("sphere", "ArmL", spirit, body, (-0.3 * s, -0.05 * s, 0.55 * s), scale=(0.1 * s, 0.1 * s, 0.14 * s), segments=8, ring_count=5)
     pc.part("sphere", "ArmR", spirit, body, (0.3 * s, -0.05 * s, 0.55 * s), scale=(0.1 * s, 0.1 * s, 0.14 * s), segments=8, ring_count=5)
+    if opts.get("tentacles"):
+        for index in range(4):
+            angle = index * 90 + 45
+            tentacle = pc.material("Tentacle", spec["colors"][1])
+            pc.part("cylinder", "Tentacle%d" % index, tentacle, body, (0.3 * s * (1 if angle < 180 else -1) * (1 if index % 2 == 0 else 0.6), 0.3 * s * (1 if index in (1, 2) else -1), 0.3 * s), scale=(0.05 * s, 0.05 * s, 0.3 * s), rotation=pc.radians(30 * (1 if index % 2 else -1), 25, 0), vertices=6)
     swing(body, (0, 0, 0), (-18, 0, 0), idle_drift=(0, 0, 10))
+    return root
+
+
+def drone(spec, opts, s):
+    root = pc.empty(spec["id"])
+    base(root, spec["tier"], (0.3, 0.3, 0.32))
+    shell = pc.material("Shell", spec["colors"][0], roughness=0.4)
+    lens = pc.material("Lens", spec["colors"][1], emission=0.8)
+    dark = pc.material("Rotor", (0.1, 0.1, 0.12))
+    pc.part("cylinder", "Mast", dark, root, (0, 0, 0.45), scale=(0.04, 0.04, 0.3), vertices=6)
+    turret = pc.empty("Turret", root, (0, 0, 0.9))
+    body = pc.empty("Body", turret, (0, 0, 0))
+    pc.part("cube", "Hull", shell, body, (0, 0, 0), scale=(0.22, 0.22, 0.07))
+    pc.part("sphere", "Camera", lens, body, (0, -0.22, -0.02), scale=(0.07, 0.05, 0.07), segments=8, ring_count=5)
+    for x in (-0.3, 0.3):
+        for y in (-0.3, 0.3):
+            pc.part("cylinder", "Rotor", dark, body, (x, y, 0.06), scale=(0.14, 0.14, 0.01), vertices=10)
+    pc.keyframe_action(body, "idle", "location", [(0.0, (0, 0, 0)), (0.6, (0, 0, 0.08)), (1.2, (0, 0, 0))])
+    pc.keyframe_action(body, "attack", "location", [(0.0, (0, 0, 0)), (0.06, (0, 0.08, 0)), (0.3, (0, 0, 0))])
+    return root
+
+
+def dish(spec, opts, s):
+    root = pc.empty(spec["id"])
+    base(root, spec["tier"], (0.3, 0.32, 0.38))
+    metal = pc.material("Metal", (0.75, 0.78, 0.82), roughness=0.3)
+    panel = pc.material("Panel", (0.2, 0.3, 0.6), roughness=0.2)
+    beam = pc.material("Beam", spec["colors"][1], emission=0.9)
+    pc.part("cylinder", "Pillar", metal, root, (0, 0, 0.45), scale=(0.12, 0.12, 0.35), vertices=10)
+    pc.part("cube", "PanelL", panel, root, (-0.55, 0.3, 0.45), scale=(0.25, 0.12, 0.01), rotation=pc.radians(30, 0, 0))
+    pc.part("cube", "PanelR", panel, root, (0.55, 0.3, 0.45), scale=(0.25, 0.12, 0.01), rotation=pc.radians(30, 0, 0))
+    turret = pc.empty("Turret", root, (0, 0, 0.85))
+    dish_pivot = pc.empty("Dish", turret, (0, 0, 0.1))
+    pc.part("sphere", "Bowl", metal, dish_pivot, (0, -0.1, 0.2), scale=(0.5, 0.18, 0.5), segments=14, ring_count=8)
+    pc.part("cylinder", "Emitter", metal, dish_pivot, (0, -0.4, 0.2), scale=(0.03, 0.03, 0.25), rotation=pc.radians(90, 0, 0), vertices=6)
+    pc.part("sphere", "Focus", beam, dish_pivot, (0, -0.65, 0.2), scale=(0.08, 0.08, 0.08), segments=8, ring_count=5)
+    pc.part("cube", "Phone", panel, dish_pivot, (0, -0.2, 0.62), scale=(0.08, 0.01, 0.14))
+    swing(dish_pivot, (-25, 0, 0), (-5, 0, 0), idle_drift=(0, 0, 12))
     return root
 
 
@@ -344,7 +394,7 @@ def bug(spec, opts, s):
 
 ARCHETYPES = {
     "figure": figure, "streamer": streamer, "vehicle": vehicle, "rider": rider, "cannon": cannon,
-    "beast": beast, "owl": owl, "water": water, "tree": tree, "bug": bug,
+    "beast": beast, "owl": owl, "water": water, "tree": tree, "bug": bug, "drone": drone, "dish": dish,
 }
 
 

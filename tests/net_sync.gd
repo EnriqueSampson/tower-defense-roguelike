@@ -103,6 +103,9 @@ func _on_client_connected(peer_id: int) -> void:
 func _host_step() -> void:
 	if _once("host_check_build", BUILD_CHECK_AT):
 		_compare_build_state()
+		# The halfway choice, opened early: the client answers over RPC.
+		_game.call("_open_midpoint_choice")
+		_game.call("_try_choose_midpoint", 1, "relic")
 		_game.call("_on_ready_pressed")
 	if _once("host_check_wave", WAVE_CHECK_AT):
 		_compare_wave_state()
@@ -144,6 +147,7 @@ func _compare_build_state() -> void:
 func _compare_wave_state() -> void:
 	var client := _read_client_digest()
 	var state: RunState = _game.get("run_state")
+	_check(state.bonus_race_of(_client_peer) == "bugs" and state.relics_of(1) == 1 and not state.has_midpoint_pending(), "the client's halfway choice reaches the host (recruited Bugs)")
 	_check(state.phase == RunState.Phase.WAVE or state.current_wave_index > 0, "both players readying up starts wave one")
 	if client.is_empty():
 		return
@@ -203,6 +207,8 @@ func _client_step(delta: float) -> void:
 	if _once("client_move", 9.0):
 		_game.call("_clear_selection")
 		_game.call("_on_move_requested", _client_move_target(), false)
+	if _once("client_midpoint", CLIENT_READY_AT - 0.5):
+		_game.call("_on_midpoint_chosen", "race", "bugs")
 	if _once("client_ready", CLIENT_READY_AT):
 		_game.call("_on_ready_pressed")
 	_dump_timer -= delta

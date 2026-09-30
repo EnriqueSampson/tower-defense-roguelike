@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://kj0pqwtie5wv" path="res://assets/models/towers/bug_stink.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "bug_stink"
+display_name = "Stink Bug"
+role = "Control"
+description = "Nobody wants to walk past it. A cheap magic slow on a cheap body. Ground only."
+primary_color = Color(0.35, 0.4, 0.2, 1)
+accent_color = Color(0.7, 0.85, 0.3, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 20
+damage = 4
+attack_range = 196.0
+attack_cooldown = 0.9
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.3
+slow_duration = 2.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = false
+is_magic = true
+detection_range = 0.0
+default_targeting = 0
+tier = 2
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

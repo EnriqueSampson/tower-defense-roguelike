@@ -73,6 +73,8 @@ func race_towers(race: RaceDefinition) -> Array[TowerDefinition]:
 	for root in race.towers:
 		if root != null:
 			queue.append(root)
+	if race.ultimate != null:
+		queue.append(race.ultimate)
 	var seen: Dictionary = {}
 	while not queue.is_empty():
 		var tower: TowerDefinition = queue.pop_front()
@@ -174,6 +176,10 @@ func _validate_trees(seen: Dictionary) -> Array[String]:
 				problems.append("race %s lists a tower missing from the catalog" % race.id)
 			elif root.tier != 1:
 				problems.append("race %s builds %s, which is not a tier 1 tower" % [race.id, root.id])
+		if race.ultimate == null or not seen.has("tower:" + race.ultimate.id):
+			problems.append("race %s has no ultimate tower in the catalog" % race.id)
+		elif race.ultimate.can_upgrade():
+			problems.append("race %s's ultimate %s must not upgrade further" % [race.id, race.ultimate.id])
 		for tower in race_towers(race):
 			if owner.has(tower.id) and owner[tower.id] != race.id:
 				problems.append("tower %s belongs to races %s and %s" % [tower.id, owner[tower.id], race.id])
@@ -213,7 +219,10 @@ func _ensure_indexes() -> void:
 		if race == null:
 			continue
 		_race_index[race.id] = race
-		for root in race.towers:
+		var roots: Array[TowerDefinition] = race.towers.duplicate()
+		if race.ultimate != null:
+			roots.append(race.ultimate)
+		for root in roots:
 			if root == null:
 				continue
 			var queue: Array[TowerDefinition] = [root]

@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://tsdv2wnt38qw" path="res://assets/models/towers/orc_boar_cavalry.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "orc_boar_cavalry"
+display_name = "Boar Cavalry"
+role = "Detection"
+description = "An orc finally rides the Truffle Hog. Both are thrilled. Huge detection and a heavy charge."
+primary_color = Color(0.45, 0.3, 0.24, 1)
+accent_color = Color(0.95, 0.7, 0.4, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 120
+damage = 38
+attack_range = 252.0
+attack_cooldown = 0.8
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 2
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 504.0
+default_targeting = 0
+tier = 3
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

@@ -28,5 +28,5 @@ is_magic = false
 detection_range = 392.0
 default_targeting = 0
 tier = 2
-upgrade_options = PackedStringArray("human_hoa")
+upgrade_options = PackedStringArray("human_hoa", "human_drone")
 sell_refund_percent = 70

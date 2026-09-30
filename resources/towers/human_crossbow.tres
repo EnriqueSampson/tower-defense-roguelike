@@ -28,5 +28,5 @@ is_magic = false
 detection_range = 0.0
 default_targeting = 0
 tier = 2
-upgrade_options = PackedStringArray("human_musket")
+upgrade_options = PackedStringArray("human_musket", "human_ballista")
 sell_refund_percent = 70
