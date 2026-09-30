@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://dkrnxs31l7p4n" path="res://assets/models/towers/bug_queen.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "bug_queen"
+display_name = "The Hive Queen"
+role = "Ultimate: splash"
+description = "Every bug answers to her. She answers to no one. The only Bug tower that splashes."
+primary_color = Color(0.55, 0.3, 0.45, 1)
+accent_color = Color(1.0, 0.75, 0.3, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 250
+damage = 60
+attack_range = 280.0
+attack_cooldown = 1.0
+projectile_speed = 700.0
+splash_radius = 58.8
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 0.0
+default_targeting = 0
+tier = 4
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

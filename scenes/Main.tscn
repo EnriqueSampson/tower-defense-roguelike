@@ -196,6 +196,30 @@ theme_override_colors/font_color = Color(0.851, 0.941, 0.918, 1)
 theme_override_font_sizes/font_size = 20
 text = "Current Lobby"
 
+[node name="RaceRow" type="HBoxContainer" parent="Margin/Layout/Content/LobbyPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="RaceLabel" type="Label" parent="Margin/Layout/Content/LobbyPanel/RaceRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.776, 0.847, 0.827, 1)
+theme_override_font_sizes/font_size = 15
+text = "Your builder race"
+
+[node name="RacePicker" type="OptionButton" parent="Margin/Layout/Content/LobbyPanel/RaceRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 36)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RaceBlurb" type="Label" parent="Margin/Layout/Content/LobbyPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.573, 0.627, 0.616, 1)
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3
+
 [node name="RosterList" type="ItemList" parent="Margin/Layout/Content/LobbyPanel"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 300)

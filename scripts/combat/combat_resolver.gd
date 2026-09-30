@@ -14,18 +14,28 @@ static func resolve_impact(candidates: Array, payload: Dictionary, impact_positi
 	var armor_pierce := int(payload.get("armor_pierce", 0))
 	var slow_factor := float(payload.get("slow_factor", 0.0))
 	var slow_duration := float(payload.get("slow_duration", 0.0))
+	var magic := bool(payload.get("magic", false))
+	var targets_ground := bool(payload.get("targets_ground", true))
+	var targets_air := bool(payload.get("targets_air", true))
 
 	var victims: Array = []
 	if splash_radius > 0.0:
 		var radius_squared := splash_radius * splash_radius
 		for candidate in candidates:
 			if candidate is RouteRunner and candidate.health > 0 and not candidate.is_queued_for_deletion():
+				# Splash hits what the tower can hurt: ground splash never reaches
+				# flyers, but it does catch invisible creeps (as in WC3).
+				if candidate.is_air and not targets_air or not candidate.is_air and not targets_ground:
+					continue
 				if impact_position.distance_squared_to(candidate.plane_position) <= radius_squared:
 					victims.append(candidate)
 	elif target != null and is_instance_valid(target) and target.health > 0:
 		victims.append(target)
 
 	for victim: RouteRunner in victims:
+		if magic and victim.magic_immune:
+			hits.append({"creep": victim, "damage": 0, "slowed": false, "killed": false})
+			continue
 		var applied := victim.take_damage(damage, armor_pierce)
 		var slowed := false
 		if victim.health > 0 and slow_factor > 0.0:

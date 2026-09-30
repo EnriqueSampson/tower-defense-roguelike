@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://b4as0yrmgdb4p" path="res://assets/models/creeps/gargoyle.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_creep")
+id = "gargoyle"
+display_name = "Frequent Flyer"
+role = "Air"
+description = "A gargoyle with elite status. Flies straight over your maze, so bring towers that can shoot up."
+color = Color(0.5, 0.52, 0.56, 1)
+visual_scene = ExtResource("2_model")
+radius = 6.0
+health = 16
+speed = 3.2
+armor = 0
+bounty = 6
+regen_per_second = 0.0
+slow_immune = false
+is_boss = false
+is_air = true
+magic_immune = false
+invisible = false
+tags = PackedStringArray("air")

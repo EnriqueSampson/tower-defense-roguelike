@@ -623,10 +623,12 @@ horizontal_alignment = 1
 layout_mode = 2
 theme_override_colors/font_color = Color(0.78, 0.86, 0.83, 1)
 theme_override_font_sizes/font_size = 14
-text = "BUILD      Pick a tower on the command card (bottom right, hotkeys Q W E), then left-click inside your position.
+text = "BUILDER    F1 selects and centres your builder. Right-click the ground to walk there (Shift queues). S stops.
+BUILD      Pick a tower on the command card (bottom right, hotkeys Q W E R), then left-click inside your position; Shift-click queues more.
+             The builder walks to the site and the tower rises over a few seconds. Gold is paid when construction starts.
              The preview turns green when valid, orange if it would seal a route, purple outside your position, yellow if unaffordable.
-SELECT     Left-click a tower: Q upgrades, A S D F set its target (first / last / strongest / nearest), C sells, V or Esc cancels.
-PAN        Arrow keys, right-drag, the screen edge, or click and drag on the minimap (bottom left).
+SELECT     Left-click a tower: Q upgrades, A S D F set its target (first / last / strongest / nearest), C sells or cancels construction, V or Esc deselects.
+PAN        Arrow keys, middle-drag, the screen edge, or click and drag on the minimap (bottom left).
 ZOOM       Mouse wheel.
 MENU       F10 opens the menu.
 GOAL       Creeps leaving Positions 1-8 relay into Position 9. Only creeps crossing the final gate cost shared lives.

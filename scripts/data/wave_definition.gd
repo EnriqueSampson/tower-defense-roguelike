@@ -9,6 +9,9 @@ extends Resource
 @export var is_boss_wave := false
 ## Waves whose clear triggers a run-upgrade offer.
 @export var offers_upgrade_after := false
+## Seconds of build time before this level (0 = BalanceConfig.BUILD_DURATION).
+## Boss levels get longer to prepare. Wave 1 always waits for ready-up.
+@export_range(0.0, 120.0, 1.0) var build_seconds := 0.0
 
 
 func is_valid() -> bool:
@@ -40,7 +43,7 @@ func creep_count_for_lane(lane_id: int, player_scale := 1.0) -> int:
 
 
 ## Ordered, deterministic spawn queue for one position. Each entry:
-## {creep_id, health_multiplier, delay} where delay is seconds after the
+## {creep_id, health_multiplier, bounty_multiplier, delay} where delay is seconds after the
 ## previous entry.
 func build_spawn_queue(lane_id: int, player_scale := 1.0) -> Array[Dictionary]:
 	var queue: Array[Dictionary] = []
@@ -56,6 +59,7 @@ func build_spawn_queue(lane_id: int, player_scale := 1.0) -> Array[Dictionary]:
 			queue.append({
 				"creep_id": group.creep.id,
 				"health_multiplier": group.health_multiplier,
+				"bounty_multiplier": group.bounty_multiplier,
 				"delay": delay,
 			})
 	return queue

@@ -3,29 +3,32 @@
 [ext_resource type="Script" path="res://scripts/data/wave_definition.gd" id="1_wave"]
 [ext_resource type="Script" path="res://scripts/data/wave_spawn_group.gd" id="2_group"]
 [ext_resource type="Resource" path="res://resources/creeps/grunt.tres" id="creep_grunt"]
-[ext_resource type="Resource" path="res://resources/creeps/runner.tres" id="creep_runner"]
+[ext_resource type="Resource" path="res://resources/creeps/regional_manager.tres" id="creep_regional_manager"]
 
 [sub_resource type="Resource" id="group_1"]
 script = ExtResource("2_group")
 creep = ExtResource("creep_grunt")
-count = 8
-spawn_interval = 0.6
-health_multiplier = 2.0
+count = 6
+spawn_interval = 0.7
+health_multiplier = 1.94
+bounty_multiplier = 1.26
 delay_before = 0.0
 
 [sub_resource type="Resource" id="group_2"]
 script = ExtResource("2_group")
-creep = ExtResource("creep_runner")
-count = 6
-spawn_interval = 0.4
-health_multiplier = 1.5
-delay_before = 1.0
+creep = ExtResource("creep_regional_manager")
+count = 1
+spawn_interval = 1.0
+health_multiplier = 1.13
+bounty_multiplier = 1.0
+delay_before = 4.0
 
 [resource]
 script = ExtResource("1_wave")
 id = "wave_05"
 number = 5
-title = "Mixed Push"
+title = "The Regional Manager"
 spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1"), SubResource("group_2")])
-is_boss_wave = false
+is_boss_wave = true
 offers_upgrade_after = false
+build_seconds = 35.0

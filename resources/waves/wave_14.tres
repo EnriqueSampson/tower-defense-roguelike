@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="WaveDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/wave_definition.gd" id="1_wave"]
+[ext_resource type="Script" path="res://scripts/data/wave_spawn_group.gd" id="2_group"]
+[ext_resource type="Resource" path="res://resources/creeps/gargoyle.tres" id="creep_gargoyle"]
+
+[sub_resource type="Resource" id="group_1"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_gargoyle")
+count = 12
+spawn_interval = 0.7
+health_multiplier = 8.6
+bounty_multiplier = 2.13
+delay_before = 0.0
+
+[resource]
+script = ExtResource("1_wave")
+id = "wave_14"
+number = 14
+title = "Layover"
+spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1")])
+is_boss_wave = false
+offers_upgrade_after = false
+build_seconds = 0.0

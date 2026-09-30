@@ -7,13 +7,15 @@ signal damaged(creep_id: int, amount: int)
 
 const STAGE_PROGRESS_WEIGHT := 1000000.0
 const SLOW_TINT := Color(0.62, 0.85, 1.0)
+## Air creeps fly this high (units) above the ground; their blob shadow stays down.
+const FLY_HEIGHT := 1.4
 
 ## Simulation position in sim pixels; the 3D transform is derived from it.
 var plane_position: Vector2:
 	get:
 		return MapProjection.to_plane(position)
 	set(value):
-		position = MapProjection.to_3d(value)
+		position = MapProjection.to_3d(value, _fly_height)
 
 var creep_id := 0
 var lane_id := 0
@@ -24,6 +26,11 @@ var armor := 0
 var regen_per_second := 0.0
 var slow_immune := false
 var is_boss := false
+var is_air := false
+var magic_immune := false
+var invisible := false
+## Set every frame by WintermaulMap from detector towers (every peer).
+var detected := false
 var radius := 6.0
 var body_color := Color.WHITE
 var lane_color := Color.WHITE
@@ -51,6 +58,7 @@ var _visual_scene: PackedScene
 var _model: Node3D
 var _model_height := 0.0
 var _selection_circle: MeshInstance3D
+var _fly_height := 0.0
 
 
 func _ready() -> void:
@@ -82,15 +90,23 @@ func setup(
 	regen_per_second = float(options.get("regen_per_second", 0.0))
 	slow_immune = bool(options.get("slow_immune", false))
 	is_boss = bool(options.get("is_boss", false))
+	is_air = bool(options.get("is_air", false))
+	magic_immune = bool(options.get("magic_immune", false))
+	invisible = bool(options.get("invisible", false))
+	_fly_height = FLY_HEIGHT if is_air else 0.0
 	radius = float(options.get("radius", 6.0))
 	speed_multiplier = float(options.get("speed_multiplier", 1.0))
 	_visual_scene = options.get("visual_scene") as PackedScene
 	_map = path_map
 	_path_revision = _map.get_grid_revision()
-	plane_position = _map.grid_to_world(start_cell)
-	_load_current_stage(start_cell)
+	# Split children start where their parent fell, on the parent's stage.
+	plane_position = options.get("start_position", _map.grid_to_world(start_cell))
+	_stage_index = clampi(int(options.get("start_stage", 0)), 0, maxi(0, _stage_targets.size() - 1))
+	_distance_travelled = float(options.get("start_distance", 0.0))
+	_load_current_stage(_map.world_to_grid(plane_position))
 	_visual_state = -1
 	_refresh_visual()
+	set_detected(false)
 
 
 ## Applies damage after armor. Returns the health actually removed.
@@ -125,6 +141,16 @@ func apply_slow(factor: float, duration: float) -> bool:
 func current_speed() -> float:
 	var slow := _slow_factor if _slow_remaining > 0.0 else 0.0
 	return _speed_pixels * speed_multiplier * (1.0 - slow)
+
+
+## Invisible and not revealed by any detector: untargetable and unseen.
+func is_hidden() -> bool:
+	return invisible and not detected
+
+
+func set_detected(value: bool) -> void:
+	detected = value
+	visible = not is_hidden()
 
 
 func is_slowed() -> bool:
@@ -222,7 +248,7 @@ func _is_authority() -> bool:
 
 
 func _repath_if_needed() -> void:
-	if not is_instance_valid(_map) or _path_revision == _map.get_grid_revision():
+	if is_air or not is_instance_valid(_map) or _path_revision == _map.get_grid_revision():
 		return
 	var path := _map.get_world_path(_map.world_to_grid(plane_position), get_current_target())
 	if path.is_empty():
@@ -247,6 +273,11 @@ func _advance_stage() -> void:
 
 
 func _load_current_stage(from_cell: Vector2i) -> void:
+	if is_air:
+		# Flyers ignore the maze: straight to the next checkpoint.
+		_points = PackedVector2Array([plane_position, _map.grid_to_world(get_current_target())])
+		_segment_index = 0
+		return
 	_points = _map.get_world_path(from_cell, get_current_target())
 	_segment_index = 0
 	_path_revision = _map.get_grid_revision()
@@ -291,8 +322,8 @@ func set_selected(value: bool) -> void:
 ## Height above the ground where the health bar should be anchored.
 func get_visual_height() -> float:
 	if _model != null:
-		return _model_height + MapProjection.units(4.0)
-	return MapProjection.units(radius * 2.0 + (6.0 if is_boss else 2.0))
+		return _fly_height + _model_height + MapProjection.units(4.0)
+	return _fly_height + MapProjection.units(radius * 2.0 + (6.0 if is_boss else 2.0))
 
 
 ## Models face +Z; yaw toward the sim-space movement direction.
@@ -311,7 +342,7 @@ func _refresh_visual() -> void:
 		# draw call (model creeps lost the procedural lane band).
 		var tint := lane_color.darkened(0.35)
 		_shadow.material_override = MeshPalette.disc_material(Color(tint.r, tint.g, tint.b, 0.6))
-		_shadow.position.y = 0.01
+		_shadow.position.y = 0.01 - _fly_height
 		add_child(_shadow)
 		var shadow_radius := MapProjection.units(radius * 1.3)
 		_shadow.scale = Vector3(shadow_radius, 1.0, shadow_radius)
@@ -330,7 +361,7 @@ func _refresh_visual() -> void:
 	if _body == null:
 		_body = MeshInstance3D.new()
 		add_child(_body)
-	var key := "creep:%s:%s:%s:%s:%s" % [definition_id, body_color.to_html(false), lane_color.to_html(false), armor > 0, is_boss]
+	var key := "creep:%s:%s:%s:%s:%s:%s" % [definition_id, body_color.to_html(false), lane_color.to_html(false), armor > 0, is_boss, is_air]
 	if _body.mesh == null or _body.mesh.resource_name != key:
 		_body.mesh = _body_mesh(key)
 	var state := (1 if is_slowed() else 0) + (2 if _flash_remaining > 0.0 else 0)
@@ -374,6 +405,8 @@ func _body_mesh(key: String) -> ArrayMesh:
 		builder.add_cylinder(r * 1.35, r * 0.18, Vector3(0.0, r * 0.25, 0.0), Color("ffd36a"), 16)
 	if armor > 0:
 		builder.add_box(Vector3(r * 0.7, r * 0.5, r * 0.3), Vector3(0.0, r * 0.95, r * 0.95), Color(0.15, 0.17, 0.22))
+	if is_air:
+		builder.add_box(Vector3(r * 3.2, r * 0.12, r * 0.9), Vector3(0.0, r * 1.1, 0.0), body_color.darkened(0.3))
 	mesh = builder.commit()
 	mesh.resource_name = key
 	return MeshBuilder.store(key, mesh)

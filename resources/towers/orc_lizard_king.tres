@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://icjwadsd36gj" path="res://assets/models/towers/orc_lizard_king.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "orc_lizard_king"
+display_name = "Big Lizard Energy"
+role = "Ultimate: armor breaker"
+description = "The lizard got promoted. The orc is now the lizard's rider, assistant and publicist. Pierces nearly all armor, hits air."
+primary_color = Color(0.2, 0.45, 0.3, 1)
+accent_color = Color(1.0, 0.8, 0.2, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 200
+damage = 95
+attack_range = 280.0
+attack_cooldown = 0.6
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 4
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 0.0
+default_targeting = 0
+tier = 4
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

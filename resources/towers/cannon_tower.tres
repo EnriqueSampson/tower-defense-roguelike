@@ -1,43 +1,18 @@
-[gd_resource type="Resource" script_class="TowerDefinition" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
-[ext_resource type="Script" path="res://scripts/data/tower_upgrade_tier.gd" id="2_tier"]
-[ext_resource type="PackedScene" uid="uid://cf6ixwql6nbmf" path="res://assets/models/towers/orc_junk_cannon.glb" id="model_glb"]
-
-[sub_resource type="Resource" id="tier_1"]
-script = ExtResource("2_tier")
-tier_name = "Mk II"
-cost = 70
-damage_multiplier = 1.5
-range_bonus = 10.0
-cooldown_multiplier = 0.95
-splash_radius_bonus = 10.0
-slow_factor_bonus = 0.0
-slow_duration_bonus = 0.0
-armor_pierce_bonus = 1
-
-[sub_resource type="Resource" id="tier_2"]
-script = ExtResource("2_tier")
-tier_name = "Mk III"
-cost = 130
-damage_multiplier = 1.6
-range_bonus = 13.0
-cooldown_multiplier = 0.92
-splash_radius_bonus = 14.0
-slow_factor_bonus = 0.0
-slow_duration_bonus = 0.0
-armor_pierce_bonus = 2
+[ext_resource type="PackedScene" uid="uid://cf6ixwql6nbmf" path="res://assets/models/towers/orc_junk_cannon.glb" id="2_model"]
 
 [resource]
 script = ExtResource("1_tower")
 id = "cannon"
-display_name = "Cannon Tower"
+display_name = "Junk Cannon"
 role = "Area damage"
-description = "Slow, heavy shells that splash nearby creeps. Excels against packed grunts and brutes."
+description = "Slow, heavy shells that splash packed creeps. Assembled from whatever was lying around. Cannot hit air."
 primary_color = Color(0.36, 0.3, 0.24, 1)
 accent_color = Color(0.94, 0.53, 0.29, 1)
 footprint = Vector2i(2, 2)
-visual_scene = ExtResource("model_glb")
+visual_scene = ExtResource("2_model")
 cost = 45
 damage = 12
 attack_range = 196.0
@@ -47,6 +22,11 @@ splash_radius = 42.0
 slow_factor = 0.0
 slow_duration = 0.0
 armor_pierce = 1
+can_target_ground = true
+can_target_air = false
+is_magic = false
+detection_range = 0.0
 default_targeting = 2
-upgrade_tiers = Array[ExtResource("2_tier")]([SubResource("tier_1"), SubResource("tier_2")])
+tier = 1
+upgrade_options = PackedStringArray("orc_mortar")
 sell_refund_percent = 70

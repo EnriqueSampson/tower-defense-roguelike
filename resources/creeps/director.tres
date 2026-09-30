@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://c6d07jbnicxkv" path="res://assets/models/creeps/director.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_creep")
+id = "director"
+display_name = "Director"
+role = "Split"
+description = "One board member, briefcase in hand, walking off with a bonus."
+color = Color(0.12, 0.12, 0.16, 1)
+visual_scene = ExtResource("2_model")
+radius = 8.0
+health = 900
+speed = 2.6
+armor = 3
+bounty = 60
+regen_per_second = 0.0
+slow_immune = false
+is_boss = false
+is_air = false
+magic_immune = false
+invisible = false
+tags = PackedStringArray("ground", "armored", "split")

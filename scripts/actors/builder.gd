@@ -3,9 +3,11 @@ extends Node3D
 
 ## Presentation of a player's builder. The host drives it straight from
 ## BuilderSystem every frame; clients walk it toward the replicated target at
-## builder speed and snap when drift grows past SNAP_DISTANCE.
+## builder speed, glide onto the host position once it stops, and snap when
+## drift grows past SNAP_DISTANCE.
 
-const MODEL_SCENE := preload("res://assets/models/builders/human_peasant.glb")
+## Used until the owner's race is known (and for races without a model).
+const DEFAULT_MODEL := preload("res://assets/models/builders/human_peasant.glb")
 const SNAP_DISTANCE := WintermaulMap.TILE_SIZE * 1.5
 const SELECTION_COLOR := Color("5ce36b")
 
@@ -22,16 +24,36 @@ var plane_position: Vector2:
 		position = MapProjection.to_3d(value)
 
 var _model: Node3D
+var _model_scene: PackedScene
 var _animation := &""
 var _authoritative := false
 var _selection_circle: MeshInstance3D
 
 
 func _ready() -> void:
-	_model = ActorModel.instantiate(MODEL_SCENE)
+	if _model == null:
+		var scene := _model_scene
+		_model_scene = null
+		set_model_scene(scene)
+
+
+## Swaps to the owner's race builder model (null keeps the default).
+func set_model_scene(scene: PackedScene) -> void:
+	var wanted := scene if scene != null else DEFAULT_MODEL
+	if wanted == _model_scene:
+		return
+	_model_scene = wanted
+	if not is_inside_tree():
+		return
+	var yaw := _model.rotation.y if _model != null else 0.0
+	if _model != null:
+		_model.queue_free()
+	_model = ActorModel.instantiate(wanted)
 	if _model != null:
 		add_child(_model)
-	_play(&"idle")
+		_model.rotation.y = yaw
+	_animation = &""
+	_refresh_animation()
 
 
 ## Applies a BuilderSystem record. `authoritative` (host) places it exactly.
@@ -44,6 +66,10 @@ func apply_record(record: Dictionary, authoritative: bool) -> void:
 	if authoritative or plane_position.distance_to(authoritative_position) > SNAP_DISTANCE:
 		_face(authoritative_position - plane_position)
 		plane_position = authoritative_position
+	elif state != BuilderSystem.State.MOVING:
+		# Extrapolation overshoots a build site (the host stops within reach of
+		# it), so a stopped builder settles onto the host's position.
+		target = authoritative_position
 	if state != previous_state or _animation == &"":
 		_refresh_animation()
 
@@ -70,11 +96,12 @@ func set_selected(value: bool) -> void:
 
 
 func _process(delta: float) -> void:
-	if _authoritative or state != BuilderSystem.State.MOVING:
+	if _authoritative or plane_position.is_equal_approx(target):
 		return
 	var before := plane_position
 	plane_position = before.move_toward(target, speed_pixels * delta)
-	_face(plane_position - before)
+	if state == BuilderSystem.State.MOVING:
+		_face(plane_position - before)
 
 
 func _refresh_animation() -> void:

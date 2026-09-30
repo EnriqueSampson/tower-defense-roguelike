@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://bj5jgdcfbu24n" path="res://assets/models/creeps/overtime_wyrm.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_creep")
+id = "overtime_wyrm"
+display_name = "Wyrm of Unpaid Overtime"
+role = "Air boss"
+description = "A dragon that has not clocked out since the last patch. Flies straight for the gate."
+color = Color(0.35, 0.2, 0.5, 1)
+visual_scene = ExtResource("2_model")
+radius = 13.0
+health = 1400
+speed = 2.2
+armor = 2
+bounty = 180
+regen_per_second = 0.0
+slow_immune = false
+is_boss = true
+is_air = true
+magic_immune = false
+invisible = false
+tags = PackedStringArray("air", "boss")

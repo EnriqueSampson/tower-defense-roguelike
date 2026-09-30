@@ -46,6 +46,9 @@ func _initialize() -> void:
 
 
 func _run_tests() -> void:
+	# The host's race comes from this machine's saved preference; pin the
+	# default race so results never depend on local settings.
+	root.get_node("SteamSession").set("local_race", "")
 	# Lobby and session
 	_test_compatible_lobby()
 	_test_full_lobby_rejected()
@@ -61,14 +64,14 @@ func _run_tests() -> void:
 	_test_wave_lane_counts()
 	_test_wave_spawn_groups()
 	_test_balance_player_scale()
-	_test_tower_definition_tiers()
+	_test_upgrade_trees_and_races()
 	# Run state
 	_test_run_phase_transitions()
 	_test_build_phase_policy()
 	_test_leak_resolves_once()
 	_test_team_economy()
 	_test_snapshot_round_trip()
-	_test_ten_wave_victory_and_defeat_model()
+	_test_full_run_victory_and_defeat_model()
 	# Ownership and authority
 	_test_build_permission_policy()
 	_test_unauthorized_client_build_rejected()
@@ -96,8 +99,18 @@ func _run_tests() -> void:
 	_test_mid_wave_tower_placement()
 	_test_blocked_placement_preserves_gold()
 	_test_upgrade_and_sell_economy()
+	# Special creeps
+	_test_air_creeps()
+	_test_magic_immunity()
+	_test_invisible_creeps_and_detection()
+	_test_splitters()
+	_test_level_pacing()
+	_test_starting_gold_scales_with_players()
 	# Builder
 	_test_builder_orders_and_construction()
+	_test_builder_stop_and_trip()
+	_test_races_gate_building_and_offers()
+	_test_builder_reconciliation()
 	# Roguelike layer
 	_test_run_modifiers()
 	_test_upgrade_offer_rules_and_determinism()
@@ -219,11 +232,15 @@ func _test_classic_layout_coordinates() -> void:
 
 func _test_content_catalog_validation() -> void:
 	_check(Catalog.validate().is_empty(), "shipped content catalog validates with unique ids")
-	_check(Catalog.towers.size() == 3, "catalog ships three base towers")
-	_check(Catalog.waves.size() == 10, "catalog ships a ten-wave run")
-	_check(Catalog.upgrades.size() >= 12 and Catalog.upgrades.size() <= 18, "catalog ships 12-18 run upgrades")
+	_check(Catalog.towers.size() >= 32, "catalog ships 8+ towers for each of four races")
+	_check(Catalog.waves.size() >= 30, "catalog ships a classic run of 30+ levels")
+	_check(Catalog.upgrades.size() >= 12 and Catalog.upgrades.size() <= 24, "catalog ships 12-24 run upgrades")
 	_check(Catalog.creeps().size() >= 4, "catalog references at least four creep roles")
-	_check(Catalog.waves[9].has_boss() and Catalog.waves[9].is_boss_wave, "wave ten is the boss wave")
+	var bosses_every_five := true
+	for wave in Catalog.waves:
+		bosses_every_five = bosses_every_five and (wave.number % 5 == 0) == wave.has_boss() and wave.has_boss() == wave.is_boss_wave
+	_check(bosses_every_five, "every fifth level, and only those, is a boss level")
+	_check(Catalog.waves[-1].has_boss(), "the run ends on a boss")
 	var roles: Dictionary = {}
 	for creep in Catalog.creeps():
 		roles[creep.role] = true
@@ -295,15 +312,54 @@ func _test_balance_player_scale() -> void:
 	_check(BalanceConfig.build_duration_for_wave(0) > BalanceConfig.build_duration_for_wave(3), "first build phase is longer for initial mazing")
 
 
-func _test_tower_definition_tiers() -> void:
-	_check(Bolt.max_tier() == 2 and Cannon.max_tier() == 2 and Frost.max_tier() == 2, "every tower has two upgrade tiers")
-	_check(Bolt.upgrade_cost(0) == 40 and Bolt.upgrade_cost(2) == -1, "upgrade cost is reported per tier and ends at max tier")
-	_check(Bolt.total_invested(2) == 25 + 40 + 80, "total investment sums base and tier costs")
-	_check(Bolt.sell_value(0) == 17 and Bolt.sell_value(2, 30) == 145, "sell value applies the refund percentage and bonuses")
-	var base := Bolt.stats_for_tier(0)
-	var top := Bolt.stats_for_tier(2)
-	_check(top["damage"] > base["damage"] and top["range"] > base["range"] and top["cooldown"] < base["cooldown"], "higher tiers improve damage, range, and cooldown")
-	_check(Cannon.stats_for_tier(0)["splash_radius"] > 0.0 and Frost.stats_for_tier(0)["slow_factor"] > 0.0, "cannon splashes and frost slows by definition")
+func _test_upgrade_trees_and_races() -> void:
+	_check(Catalog.races.size() == 4, "the catalog ships four builder races")
+	var race_ids: Array = []
+	for race in Catalog.races:
+		race_ids.append(race.id)
+	_check(race_ids == ["humans", "orcs", "elves", "bugs"], "races are Humans, Orcs, Elves and Bugs, Humans first (the default)")
+	_check(Catalog.race_of_tower("bolt") == "humans" and Catalog.race_of_tower("sentry") == "humans" and Catalog.race_of_tower("cannon") == "orcs" and Catalog.race_of_tower("frost") == "elves", "the original towers are folded into races")
+	var every_tower_owned := true
+	for tower in Catalog.towers:
+		every_tower_owned = every_tower_owned and not Catalog.race_of_tower(tower.id).is_empty()
+	_check(every_tower_owned, "every tower belongs to a race")
+	for race in Catalog.races:
+		var towers := Catalog.race_towers(race)
+		var detects := false
+		var branches := false
+		for tower in towers:
+			detects = detects or tower.detection_range > 0.0
+			branches = branches or tower.upgrade_options.size() > 1
+		_check(towers.size() >= 8 and detects, "%s have 8+ towers and a detector" % race.display_name)
+		_check(race.towers.size() <= 10, "%s' builder roster fits the build card" % race.display_name)
+	_check(Bolt.upgrade_options.size() == 2 and Catalog.get_tower("orc_mortar").upgrade_options.size() == 2, "upgrade trees branch, as in Wintermaul")
+	var crossbow := Catalog.get_tower("human_crossbow")
+	_check(crossbow.tier == Bolt.tier + 1 and Catalog.line_of("human_streamer") == "bolt", "upgrades sit one tier up and belong to their root's line")
+	_check(Bolt.sell_value(25) == 17 and Bolt.sell_value(145, 30) == 145, "sell value applies the refund percentage and bonuses to the investment")
+	var base := Bolt.stats()
+	var top := Catalog.get_tower("human_musket").stats()
+	_check(top["damage"] > base["damage"] and top["range"] > base["range"], "deeper towers hit harder and reach further")
+	_check(Cannon.stats()["splash_radius"] > 0.0 and Frost.stats()["slow_factor"] > 0.0, "cannon splashes and frost slows by definition")
+	var bug_splash: Array[String] = []
+	var cheapest := 1 << 30
+	for tower in Catalog.race_towers(Catalog.get_race("bugs")):
+		if tower.splash_radius > 0.0:
+			bug_splash.append(tower.id)
+		if tower.tier == 1:
+			cheapest = mini(cheapest, tower.cost)
+	_check(bug_splash == ["bug_queen"], "Bugs have no splash except the Hive Queen ultimate")
+	_check(cheapest <= 5 and cheapest < Bolt.cost, "Bugs build the cheapest maze towers")
+	var looped := ContentCatalog.new()
+	var a := TowerDefinition.new()
+	a.id = "a"
+	a.upgrade_options = ["missing"]
+	var race := RaceDefinition.new()
+	race.id = "r"
+	race.towers = [a]
+	looped.towers = [a]
+	looped.races = [race]
+	var problems := looped.validate()
+	_check(problems.any(func(p: String) -> bool: return "unknown tower" in p) and problems.any(func(p: String) -> bool: return "detect" in p), "validation rejects unknown upgrade targets and races without detection")
 	_check(Bolt.default_targeting == TowerTargeting.Mode.FIRST and Cannon.default_targeting == TowerTargeting.Mode.STRONGEST, "towers carry default targeting modes")
 
 
@@ -374,7 +430,7 @@ func _test_snapshot_round_trip() -> void:
 	state.position_owners[2] = 7
 	state.add_tower("bolt", P1_OPEN, 0, TowerTargeting.Mode.LAST)
 	state.add_tower("frost", P2_OPEN, 1, TowerTargeting.Mode.FIRST)
-	state.upgrade_tower(1)
+	state.upgrade_tower(1, "human_crossbow", 45)
 	state.apply_upgrade("bolt_damage")
 	state.pending_offer = ["war_chest", "extra_lives"]
 	state.elapsed_seconds = 42.5
@@ -383,14 +439,14 @@ func _test_snapshot_round_trip() -> void:
 	var restored := RunStateModel.new()
 	restored.restore(snapshot)
 	_check(restored.run_seed == 987654 and restored.position_owners == state.position_owners, "snapshot restores seed and position owners")
-	_check(restored.towers.size() == 2 and restored.get_tower(1)["tier"] == 1 and restored.get_tower(2)["definition_id"] == "frost", "snapshot restores tower records by stable id")
+	_check(restored.towers.size() == 2 and restored.get_tower(1)["definition_id"] == "human_crossbow" and int(restored.get_tower(1)["invested"]) == 45 and restored.get_tower(2)["definition_id"] == "frost", "snapshot restores tower records by stable id")
 	_check(restored.applied_upgrades == ["bolt_damage"] and restored.pending_offer == ["war_chest", "extra_lives"], "snapshot restores applied upgrades and pending offer")
 	_check(restored.team_gold == 90 and is_equal_approx(restored.elapsed_seconds, 42.5) and restored.stats["towers_built"] == 2, "snapshot restores economy, timer, and stats")
 	_check(restored.snapshot(12.0) == snapshot, "snapshot serialization is stable across a round trip")
 	_check(restored.allocate_tower_id() == 3, "snapshot restores id allocation so new ids never collide")
 
 
-func _test_ten_wave_victory_and_defeat_model() -> void:
+func _test_full_run_victory_and_defeat_model() -> void:
 	var state := RunStateModel.new(Catalog.waves.size(), BalanceConfig.STARTING_LIVES, BalanceConfig.STARTING_GOLD)
 	var creep_id := 1
 	var boss_seen := false
@@ -408,7 +464,7 @@ func _test_ten_wave_victory_and_defeat_model() -> void:
 				creep_id += 1
 		_check(state.is_wave_clear(), "wave %s clears when every queued creep resolves" % wave.number)
 		state.advance_after_clear()
-	_check(state.phase == RunStateModel.Phase.VICTORY and boss_seen, "ten cleared waves including the boss end in victory")
+	_check(state.phase == RunStateModel.Phase.VICTORY and boss_seen, "every cleared level including the bosses ends in victory")
 
 	var doomed := RunStateModel.new(Catalog.waves.size(), 3, BalanceConfig.STARTING_GOLD)
 	doomed.begin_wave(PackedInt32Array([3, 0, 0, 0, 0, 0, 0, 0, 0]))
@@ -457,7 +513,7 @@ func _test_unauthorized_client_build_rejected() -> void:
 	_check(game.call("_try_place_tower", "ghost_tower", P1_OPEN_B, 1) == WintermaulMap.Placement.NO_TOWER_SELECTED, "unknown tower ids are rejected")
 	_check(game.call("_try_place_tower", "bolt", Vector2i(-5, 400), 1) == WintermaulMap.Placement.OUT_OF_BOUNDS, "malformed cells are rejected")
 	var tower_id: int = state.tower_records()[0]["id"]
-	_check(not game.call("_try_upgrade_tower", tower_id, 3) and not game.call("_try_sell_tower", tower_id, 3), "clients cannot upgrade or sell towers they do not control")
+	_check(not game.call("_try_upgrade_tower", tower_id, "human_crossbow", 3) and not game.call("_try_sell_tower", tower_id, 3), "clients cannot upgrade or sell towers they do not control")
 	_check(not game.call("_try_set_targeting", tower_id, TowerTargeting.Mode.LAST, 3), "clients cannot retarget towers they do not control")
 	_check(game.call("_try_set_targeting", tower_id, TowerTargeting.Mode.LAST, 2) and state.get_tower(tower_id)["targeting"] == TowerTargeting.Mode.LAST, "owners can change target priority")
 	_check(not game.call("_try_set_targeting", tower_id, 99, 2), "invalid targeting modes are rejected")
@@ -918,12 +974,12 @@ func _test_splash_slow_and_armor() -> void:
 	primary.plane_position = center
 	nearby.plane_position = center + Vector2(20, 0)
 	distant.plane_position = center + Vector2(200, 0)
-	var cannon_stats := Cannon.stats_for_tier(0)
+	var cannon_stats := Cannon.stats()
 	var payload := {"damage": cannon_stats["damage"], "splash_radius": cannon_stats["splash_radius"], "armor_pierce": 0}
 	var hits := CombatResolver.resolve_impact(map.get_active_creeps(), payload, center, primary)
 	_check(hits.size() == 2 and primary.health == 30 - int(cannon_stats["damage"]) and nearby.health == primary.health and distant.health == 30, "splash damages every creep inside the radius and none outside")
 
-	var frost_stats := Frost.stats_for_tier(0)
+	var frost_stats := Frost.stats()
 	var slow_payload := {"damage": frost_stats["damage"], "splash_radius": 0.0, "slow_factor": frost_stats["slow_factor"], "slow_duration": frost_stats["slow_duration"]}
 	var base_speed := distant.current_speed()
 	CombatResolver.resolve_impact(map.get_active_creeps(), slow_payload, distant.plane_position, distant)
@@ -1030,24 +1086,162 @@ func _test_upgrade_and_sell_economy() -> void:
 	_check(game.call("_try_place_tower", "bolt", P1_OPEN) == WintermaulMap.Placement.OK, "bolt tower is placed for the economy test")
 	var tower_id: int = state.tower_records()[0]["id"]
 	var gold_after_build := state.team_gold
-	_check(game.call("_try_upgrade_tower", tower_id), "owner upgrades a tower to tier one")
-	_check(state.team_gold == gold_after_build - Bolt.upgrade_cost(0) and state.get_tower(tower_id)["tier"] == 0 and map.get_tower(tower_id).is_upgrading(), "upgrades charge up front and keep the old tier while in progress")
-	_check(not game.call("_try_upgrade_tower", tower_id), "a tower cannot start a second upgrade mid-upgrade")
+	var knight := Catalog.get_tower("human_knight")
+	var crossbow := Catalog.get_tower("human_crossbow")
+	var musket := Catalog.get_tower("human_musket")
+	_check(not game.call("_try_upgrade_tower", tower_id, "human_musket"), "a tower cannot skip to a tower outside its options")
+	_check(game.call("_try_upgrade_tower", tower_id, "human_crossbow"), "owner picks one branch of the upgrade tree")
+	_check(state.team_gold == gold_after_build - crossbow.cost and state.get_tower(tower_id)["definition_id"] == "bolt" and map.get_tower(tower_id).is_upgrading(), "upgrades charge the target's cost up front and keep the old tower while in progress")
+	_check(not game.call("_try_upgrade_tower", tower_id, "human_knight"), "a tower cannot start a second upgrade mid-upgrade")
 	game.call("_tick_construction", 60.0)
-	_check(state.get_tower(tower_id)["tier"] == 1 and not map.get_tower(tower_id).is_upgrading(), "the upgrade completes after its build time and records the tier")
-	_check(map.get_tower(tower_id).tier == 1 and map.get_tower(tower_id).damage() == Bolt.stats_for_tier(1)["damage"], "upgraded tower visual adopts the new tier stats")
-	_check(game.call("_try_upgrade_tower", tower_id), "owner upgrades a tower to tier two")
+	_check(state.get_tower(tower_id)["definition_id"] == "human_crossbow" and not map.get_tower(tower_id).is_upgrading(), "the upgrade completes into the chosen tower")
+	_check(map.get_tower(tower_id).definition == crossbow and map.get_tower(tower_id).damage() == crossbow.damage, "the tower node becomes the new tower with its stats")
+	_check(not game.call("_try_upgrade_tower", tower_id, "human_knight"), "the other branch closes once a branch is taken")
+	_check(game.call("_try_upgrade_tower", tower_id, "human_musket"), "owner upgrades further down the branch")
 	game.call("_tick_construction", 60.0)
-	_check(not game.call("_try_upgrade_tower", tower_id), "upgrading past the final tier is rejected")
+	var invested := Bolt.cost + crossbow.cost + musket.cost
+	_check(int(state.get_tower(tower_id)["invested"]) == invested and knight != null, "the record tracks every gold paid into the tower")
 	var gold_before_sell := state.team_gold
 	_check(game.call("_try_sell_tower", tower_id), "owner sells a tower")
-	_check(state.team_gold == gold_before_sell + Bolt.sell_value(2), "selling refunds the documented percentage of total investment")
-	_check(not game.call("_try_sell_tower", tower_id) and state.team_gold == gold_before_sell + Bolt.sell_value(2), "duplicate sell requests are ignored")
+	_check(state.team_gold == gold_before_sell + musket.sell_value(invested), "selling refunds the documented percentage of total investment")
+	_check(not game.call("_try_sell_tower", tower_id) and state.team_gold == gold_before_sell + musket.sell_value(invested), "duplicate sell requests are ignored")
 	_check(map.get_tower(tower_id) == null and map.can_place_tower(P1_OPEN), "sold towers leave the map and free their cell")
 	_check(state.stats["towers_built"] == 1 and state.stats["towers_upgraded"] == 2 and state.stats["towers_sold"] == 1, "run stats track builds, upgrades, and sells")
 	state.team_gold = 0
 	_check(game.call("_try_place_tower", "bolt", P1_OPEN_B) == WintermaulMap.Placement.UNAFFORDABLE, "unaffordable builds report the reason and spend nothing")
 	game.queue_free()
+
+
+# --- Special creeps -------------------------------------------------------------
+
+func _test_air_creeps() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	var gargoyle := Catalog.get_creep("gargoyle")
+	_check(gargoyle != null and gargoyle.is_air and "Air" in gargoyle.trait_summary(), "the catalog ships an air creep")
+	var flyer := map.spawn_creep(8101, 0, gargoyle)
+	var walker := map.spawn_creep(8102, 0, Grunt)
+	_check(flyer.position.y > 1.0 and is_zero_approx(walker.position.y), "air creeps fly above the ground")
+	var points: PackedVector2Array = flyer.get("_points")
+	_check(points.size() == 2 and points[1] == map.grid_to_world(flyer.get_current_target()), "air creeps fly straight to the next checkpoint")
+	var start := flyer.plane_position
+	walker.queue_free()
+	var cell := map.world_to_grid(start)
+	var anchor := cell - Vector2i(1, 1)
+	var result := map.evaluate_placement(anchor, Bolt.footprint)
+	_check(result != WintermaulMap.Placement.CREEP_ON_CELL, "air creeps never block building under them")
+	var cannon_stats := Cannon.stats()
+	_check(not cannon_stats["targets_air"] and Bolt.stats()["targets_air"], "Cannon is ground only; Bolt hits air")
+	flyer.plane_position = Vector2(400, 400)
+	_check(TowerTargeting.select([flyer], Vector2(400, 420), 100.0, TowerTargeting.Mode.FIRST, true, false) == null, "ground-only towers ignore flyers")
+	_check(TowerTargeting.select([flyer], Vector2(400, 420), 100.0, TowerTargeting.Mode.FIRST, true, true) == flyer, "towers that hit air target flyers")
+	var ground := map.spawn_creep(8103, 0, Grunt)
+	ground.plane_position = Vector2(410, 400)
+	var hits := CombatResolver.resolve_impact([flyer, ground], {"damage": 5, "splash_radius": 60.0, "targets_air": false}, Vector2(405, 400), ground)
+	_check(hits.size() == 1 and hits[0]["creep"] == ground, "ground splash never reaches flyers")
+	map.queue_free()
+
+
+func _test_magic_immunity() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	var golem := map.spawn_creep(8201, 0, Catalog.get_creep("golem"))
+	_check(golem.magic_immune and Frost.is_magic and Frost.stats()["magic"], "golems are magic immune and Frost is magic")
+	var before := golem.health
+	var frost_hit := CombatResolver.resolve_impact([golem], {"damage": 50, "magic": true, "slow_factor": 0.5, "slow_duration": 2.0}, golem.plane_position, golem)
+	_check(golem.health == before and not golem.is_slowed() and frost_hit[0]["damage"] == 0, "magic attacks neither damage nor slow magic-immune creeps")
+	_check(TowerTargeting.select([golem], golem.plane_position, 50.0, TowerTargeting.Mode.FIRST, true, true, true) == null, "magic towers do not waste shots on immune creeps")
+	CombatResolver.resolve_impact([golem], {"damage": 50}, golem.plane_position, golem)
+	_check(golem.health < before, "physical attacks still hurt magic-immune creeps")
+	map.queue_free()
+
+
+func _test_invisible_creeps_and_detection() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	var shade := map.spawn_creep(8301, 8, Catalog.get_creep("shade"))
+	shade.plane_position = map.grid_to_world(P9_OPEN + Vector2i(0, 6))
+	map.refresh_detection()
+	_check(shade.is_hidden() and not shade.visible, "invisible creeps are hidden without a detector")
+	_check(TowerTargeting.select([shade], shade.plane_position, 100.0, TowerTargeting.Mode.FIRST) == null, "towers cannot target undetected invisible creeps")
+	var bolt := map.spawn_tower(8310, P9_OPEN, Bolt)
+	map.refresh_detection()
+	_check(shade.is_hidden(), "ordinary towers do not detect")
+	var sentry := Catalog.get_tower("sentry")
+	_check(sentry != null and sentry.detection_range > 0.0, "the catalog ships a detection tower")
+	map.spawn_tower(8311, P9_OPEN + Vector2i(-4, 0), sentry)
+	map.refresh_detection()
+	_check(not shade.is_hidden() and shade.visible, "a detection tower reveals invisible creeps in range")
+	_check(TowerTargeting.select([shade], shade.plane_position, 100.0, TowerTargeting.Mode.FIRST) == shade, "revealed creeps can be targeted by any tower")
+	shade.plane_position = map.grid_to_world(P9_OPEN + Vector2i(0, 40))
+	map.refresh_detection()
+	_check(shade.is_hidden(), "leaving detection range hides the creep again")
+	var modifiers := RunModifiers.new(Catalog)
+	modifiers.apply(Catalog.get_upgrade("snitch_network"))
+	var bolt_stats := modifiers.modify_stats(Bolt.stats(), "bolt")
+	_check(is_equal_approx(bolt_stats["detection_range"], bolt_stats["range"]), "the Snitch Network upgrade gives every tower detection over its range")
+	bolt.apply_stats(Bolt, bolt.targeting, bolt_stats)
+	shade.plane_position = bolt.plane_position + Vector2(40, 0)
+	map.remove_tower(8311)
+	map.refresh_detection()
+	_check(not shade.is_hidden(), "towers with the detection upgrade reveal nearby invisible creeps")
+	map.queue_free()
+
+
+func _test_splitters() -> void:
+	var steam_session := root.get_node("SteamSession")
+	steam_session.set("is_solo_session", true)
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	var map := game.get_node(MAP_PATH) as WintermaulMap
+	var slime := Catalog.get_creep("slime")
+	_check(slime.splits() and Catalog.get_creep("slimelet") == slime.split_into, "the catalog indexes a splitter's children")
+	state.begin_wave(PackedInt32Array([1, 0, 0, 0, 0, 0, 0, 0, 0]))
+	game.call("_spawn_entry", 0, {"creep_id": "slime", "health_multiplier": 2.0, "bounty_multiplier": 1.5, "delay": 0.0})
+	var parent: RouteRunner = map.get_active_creeps()[0]
+	for step in range(40):
+		parent._process(0.1)
+	var fell_at := parent.plane_position
+	var stage := parent.get_stage_index()
+	var gold := state.team_gold
+	parent.take_damage(100000, 100)
+	var children := map.get_active_creeps()
+	_check(children.size() == slime.split_count and state.active_creeps.size() == slime.split_count, "a splitter's death spawns and registers its children")
+	var placed := true
+	for child: RouteRunner in children:
+		placed = placed and child.definition_id == "slimelet" and child.plane_position.distance_to(fell_at) < WintermaulMap.TILE_SIZE and child.get_stage_index() == stage
+		placed = placed and child.max_health == roundi(slime.split_into.health * 2.0)
+	_check(placed, "children appear where the parent fell, on its stage, with its health multiplier")
+	_check(state.team_gold == gold + roundi(slime.bounty * 1.5) and not state.is_wave_clear(), "the parent pays its bounty and the wave waits for the children")
+	for child: RouteRunner in children:
+		child.take_damage(100000, 100)
+	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 1 and state.team_gold == gold + roundi(slime.bounty * 1.5) + slime.split_count * roundi(slime.split_into.bounty * 1.5), "killing every child clears the level and pays scaled bounties")
+	var looped := CreepDefinition.new()
+	looped.id = "loop"
+	looped.split_into = looped
+	looped.split_count = 2
+	_check(not looped.is_valid(), "a creep cannot split into itself")
+	steam_session.set("is_solo_session", false)
+	game.queue_free()
+
+
+func _test_starting_gold_scales_with_players() -> void:
+	_check(BalanceConfig.starting_gold(1) == BalanceConfig.STARTING_GOLD, "solo starts with the base team gold")
+	_check(BalanceConfig.starting_gold(4) == BalanceConfig.STARTING_GOLD + 3 * BalanceConfig.STARTING_GOLD_PER_EXTRA_PLAYER, "each extra player adds starting gold")
+	_check(BalanceConfig.starting_gold(20) == BalanceConfig.starting_gold(ClassicWintermaulLayout.PLAYER_COUNT), "starting gold caps at a full lobby")
+
+
+func _test_level_pacing() -> void:
+	var boss_wave: WaveDefinition = Catalog.waves[4]
+	_check(boss_wave.has_boss() and BalanceConfig.build_duration_for_wave(4, boss_wave) > BalanceConfig.BUILD_DURATION, "boss levels give extra build time")
+	_check(is_equal_approx(BalanceConfig.build_duration_for_wave(1, Catalog.waves[1]), BalanceConfig.BUILD_DURATION), "ordinary levels use the default build time")
+	_check(is_equal_approx(BalanceConfig.build_duration_for_wave(0, Catalog.waves[0]), BalanceConfig.WAVE_ONE_READY_TIMEOUT), "level one still waits for ready-up")
+	var early: WaveDefinition = Catalog.waves[1]
+	var late: WaveDefinition = Catalog.waves[25]
+	_check(late.spawn_groups[0].health_multiplier > early.spawn_groups[0].health_multiplier * 10.0 and late.spawn_groups[0].bounty_multiplier > early.spawn_groups[0].bounty_multiplier, "creep health and bounty scale up across the run")
+	var queue := late.build_spawn_queue(0)
+	_check(is_equal_approx(float(queue[0]["bounty_multiplier"]), late.spawn_groups[0].bounty_multiplier), "spawn queues carry the bounty multiplier")
 
 
 # --- Builder --------------------------------------------------------------------
@@ -1084,21 +1278,24 @@ func _test_builder_orders_and_construction() -> void:
 	creep.plane_position = tower.plane_position + Vector2(20, 0)
 	tower._process(0.01)
 	_check(map.get_node("Projectiles").get_child_count() == 0, "towers under construction do not attack")
+	# The probe creep stands inside the footprint; left there, its segment would
+	# start in a blocked cell and every later placement would read BLOCKS_ROUTE.
+	map.remove_creep(7001)
 	game.call("_tick_construction", 10.0)
 	_check(not state.towers.values()[0].has("build_remaining") or float(state.towers.values()[0]["build_remaining"]) <= 0.0, "construction completes after its build time")
 	# Queued orders show as sites; a plain order replaces the queue.
-	_check(game.call("_try_order_build", 1, "cannon", P9_OPEN + Vector2i(4, 0), true) == WintermaulMap.Placement.OK and game.call("_try_order_build", 1, "frost", P9_OPEN + Vector2i(8, 0), true) == WintermaulMap.Placement.OK, "shift-queued build orders are accepted")
+	_check(game.call("_try_order_build", 1, "sentry", P9_OPEN + Vector2i(4, 0), true) == WintermaulMap.Placement.OK and game.call("_try_order_build", 1, "bolt", P9_OPEN + Vector2i(8, 0), true) == WintermaulMap.Placement.OK, "shift-queued build orders are accepted")
 	var records: Array = game.get("_builder_records")
 	_check((records[0]["sites"] as Array).size() == 2, "queued build sites are replicated for markers")
 	builders.stop(1)
 	# Cancelling construction refunds in full.
-	_check(game.call("_try_order_build", 1, "cannon", P9_OPEN + Vector2i(4, 0), false) == WintermaulMap.Placement.OK, "a second build order is accepted")
+	_check(game.call("_try_order_build", 1, "sentry", P9_OPEN + Vector2i(4, 0), false) == WintermaulMap.Placement.OK, "a second build order is accepted")
 	gold = state.team_gold
 	_run_builders(game, 5.0)
 	var building_id: int = state.tower_records()[-1]["id"]
-	_check(state.team_gold == gold - Cannon.cost and game.call("_try_sell_tower", building_id) and state.team_gold == gold, "cancelling construction refunds the full cost")
+	_check(state.team_gold == gold - Catalog.get_tower("sentry").cost and game.call("_try_sell_tower", building_id) and state.team_gold == gold, "cancelling construction refunds the full cost")
 	# A site taken while walking fails on arrival without charging.
-	_check(game.call("_try_order_build", 1, "frost", P9_OPEN + Vector2i(0, 4), false) == WintermaulMap.Placement.OK, "a third build order is accepted")
+	_check(game.call("_try_order_build", 1, "bolt", P9_OPEN + Vector2i(0, 4), false) == WintermaulMap.Placement.OK, "a third build order is accepted")
 	game.call("_try_place_tower", "bolt", P9_OPEN + Vector2i(0, 4))
 	gold = state.team_gold
 	_run_builders(game, 5.0)
@@ -1112,14 +1309,125 @@ func _test_builder_orders_and_construction() -> void:
 	game.queue_free()
 
 
+func _test_races_gate_building_and_offers() -> void:
+	var steam_session := root.get_node("SteamSession")
+	steam_session.set("is_solo_session", true)
+	var previous_race: String = steam_session.get("local_race")
+	steam_session.set("local_race", "bugs")
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	state.team_gold = 1000
+	_check(state.race_of(1) == "bugs", "the host builds with the race picked in the lobby")
+	_check(game.call("_try_order_build", 1, "bolt", P9_OPEN, false) == WintermaulMap.Placement.WRONG_RACE, "a builder cannot order another race's tower")
+	_check(game.call("_try_place_tower", "bug_soldier_ant", P9_OPEN, 1) == WintermaulMap.Placement.WRONG_RACE, "a builder cannot build an upgrade directly")
+	_check(game.call("_try_place_tower", "bug_ant", P9_OPEN, 1) == WintermaulMap.Placement.OK, "a builder builds its own race's towers")
+	var snapshot: Dictionary = game.call("_make_state_snapshot")
+	_check(snapshot["races"] == {1: "bugs"}, "state snapshots carry each peer's race")
+	var lines: PackedStringArray = game.call("_available_lines")
+	_check(lines.has("bug_ant") and not lines.has("bolt"), "offer pools only include tower lines the team can build")
+	var modifiers := RunModifiers.new(Catalog)
+	var offered := {}
+	for wave_index in range(40):
+		for upgrade_id in UpgradeOffer.roll(Catalog.upgrades, modifiers, 7, wave_index, BalanceConfig.OFFER_CHOICE_COUNT, lines):
+			offered[upgrade_id] = true
+	_check(not offered.has("bolt_damage") and not offered.has("cannon_splash") and offered.has("pheromone_trails"), "race-aware offers skip other races' tower upgrades")
+	state.peer_races[2] = "nonsense"
+	_check((game.call("_race_for", 2) as RaceDefinition).id == "humans", "unknown race picks fall back to the default race")
+	steam_session.set("local_race", previous_race)
+	steam_session.set("is_solo_session", false)
+	game.queue_free()
+
+
+func _test_builder_stop_and_trip() -> void:
+	var steam_session := root.get_node("SteamSession")
+	steam_session.set("is_solo_session", true)
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	var map := game.get_node(MAP_PATH) as WintermaulMap
+	var builders: BuilderSystem = game.get("builder_system")
+	state.team_gold = 1000
+	_check(is_equal_approx(builders.trip_chance, BalanceConfig.BUILDER_TRIP_CHANCE) and builders.trip_chance < 0.1, "builders trip only now and then")
+	# Stop clears queued orders; a peer without a builder cannot issue one.
+	game.call("_try_order_build", 1, "bolt", P9_OPEN, true)
+	game.call("_try_order_build", 1, "sentry", P9_OPEN + Vector2i(4, 0), true)
+	_check(game.call("_try_order_stop", 1) and builders.get_orders(1).is_empty(), "Stop clears the builder's queued orders")
+	_check(not game.call("_try_order_stop", 7), "peers without a builder cannot issue Stop")
+	_check(((game.get("_builder_records") as Array)[0]["sites"] as Array).is_empty(), "Stop clears the replicated build site markers")
+	_run_builders(game, 3.0)
+	_check(state.towers.is_empty() and state.team_gold == 1000, "stopped build orders never start construction or charge")
+	# Trip: forced on, a move that ends beside a building knocks the builder over.
+	game.call("_try_place_tower", "bolt", P9_OPEN)
+	var tower := map.get_tower(state.tower_records()[0]["id"])
+	builders.trip_chance = 1.0
+	var beside := tower.plane_position + Vector2(WintermaulMap.TILE_SIZE * 1.5, 0.0)
+	game.call("_try_order_move", 1, beside, false)
+	var guard := 0
+	while not builders.get_orders(1).is_empty() and guard < 200:
+		game.call("_tick_builders", 0.05)
+		guard += 1
+	_check(builders.state_of(1) == BuilderSystem.State.STUNNED and map.get_builder(1).state == BuilderSystem.State.STUNNED, "a builder stopping beside a building can trip over it")
+	var elsewhere := map.grid_to_world(P9_OPEN + Vector2i(-6, -10))
+	var before := builders.get_position(1)
+	game.call("_try_order_move", 1, elsewhere, false)
+	_check(builders.state_of(1) == BuilderSystem.State.MOVING, "a new order gets a tripped builder straight back up")
+	game.call("_tick_builders", 0.1)
+	_check(builders.get_position(1).distance_to(before) > 1.0, "tripping never delays the next order")
+	_run_builders(game, 4.0)
+	_check(builders.state_of(1) == BuilderSystem.State.IDLE, "moves that end away from buildings never trip")
+	builders.trip_chance = 0.0
+	game.call("_try_order_move", 1, beside, false)
+	_run_builders(game, 4.0)
+	_check(builders.state_of(1) == BuilderSystem.State.IDLE, "with no trip chance the builder never trips")
+	steam_session.set("is_solo_session", false)
+	game.queue_free()
+
+
+func _test_builder_reconciliation() -> void:
+	var map := WintermaulMapScene.instantiate() as WintermaulMap
+	root.add_child(map)
+	var speed := 100.0
+	var start := Vector2(400, 400)
+	var record := {"owner": 2, "x": start.x, "y": start.y, "tx": 600.0, "ty": 400.0, "state": BuilderSystem.State.MOVING, "sites": []}
+	map.reconcile_builders([record], speed, false)
+	var builder := map.get_builder(2)
+	_check(builder != null and builder.plane_position.is_equal_approx(start), "clients spawn missing builders at the replicated position")
+	builder._process(0.5)
+	_check(builder.plane_position.is_equal_approx(start + Vector2(50, 0)), "clients walk moving builders toward the replicated target")
+	var near := record.duplicate()
+	near["x"] = start.x + 40.0
+	map.reconcile_builders([near], speed, false)
+	_check(builder.plane_position.is_equal_approx(start + Vector2(50, 0)), "small drift keeps the client's smooth position")
+	var far := record.duplicate()
+	far["x"] = start.x + 200.0
+	map.reconcile_builders([far], speed, false)
+	_check(builder.plane_position.is_equal_approx(start + Vector2(200, 0)), "large drift snaps the client builder to the host position")
+	var idle := far.duplicate()
+	idle["state"] = BuilderSystem.State.IDLE
+	map.reconcile_builders([idle], speed, false)
+	builder._process(0.5)
+	_check(builder.plane_position.is_equal_approx(start + Vector2(200, 0)), "idle builders stay put on clients")
+	builder._process(0.5)
+	var stopped := idle.duplicate()
+	stopped["x"] = start.x + 190.0
+	stopped["tx"] = stopped["x"]
+	map.reconcile_builders([stopped], speed, false)
+	builder._process(0.5)
+	_check(builder.plane_position.is_equal_approx(start + Vector2(190, 0)), "a stopped client builder settles onto the host position instead of keeping small drift")
+	map.reconcile_builders([], speed, false)
+	_check(map.get_builder(2) == null, "builders missing from the host record are removed")
+	map.queue_free()
+
+
 # --- Roguelike layer ----------------------------------------------------------
 
 func _test_run_modifiers() -> void:
 	var modifiers := RunModifiers.new(Catalog)
 	_check(modifiers.apply(Catalog.get_upgrade("bolt_damage")), "run modifiers accept a new upgrade")
 	_check(not modifiers.apply(Catalog.get_upgrade("bolt_damage")), "run modifiers reject duplicate upgrades")
-	var bolt_stats := modifiers.modify_stats(Bolt.stats_for_tier(0), "bolt")
-	var cannon_stats := modifiers.modify_stats(Cannon.stats_for_tier(0), "cannon")
+	var bolt_stats := modifiers.modify_stats(Bolt.stats(), "bolt")
+	var cannon_stats := modifiers.modify_stats(Cannon.stats(), "cannon")
 	_check(bolt_stats["damage"] == roundi(Bolt.damage * 1.3) and cannon_stats["damage"] == Cannon.damage, "tower-specific upgrades only affect their tower")
 	_check(Bolt.damage == 5, "applying modifiers never mutates the tower resource")
 	modifiers.apply(Catalog.get_upgrade("glass_cannons"))
@@ -1131,8 +1439,8 @@ func _test_run_modifiers() -> void:
 	modifiers.apply(Catalog.get_upgrade("better_refunds"))
 	_check(modifiers.sell_refund_bonus() == 20, "refund bonuses accumulate")
 	modifiers.apply(Catalog.get_upgrade("p9_bastion"))
-	var p9_stats := modifiers.modify_stats(Cannon.stats_for_tier(0), "cannon", true)
-	var p1_stats := modifiers.modify_stats(Cannon.stats_for_tier(0), "cannon", false)
+	var p9_stats := modifiers.modify_stats(Cannon.stats(), "cannon", true)
+	var p1_stats := modifiers.modify_stats(Cannon.stats(), "cannon", false)
 	_check(p9_stats["damage"] > p1_stats["damage"], "final position bonuses only apply inside position nine")
 	var rebuilt := RunModifiers.new(Catalog)
 	rebuilt.rebuild(modifiers.applied_ids)
@@ -1174,7 +1482,7 @@ func _test_controller_wave_loop_with_offer() -> void:
 	var state: RunState = game.get("run_state")
 	var map := game.get_node(MAP_PATH) as WintermaulMap
 	var starting_lives := state.shared_lives
-	for wave_number in range(1, 3):
+	for wave_number in range(1, 4):
 		game.call("_begin_wave")
 		_check(state.phase == RunStateModel.Phase.WAVE and state.current_wave_index == wave_number - 1, "controller begins wave %d" % wave_number)
 		var guard := 0
@@ -1187,9 +1495,9 @@ func _test_controller_wave_loop_with_offer() -> void:
 				break
 		_check(state.active_creeps.is_empty() and state.shared_lives == starting_lives, "wave %d clears through kills without leaks" % wave_number)
 		game.call("_finish_creep_resolution")
-	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 2, "two cleared waves return to build for wave three")
+	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 3, "three cleared waves return to build for wave four")
 	_check(state.stats["kills"] > 0 and state.team_gold > BalanceConfig.STARTING_GOLD, "kills award team gold and count toward results")
-	_check(state.has_pending_offer() and state.pending_offer.size() == BalanceConfig.OFFER_CHOICE_COUNT, "clearing wave two offers a team upgrade")
+	_check(state.has_pending_offer() and state.pending_offer.size() == BalanceConfig.OFFER_CHOICE_COUNT, "clearing wave three offers a team upgrade")
 	var countdown_before: float = game.get("build_countdown")
 	game.call("_process", 1.0)
 	_check(is_equal_approx(game.get("build_countdown"), countdown_before), "the build countdown pauses while an offer is open")
@@ -1214,20 +1522,20 @@ func _test_tower_reconciliation() -> void:
 	var map := WintermaulMapScene.instantiate() as WintermaulMap
 	root.add_child(map)
 	var stats_lookup := func(record: Dictionary) -> Dictionary:
-		return Catalog.get_tower(record["definition_id"]).stats_for_tier(int(record["tier"]))
+		return Catalog.get_tower(record["definition_id"]).stats()
 	var records := [
-		{"id": 1, "definition_id": "bolt", "cell": P1_OPEN, "tier": 0, "position": 0, "targeting": 0},
-		{"id": 2, "definition_id": "frost", "cell": P2_OPEN, "tier": 0, "position": 1, "targeting": 0},
+		{"id": 1, "definition_id": "bolt", "cell": P1_OPEN, "position": 0, "targeting": 0, "invested": 25},
+		{"id": 2, "definition_id": "frost", "cell": P2_OPEN, "position": 1, "targeting": 0, "invested": 35},
 	]
 	var summary := map.reconcile_towers(records, Catalog.get_tower, stats_lookup)
 	_check(summary["added"] == 2 and map.get_tower_count() == 2, "reconciliation spawns missing towers from authoritative records")
-	records[0]["tier"] = 1
+	records[0]["definition_id"] = "human_crossbow"
 	records[0]["targeting"] = TowerTargeting.Mode.LAST
 	records.remove_at(1)
-	records.append({"id": 3, "definition_id": "cannon", "cell": P4_OPEN, "tier": 0, "position": 3, "targeting": 2})
+	records.append({"id": 3, "definition_id": "cannon", "cell": P4_OPEN, "position": 3, "targeting": 2, "invested": 45})
 	summary = map.reconcile_towers(records, Catalog.get_tower, stats_lookup)
 	_check(summary["updated"] == 1 and summary["removed"] == 1 and summary["added"] == 1, "reconciliation updates changed, removes missing, and adds new towers")
-	_check(map.get_tower(1).tier == 1 and map.get_tower(1).targeting == TowerTargeting.Mode.LAST, "reconciled towers adopt tier and targeting changes")
+	_check(map.get_tower(1).definition.id == "human_crossbow" and map.get_tower(1).targeting == TowerTargeting.Mode.LAST, "reconciled towers adopt upgrades and targeting changes")
 	_check(map.get_tower(2) == null and map.can_place_tower(P2_OPEN), "removed towers free their cells")
 	summary = map.reconcile_towers(records, Catalog.get_tower, stats_lookup)
 	_check(summary["added"] == 0 and summary["updated"] == 0 and summary["removed"] == 0, "reconciling identical records is a no-op")
@@ -1275,10 +1583,10 @@ func _test_actor_models() -> void:
 		for group in wave.spawn_groups:
 			all_modeled = all_modeled and group.creep != null and group.creep.visual_scene != null
 	_check(all_modeled, "every shipped tower and creep has a placeholder model")
-	var tiered := Bolt.duplicate(true) as TowerDefinition
-	var override := PackedScene.new()
-	tiered.upgrade_tiers[0].visual_scene = override
-	_check(tiered.visual_scene_for_tier(0) == Bolt.visual_scene and tiered.visual_scene_for_tier(1) == override and tiered.visual_scene_for_tier(2) == override, "tier model overrides apply from their tier upward")
+	var every_builder_modeled := true
+	for race in Catalog.races:
+		every_builder_modeled = every_builder_modeled and race.builder_scene != null
+	_check(every_builder_modeled, "every race has a builder model")
 	var modeled := map.spawn_tower(1, P1_OPEN, Bolt)
 	var model: Node3D = modeled.get("_model")
 	_check(model != null and model.get_parent() == modeled and modeled.get("_body") == null, "a tower with a model uses it instead of the procedural mesh")
@@ -1363,7 +1671,7 @@ func _test_controller_roguelike_toggle_suppresses_offer() -> void:
 	var state: RunState = game.get("run_state")
 	var map := game.get_node(MAP_PATH) as WintermaulMap
 	_check(not state.roguelike_enabled, "host run picks up the disabled roguelike flag from the session")
-	for wave_number in range(1, 3):
+	for wave_number in range(1, 4):
 		game.call("_begin_wave")
 		var guard := 0
 		while state.is_wave_clear() == false and guard < 400:
@@ -1374,8 +1682,8 @@ func _test_controller_roguelike_toggle_suppresses_offer() -> void:
 			if state.phase != RunStateModel.Phase.WAVE:
 				break
 		game.call("_finish_creep_resolution")
-	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 2, "two cleared waves return to build for wave three with roguelike disabled")
-	_check(not state.has_pending_offer(), "clearing wave two does not offer an upgrade when roguelike is disabled")
+	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 3, "three cleared waves return to build for wave four with roguelike disabled")
+	_check(not state.has_pending_offer(), "clearing wave three does not offer an upgrade when roguelike is disabled")
 	steam_session.set("is_solo_session", false)
 	steam_session.set("roguelike_enabled", true)
 	game.queue_free()

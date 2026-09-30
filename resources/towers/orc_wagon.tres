@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://d10g7jlpo8yym" path="res://assets/models/towers/orc_wagon.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "orc_wagon"
+display_name = "Battle Wagon"
+role = "Area damage"
+description = "A makeshift car with guns bolted on. Also a cannon. Also a grill. Ground only."
+primary_color = Color(0.45, 0.32, 0.22, 1)
+accent_color = Color(0.95, 0.45, 0.2, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 130
+damage = 55
+attack_range = 252.0
+attack_cooldown = 1.3
+projectile_speed = 420.0
+splash_radius = 50.4
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 2
+can_target_ground = true
+can_target_air = false
+is_magic = false
+detection_range = 0.0
+default_targeting = 2
+tier = 3
+upgrade_options = PackedStringArray("orc_warrig")
+sell_refund_percent = 70

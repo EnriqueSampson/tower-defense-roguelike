@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="CreepDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/creep_definition.gd" id="1_creep"]
+[ext_resource type="PackedScene" uid="uid://7nm4h6gnl0qn" path="res://assets/models/creeps/golem.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_creep")
+id = "golem"
+display_name = "Warded Golem"
+role = "Magic immune"
+description = "Signed a waiver against magic. Frost does nothing; bring something that hits hard."
+color = Color(0.45, 0.4, 0.36, 1)
+visual_scene = ExtResource("2_model")
+radius = 9.0
+health = 45
+speed = 2.4
+armor = 3
+bounty = 12
+regen_per_second = 0.0
+slow_immune = false
+is_boss = false
+is_air = false
+magic_immune = true
+invisible = false
+tags = PackedStringArray("ground", "armored", "magic_immune")

@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://bbycqjarrwkay" path="res://assets/models/towers/human_streamer.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "human_streamer"
+display_name = "Rage Streamer"
+role = "Ultimate: magic splash"
+description = "Hurls insults at 300 words per minute to an audience of four. Magic damage that splashes; useless against magic immunity."
+primary_color = Color(0.45, 0.2, 0.55, 1)
+accent_color = Color(0.95, 0.35, 0.8, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 220
+damage = 90
+attack_range = 336.0
+attack_cooldown = 0.9
+projectile_speed = 900.0
+splash_radius = 50.4
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = true
+detection_range = 0.0
+default_targeting = 0
+tier = 4
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

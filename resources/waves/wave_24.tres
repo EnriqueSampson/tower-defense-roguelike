@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="WaveDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/wave_definition.gd" id="1_wave"]
+[ext_resource type="Script" path="res://scripts/data/wave_spawn_group.gd" id="2_group"]
+[ext_resource type="Resource" path="res://resources/creeps/shade.tres" id="creep_shade"]
+
+[sub_resource type="Resource" id="group_1"]
+script = ExtResource("2_group")
+creep = ExtResource("creep_shade")
+count = 12
+spawn_interval = 0.8
+health_multiplier = 45.01
+bounty_multiplier = 3.82
+delay_before = 0.0
+
+[resource]
+script = ExtResource("1_wave")
+id = "wave_24"
+number = 24
+title = "Stealth Layoffs"
+spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1")])
+is_boss_wave = false
+offers_upgrade_after = true
+build_seconds = 0.0

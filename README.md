@@ -22,8 +22,14 @@ godot --path . --editor
 # Run the game directly
 godot --path .
 
-# Headless regression suite (337 checks)
+# Headless regression suite (384 checks)
 godot --headless --path . --script res://tests/run_tests.gd
+
+# Two-process host/client sync check over local ENet (no Steam needed)
+godot --headless --path . --script res://tests/net_sync.gd
+
+# Balance harness: bots play a whole run through builder orders and report each level
+godot --headless --fixed-fps 20 --path . --script res://tests/balance_harness.gd -- --players=1 --strategy=maze
 
 # Windowed smoke run: boots a solo game, builds, launches a wave, saves /tmp/wintermaul_smoke.png
 godot --path . --script res://tests/visual_smoke.gd
@@ -51,7 +57,8 @@ project.godot              Autoloads: Steamworks, SteamSession, GameSettings, Au
 export_presets.cfg         macOS + Windows export presets
 resources/
   content_catalog.tres     Registry of every shipped tower, wave, and upgrade
-  towers/                  TowerDefinition resources (bolt, cannon, frost) with upgrade tiers
+  towers/                  TowerDefinition resources for all four races (generated; see tools/race_content.py)
+  races/                   RaceDefinition resources: Humans, Orcs, Elves, Bugs
   creeps/                  CreepDefinition resources (grunt, runner, brute, mender, warlord boss)
   waves/                   Ten WaveDefinition resources built from spawn groups
   upgrades/                17 RunUpgradeDefinition resources (tower / economy / defense / tradeoff)
@@ -67,21 +74,23 @@ scripts/
   network/                 steam_session_manager.gd, lobby_match_policy.gd
   data/                    Definitions, catalog, layout, BuildInfo
   game/                    game_controller.gd (host authority), run_state.gd, run_modifiers.gd,
-                           upgrade_offer.gd, build_permission_policy.gd, balance_config.gd
+                           upgrade_offer.gd, build_permission_policy.gd, balance_config.gd,
+                           builder_system.gd (host-side builders and their order queues)
   combat/                  tower_targeting.gd, combat_resolver.gd
-  actors/                  tower.gd, route_runner.gd, projectile.gd, effects_layer.gd
+  actors/                  tower.gd, route_runner.gd, builder.gd, projectile.gd, effects_layer.gd
   map/                     wintermaul_map.gd, battlefield_camera.gd, map_paint_layer.gd,
                            map_projection.gd (sim pixels -> 3D plane), mesh_builder.gd, mesh_palette.gd
   pathfinding/             path_grid.gd (four-direction AStarGrid2D with anti-block probes)
   ui/                      game_hud.gd
-tests/                     run_tests.gd (headless suite), visual_smoke.gd (windowed smoke)
+tests/                     run_tests.gd (headless suite), net_sync.gd (two-process sync check),
+                           balance_harness.gd (scripted runs), perf_wave.gd, visual_smoke.gd
 tools/                     Generators used to author wave and upgrade resources
 docs/                      Roadmap, architecture, release checklist, playtest template, licenses
 ```
 
 ## Adding content
 
-- **Tower**: create a `TowerDefinition` `.tres` in `resources/towers/`, give it a unique `id`, add tiers, and list it in `resources/content_catalog.tres`. Towers draw themselves from `primary_color`/`accent_color`; no controller edits are required.
+- **Tower**: add an entry to `TOWERS` in `tools/race_content.py` (race, tier, stats, `options` for its upgrade branches and a model recipe), list it in its parent's `options` or its race's `roots`, then run `python3 tools/generate_races.py` and `python tools/blender/race_towers.py <id>`. `ContentCatalog.validate()` (run by the test suite) checks the trees.
 - **Creep**: create a `CreepDefinition` and reference it from a `WaveSpawnGroup`.
 - **Wave**: create a `WaveDefinition` with ordered spawn groups and append it to the catalog (`number` must increase).
 - **Run upgrade**: create a `RunUpgradeDefinition`, set typed effects and offer rules (`requires_tags`, `excludes_tags`), and append it to the catalog.

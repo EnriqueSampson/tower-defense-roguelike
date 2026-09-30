@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://4f2werr63qd3" path="res://assets/models/towers/human_nosy_neighbor.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "sentry"
+display_name = "Nosy Neighbor"
+role = "Detection"
+description = "A retiree with binoculars who sees everything. Reveals invisible creeps nearby so every tower can hit them."
+primary_color = Color(0.55, 0.42, 0.3, 1)
+accent_color = Color(0.55, 0.85, 1.0, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 40
+damage = 3
+attack_range = 224.0
+attack_cooldown = 0.8
+projectile_speed = 700.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 336.0
+default_targeting = 0
+tier = 1
+upgrade_options = PackedStringArray("human_watch")
+sell_refund_percent = 70

@@ -29,6 +29,8 @@ enum Category {
 @export_range(0, 5000, 5) var immediate_gold := 0
 ## Applies to towers built inside Position 9 on top of other modifiers.
 @export_range(0.1, 5.0, 0.01) var final_position_damage_multiplier := 1.0
+## Every affected tower detects invisible creeps within its own attack range.
+@export var grants_detection := false
 ## Tradeoff knob: creeps move faster when above 1.0.
 @export_range(0.5, 2.0, 0.01) var creep_speed_multiplier := 1.0
 ## Offer rules: requires one of these tags to already be owned; excluded when

@@ -22,10 +22,9 @@ var tower_id := 0
 var grid_cell := Vector2i.ZERO
 var footprint := Vector2i.ONE
 var definition: TowerDefinition
-var tier := 0
 var targeting := TowerTargeting.Mode.FIRST
 var position_index := -1
-## Effective stats after tiers and run modifiers: damage, range, cooldown,
+## Effective stats after run modifiers: damage, range, cooldown,
 ## splash_radius, slow_factor, slow_duration, armor_pierce, projectile_speed.
 var stats: Dictionary = {}
 var selected := false
@@ -55,18 +54,19 @@ func _ready() -> void:
 		_refresh_visual()
 
 
-func setup(id: int, cell: Vector2i, tower_definition: TowerDefinition, tower_tier: int, targeting_mode: int, tower_stats: Dictionary, owner_position := -1) -> void:
+func setup(id: int, cell: Vector2i, tower_definition: TowerDefinition, targeting_mode: int, tower_stats: Dictionary, owner_position := -1) -> void:
 	tower_id = id
 	grid_cell = cell
-	definition = tower_definition
 	footprint = tower_definition.footprint if tower_definition != null else Vector2i.ONE
 	position_index = owner_position
 	_map = get_parent().get_parent() as WintermaulMap
-	apply_stats(tower_tier, targeting_mode, tower_stats)
+	apply_stats(tower_definition, targeting_mode, tower_stats)
 
 
-func apply_stats(tower_tier: int, targeting_mode: int, tower_stats: Dictionary) -> void:
-	tier = tower_tier
+## `tower_definition` changes when an upgrade completes (the tree replaces
+## the tower); the footprint never does.
+func apply_stats(tower_definition: TowerDefinition, targeting_mode: int, tower_stats: Dictionary) -> void:
+	definition = tower_definition
 	if TowerTargeting.is_valid_mode(targeting_mode):
 		targeting = targeting_mode
 	stats = tower_stats.duplicate()
@@ -111,6 +111,10 @@ func attack_range() -> float:
 	return float(stats.get("range", definition.attack_range if definition else 100.0))
 
 
+func detection_range() -> float:
+	return float(stats.get("detection_range", 0.0))
+
+
 func damage() -> int:
 	return int(stats.get("damage", 1))
 
@@ -138,7 +142,8 @@ func _process(delta: float) -> void:
 	_cooldown_remaining = maxf(0.0, _cooldown_remaining - delta)
 	if _cooldown_remaining > 0.0 or not is_instance_valid(_map):
 		return
-	var target := TowerTargeting.select(_map.get_active_creeps(), plane_position, attack_range(), targeting)
+	var target := TowerTargeting.select(_map.get_active_creeps(), plane_position, attack_range(), targeting,
+		bool(stats.get("targets_ground", true)), bool(stats.get("targets_air", true)), bool(stats.get("magic", false)))
 	if target == null:
 		_cooldown_remaining = RETARGET_INTERVAL * (0.75 + 0.5 * fposmod(tower_id * 0.618, 1.0))
 		return
@@ -168,6 +173,11 @@ func _is_authority() -> bool:
 
 # --- Visuals ------------------------------------------------------------------
 
+## Upgrade depth shown as pips on procedural towers (0 for tier 1).
+func upgrade_depth() -> int:
+	return definition.tier - 1 if definition else 0
+
+
 func _refresh_visual() -> void:
 	if not is_inside_tree():
 		return
@@ -177,7 +187,7 @@ func _refresh_visual() -> void:
 	var primary := definition.primary_color if definition else Color("315f58")
 	var accent := definition.accent_color if definition else Color("e4b94f")
 	var definition_id := definition.id if definition else "default"
-	var body_height := MapProjection.units((12.0 + tier * 3.0) * _footprint_scale())
+	var body_height := MapProjection.units((12.0 + upgrade_depth() * 3.0) * _footprint_scale())
 	if _body == null:
 		_body = MeshInstance3D.new()
 		add_child(_body)
@@ -193,10 +203,10 @@ func _refresh_visual() -> void:
 	_refresh_range_ring()
 
 
-## Swaps in the authored model for the current tier. Returns false (and
+## Swaps in the authored model for the current definition. Returns false (and
 ## removes any model) when the procedural mesh should be used instead.
 func _refresh_model() -> bool:
-	var scene := definition.visual_scene_for_tier(tier) if definition else null
+	var scene := definition.visual_scene if definition else null
 	if scene == null:
 		if _model != null:
 			_model.queue_free()
@@ -282,7 +292,7 @@ func _refresh_range_ring() -> void:
 ## Raised stone base, colored body, and golden tier pips baked into one mesh.
 func _body_mesh(definition_id: String, primary: Color, body_height: float) -> ArrayMesh:
 	var size := _footprint_scale()
-	var key := "tower:%s:%d:%d" % [definition_id, tier, size]
+	var key := "tower:%s:%d:%d" % [definition_id, upgrade_depth(), size]
 	var mesh := MeshBuilder.cached(key)
 	if mesh:
 		return mesh
@@ -292,7 +302,7 @@ func _body_mesh(definition_id: String, primary: Color, body_height: float) -> Ar
 	var body_width := MapProjection.units(14.0 * size)
 	builder.add_box(Vector3(body_width, body_height, body_width), Vector3(0.0, BASE_HEIGHT + body_height * 0.5, 0.0), primary.lightened(0.2), primary)
 	var pip_radius := MapProjection.units(1.6)
-	for pip in range(tier):
+	for pip in range(upgrade_depth()):
 		var pip_x := MapProjection.units((-5.0 + pip * 5.0) * size)
 		builder.add_sphere(pip_radius, Vector3(pip_x, BASE_HEIGHT + pip_radius, base_size * 0.5 - pip_radius), Color("fff0ae"), 6)
 	return MeshBuilder.store(key, builder.commit())

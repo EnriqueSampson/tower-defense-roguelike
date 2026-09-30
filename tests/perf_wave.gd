@@ -4,12 +4,13 @@ extends SceneTree
 ##   Logic only:  godot --headless --path . --script res://tests/perf_wave.gd
 ##   Full frame:  godot --path . --script res://tests/perf_wave.gd
 ## Places PERF_TOWERS towers (default 300) at seeded random valid spots, fakes
-## a nine-player roster so the wave spawns at full scale, launches wave 9
-## ("Full Assault") and samples frame times with vsync off and the camera
-## fully zoomed out (PERF_ZOOM overrides the zoom level; PERF_SHADOWS=off or
+## a nine-player roster so the wave spawns at full scale, launches the busiest
+## mixed level ("Full Assault", level 29) and samples frame times with vsync
+## off and the camera fully zoomed out (PERF_ZOOM overrides the zoom level; PERF_SHADOWS=off or
 ## single isolates the shadow cost).
 
-const WAVE_INDEX := 8
+## The busiest mixed level; found by title so level renumbering cannot break it.
+const WAVE_TITLE := "Full Assault"
 const WARMUP_SECONDS := 3.0
 const SAMPLE_SECONDS := 45.0
 const MAP_PATH := "WorldClip/BattlefieldView/BattlefieldViewport/World/WintermaulMap"
@@ -57,22 +58,29 @@ func _start() -> void:
 	for index in range(ClassicWintermaulLayout.PLAYER_COUNT):
 		fake_roster.append({"steam_id": 1000 + index, "lane": index + 1, "name": "P%d" % (index + 1)})
 	session.set("roster", fake_roster)
-	_state.current_wave_index = WAVE_INDEX
+	var wave_index := 0
+	for index in range(_state.wave_count):
+		if (_game.get("CATALOG") as ContentCatalog).waves[index].title == WAVE_TITLE:
+			wave_index = index
+	_state.current_wave_index = wave_index
 	_game.call("_begin_wave")
 	session.set("roster", [] as Array[Dictionary])
-	print("PERF setup towers=%d wave=%d renderer=%s" % [placed, WAVE_INDEX + 1, DisplayServer.get_name()])
+	print("PERF setup towers=%d wave=%d renderer=%s" % [placed, wave_index + 1, DisplayServer.get_name()])
 	_started = true
 
 
 func _place_towers(target: int) -> int:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 424242
-	var ids := ["bolt", "cannon", "frost"]
+	# One tier-1 tower from each race; the host takes each tower's race in turn.
+	var ids := ["bolt", "cannon", "frost", "bug_ant"]
+	var catalog: ContentCatalog = _game.get("CATALOG")
 	var placed := 0
 	var attempts := 0
 	while placed < target and attempts < target * 40:
 		attempts += 1
 		var cell := Vector2i(rng.randi_range(0, WintermaulMap.GRID_SIZE.x - 2), rng.randi_range(0, WintermaulMap.GRID_SIZE.y - 2))
+		_state.peer_races[1] = catalog.race_of_tower(ids[placed % ids.size()])
 		if _game.call("_try_place_tower", ids[placed % ids.size()], cell) == WintermaulMap.Placement.OK:
 			placed += 1
 	return placed

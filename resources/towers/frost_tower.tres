@@ -1,43 +1,18 @@
-[gd_resource type="Resource" script_class="TowerDefinition" load_steps=6 format=3]
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
-[ext_resource type="Script" path="res://scripts/data/tower_upgrade_tier.gd" id="2_tier"]
-[ext_resource type="PackedScene" uid="uid://cyvo2vmfneo2u" path="res://assets/models/towers/elf_water_spirit.glb" id="model_glb"]
-
-[sub_resource type="Resource" id="tier_1"]
-script = ExtResource("2_tier")
-tier_name = "Mk II"
-cost = 50
-damage_multiplier = 1.5
-range_bonus = 17.0
-cooldown_multiplier = 1.0
-splash_radius_bonus = 0.0
-slow_factor_bonus = 0.1
-slow_duration_bonus = 0.5
-armor_pierce_bonus = 0
-
-[sub_resource type="Resource" id="tier_2"]
-script = ExtResource("2_tier")
-tier_name = "Mk III"
-cost = 95
-damage_multiplier = 1.5
-range_bonus = 34.0
-cooldown_multiplier = 0.9
-splash_radius_bonus = 0.0
-slow_factor_bonus = 0.1
-slow_duration_bonus = 1.0
-armor_pierce_bonus = 0
+[ext_resource type="PackedScene" uid="uid://cyvo2vmfneo2u" path="res://assets/models/towers/elf_water_spirit.glb" id="2_model"]
 
 [resource]
 script = ExtResource("1_tower")
 id = "frost"
-display_name = "Frost Tower"
+display_name = "Water Spirit"
 role = "Control"
-description = "Low damage, but chills targets so they crawl through your maze. Pair with damage towers."
+description = "Low damage, but soaks creeps so they crawl through your maze. Magic: useless against magic-immune creeps."
 primary_color = Color(0.22, 0.36, 0.5, 1)
-accent_color = Color(0.62, 0.9, 1, 1)
+accent_color = Color(0.62, 0.9, 1.0, 1)
 footprint = Vector2i(2, 2)
-visual_scene = ExtResource("model_glb")
+visual_scene = ExtResource("2_model")
 cost = 35
 damage = 2
 attack_range = 280.0
@@ -47,6 +22,11 @@ splash_radius = 0.0
 slow_factor = 0.3
 slow_duration = 2.0
 armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = true
+detection_range = 0.0
 default_targeting = 0
-upgrade_tiers = Array[ExtResource("2_tier")]([SubResource("tier_1"), SubResource("tier_2")])
+tier = 1
+upgrade_options = PackedStringArray("elf_tide")
 sell_refund_percent = 70

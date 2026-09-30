@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://dww6au7cf01gn" path="res://assets/models/towers/human_crossbow.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "human_crossbow"
+display_name = "Crossbow Enthusiast"
+role = "Generalist"
+description = "Read one book about crossbows. Will tell you about it. Longer range, hits air."
+primary_color = Color(0.3, 0.42, 0.3, 1)
+accent_color = Color(0.85, 0.7, 0.35, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 45
+damage = 16
+attack_range = 308.0
+attack_cooldown = 0.7
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 0.0
+default_targeting = 0
+tier = 2
+upgrade_options = PackedStringArray("human_musket")
+sell_refund_percent = 70

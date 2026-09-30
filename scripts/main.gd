@@ -3,6 +3,7 @@ extends Control
 const COLOR_OK := Color("8ed8c6")
 const COLOR_ERROR := Color("ff8d72")
 const COLOR_MUTED := Color("92a09d")
+const CATALOG: ContentCatalog = preload("res://resources/content_catalog.tres")
 
 var _listed_lobby_ids: Array[int] = []
 var _pending_launch_action: Callable
@@ -19,6 +20,8 @@ var _pending_launch_action: Callable
 @onready var roguelike_check: CheckButton = %RoguelikeCheck
 @onready var map_options_confirm_button: Button = %MapOptionsConfirmButton
 @onready var map_options_cancel_button: Button = %MapOptionsCancelButton
+@onready var race_picker: OptionButton = %RacePicker
+@onready var race_blurb: Label = %RaceBlurb
 
 
 func _ready() -> void:
@@ -42,6 +45,7 @@ func _ready() -> void:
 	start_button.pressed.connect(SteamSession.start_game)
 	%LeaveButton.pressed.connect(SteamSession.leave_lobby)
 	lobby_list.item_selected.connect(func(_index: int) -> void: join_button.disabled = false)
+	_setup_race_picker()
 
 	Steamworks.initialization_changed.connect(_on_steam_initialization_changed)
 	SteamSession.status_changed.connect(_on_status_changed)
@@ -55,6 +59,29 @@ func _ready() -> void:
 	_on_roster_changed(SteamSession.roster)
 	if not SteamSession.last_status.is_empty():
 		_on_status_changed(SteamSession.last_status, SteamSession.last_status_is_error)
+
+
+## Every player picks a builder race here; the pick carries into solo runs
+## and is shared with the lobby as Steam member data.
+func _setup_race_picker() -> void:
+	race_picker.clear()
+	var current := CATALOG.resolve_race_id(SteamSession.local_race if not SteamSession.local_race.is_empty() else GameSettings.preferred_race)
+	for index in range(CATALOG.races.size()):
+		var race := CATALOG.races[index]
+		race_picker.add_item(race.display_name, index)
+		if race.id == current:
+			race_picker.select(index)
+	race_picker.item_selected.connect(_on_race_selected)
+	_on_race_selected(race_picker.selected, false)
+
+
+func _on_race_selected(index: int, announce := true) -> void:
+	if index < 0 or index >= CATALOG.races.size():
+		return
+	var race := CATALOG.races[index]
+	race_blurb.text = race.description
+	if announce or SteamSession.local_race != race.id:
+		SteamSession.set_local_race(race.id)
 
 
 func _request_launch(action: Callable) -> void:
@@ -129,7 +156,8 @@ func _on_roster_changed(members: Array) -> void:
 	roster_list.clear()
 	for member in members:
 		var host_marker := "  HOST" if member["is_host"] else ""
-		roster_list.add_item("Position %s   %s%s" % [member["lane"], member["name"], host_marker])
+		var race := CATALOG.get_race(CATALOG.resolve_race_id(str(member.get("race", ""))))
+		roster_list.add_item("Position %s   %s   %s%s" % [member["lane"], member["name"], race.display_name if race else "", host_marker])
 	if not members.is_empty():
 		for lane_number in range(members.size() + 1, SteamSession.MAX_PLAYERS + 1):
 			roster_list.add_item("Position %s   OPEN  •  HOST CONTROL" % lane_number)

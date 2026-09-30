@@ -1,31 +1,24 @@
-[gd_resource type="Resource" script_class="WaveDefinition" load_steps=7 format=3]
+[gd_resource type="Resource" script_class="WaveDefinition" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/data/wave_definition.gd" id="1_wave"]
 [ext_resource type="Script" path="res://scripts/data/wave_spawn_group.gd" id="2_group"]
-[ext_resource type="Resource" path="res://resources/creeps/brute.tres" id="creep_brute"]
-[ext_resource type="Resource" path="res://resources/creeps/mender.tres" id="creep_mender"]
+[ext_resource type="Resource" path="res://resources/creeps/imp.tres" id="creep_imp"]
 
 [sub_resource type="Resource" id="group_1"]
 script = ExtResource("2_group")
-creep = ExtResource("creep_brute")
-count = 6
-spawn_interval = 1.2
-health_multiplier = 1.8
+creep = ExtResource("creep_imp")
+count = 20
+spawn_interval = 0.25
+health_multiplier = 3.19
+bounty_multiplier = 1.5
 delay_before = 0.0
-
-[sub_resource type="Resource" id="group_2"]
-script = ExtResource("2_group")
-creep = ExtResource("creep_mender")
-count = 4
-spawn_interval = 1.0
-health_multiplier = 1.5
-delay_before = 3.0
 
 [resource]
 script = ExtResource("1_wave")
 id = "wave_08"
 number = 8
-title = "Siege Line"
-spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1"), SubResource("group_2")])
+title = "Intern Orientation"
+spawn_groups = Array[ExtResource("2_group")]([SubResource("group_1")])
 is_boss_wave = false
-offers_upgrade_after = true
+offers_upgrade_after = false
+build_seconds = 0.0

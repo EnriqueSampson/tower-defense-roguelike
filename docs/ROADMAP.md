@@ -1,6 +1,6 @@
 # Roadmap
 
-**Updated:** September 29, 2026
+**Updated:** September 30, 2026
 **Goal:** A commercial Steam Early Access release of a co-op tower defense that plays like Warcraft III Wintermaul, with a light roguelike layer.
 **Pace:** Part-time (10–20 h/week). No launch date yet; phases are ordered, not scheduled. Size estimates are rough, at that pace.
 
@@ -19,13 +19,14 @@ A faithful co-op Wintermaul for modern players:
 
 ## 2. Where we are
 
-### Built and tested (310 headless checks)
+### Built and tested (442 headless checks, a two-process sync check, and a balance harness)
 
 - Host-authoritative co-op over Steam lobbies, plus solo on `OfflineMultiplayerPeer`. Nine positions, with the host controlling unfilled and disconnected positions.
+- A WC3-style builder per player: right-click to move, shift-queued build orders, Stop, construction over time, and cancel for a full refund. Solo uses one builder at double speed.
 - Mazing on a 144×160 grid (72×80 two-by-two towers, scaled to classic Wintermaul proportions): A* rerouting, anti-block placement, relay checkpoints into Position 9, and shared lives and gold.
-- Three towers (Bolt, Cannon, Frost), each with two upgrade tiers, selling, and four target priorities.
-- Five creep roles, including one boss, across 10 waves.
-- 17 seeded run upgrades, offered after waves 2, 4, 6 and 8.
+- Four builder races picked in the lobby (Humans, Orcs, Elves, Bugs) with 41 towers in classic Wintermaul upgrade trees (branching, up to four tiers), selling, and four target priorities.
+- A classic 30-level run: 17 creeps including air, invisible, magic-immune, swarm and splitting creeps, with a boss every fifth level.
+- 18 seeded run upgrades, offered after every third level.
 - A data-driven content catalog: towers, creeps, waves and upgrades are `.tres` resources.
 - A 3D presentation layer over a 2D simulation, with procedural primitive meshes. At the Phase 0 baseline (tag `baseline-phase0`) the camera was orthographic at 55°.
 - HUD, main menu, lobby, settings, end screen, procedural audio, and export presets.
@@ -40,11 +41,9 @@ A faithful co-op Wintermaul for modern players:
 
 | Vision | Today |
 |---|---|
-| Builder unit you control, with build time | Click a tile and the tower appears instantly |
-| WC3 perspective camera and real models | Orthographic camera; procedural primitive meshes built per ID in `tower.gd` and `route_runner.gd` |
-| 30+ levels, air and special waves | 10 ground waves; air waves deferred |
-| 3–4 races with large tower rosters | 3 towers, no races |
-| Balanced for 1–4 players and solo | Solo exists, but controlling nine positions alone is untested |
+| Final art | Placeholder `.glb` models from `tools/blender/` for every tower, creep and the builder |
+| 3–4 races with large tower rosters | 4 races, 9–11 towers each, placeholder art |
+| Balanced for 1–4 players and solo | Balance-harness bots win with 1, 2 and 4 players and a lazy bot loses ([BALANCE.md](BALANCE.md)); no humans have tested it yet |
 
 ## 3. Decisions from the planning interview
 
@@ -96,16 +95,20 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 
 **Goal:** Building feels like WC3 Wintermaul.
 
-- [ ] Builder units: the host owns their position and order queue, and snapshots and reconciliation replicate them the same way as towers and creeps. Builders cannot be killed and do not block creeps.
-- [ ] Orders: right-click to move, a WC3-style build grid of hotkeys, shift-queued builds, and cancel.
-- [ ] Construction: the build site is validated when ordered and again when construction starts, because a path may have changed in between. Towers build over time (placement stays reserved), and cancelling refunds the cost.
-- [ ] Movement: builders walk anywhere, including other players' positions, and clip through towers and other builders. They don't use the creep path grid.
-- [ ] Permissions: a builder may only build inside positions its owner controls (`BuildPermissionPolicy`), even though it can walk anywhere.
-- [ ] Easter egg: occasionally a builder "bumps" a building and plays a fall-over animation. It's purely cosmetic and never changes gameplay.
-- [ ] Solo control: one builder per player. Decide how a solo player covers nine positions (§6).
-- [ ] Protocol bump, plus tests for order validation, construction timing, cancel and refund, and builder reconciliation.
+- [x] Builder units: `BuilderSystem` on the host owns each builder's position and order queue; the state snapshot and a 0.15 s unreliable builder snapshot replicate them, and `WintermaulMap.reconcile_builders` mirrors them by owner peer. Builders cannot be killed and do not block creeps. Placeholder model: `tools/blender/human_peasant.py` (`idle`, `walk`, `build`, `trip`).
+- [x] Orders: right-click to move (Shift queues), build from the command card's hotkey grid (Shift-click queues more sites, shown as blue footprint markers), Stop on `S`, right-click or `V` to cancel placement, F1 to select and centre the builder. Camera drag moved to the middle button.
+- [x] Construction: a build order is validated when issued and again when the builder arrives, because the maze may have changed. Gold is paid when construction starts. The tower holds its footprint, rises out of the ground over cost / 20 s (1.5–6 s) and does not attack until done. Cancelling refunds the full cost. Upgrades are timed the same way; the tower keeps fighting at its old tier meanwhile.
+- [x] Movement: builders walk in straight lines anywhere, including other players' positions, clip through towers and each other, and never use the creep path grid.
+- [x] Permissions: a builder may only build inside positions its owner controls (`BuildPermissionPolicy`), even though it can walk anywhere.
+- [x] Easter egg: a builder that stops beside a building after a move order sometimes (4%, rolled from the run seed) bumps it and falls over (`trip`). Purely cosmetic: any new order gets it straight back up.
+- [x] Solo control: one builder at double speed (16 cells/s) covers all nine positions (§6). Revisit after Playtest gate A.
+- [x] Protocol bump (now 5), plus tests for order validation, construction timing, cancel and refund, Stop, the trip, and client-side builder reconciliation.
 
-**Exit:** A solo run can be finished using only the builder, and a 2-player local or Steam test stays in sync.
+**Exit:** met in automated form. `tests/solo_builder_run.gd` finishes a solo run using only builder orders (victory at wave 10, 38 towers), and `tests/net_sync.gd` runs a host and a client over local ENet: the client builds, gets a foreign-position build rejected, upgrades, moves and readies up, and towers, gold, builders and creeps match on both peers. A human 2-player Steam session is still part of Playtest gate A.
+
+Found while testing, for later phases:
+- The creep snapshot is a list of dictionaries with string keys and exceeds the ENet MTU with only 18 creeps (Godot warns about packet loss). Pack it into typed arrays before the 9-player test (Phase 6).
+- The host broadcasts snapshots to peers whose game scene hasn't loaded yet, which logs "node not found" RPC errors on them. It's harmless, because a client requests state on load, but it's noisy.
 
 ### Playtest gate A: First friends playtest
 
@@ -117,32 +120,37 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 
 **Goal:** A full-length Wintermaul run.
 
-- [ ] Extend to 30+ levels, with a boss every few levels, level timers, and between-level pacing.
-- [ ] Air waves: flying creeps take a direct route between checkpoints, and towers need `can_target_air` / `can_target_ground` flags.
-- [ ] Special creeps: magic immunity, fast swarms, splitters, and invisible creeps. Towers can only target invisible creeps inside detection range, which each race gets from a detection tower, a detection upgrade, or either one (Phase 4).
-- [ ] Balance tooling: a headless auto-play harness that simulates waves against scripted mazes and reports leaks and gold curves. Hand-tuning 30+ levels is not realistic without it.
+- [x] 30 levels with a boss on every fifth (The Regional Manager, the Frost Warlord, the Wyrm of Unpaid Overtime, the Compliance Lich, the Phantom Auditor and the Board of Directors), generated by `tools/generate_waves.py` from a level table and health and bounty curves. Boss levels get 35 s of build time (`WaveDefinition.build_seconds`), and run-upgrade offers come after every third level. Overlapping levels (the next level spawning before this one is cleared) are not in; a level still ends when its creeps are gone.
+- [x] Air: flying creeps take a direct route between checkpoints and never block building. Towers have `can_target_air` / `can_target_ground` (Cannon is ground only).
+- [x] Special creeps: magic immunity (Frost is magic), fast swarms (Intern Imps), splitters (Middle Management Slime → three Delegated Slimelets; the final boss adjourns into five Directors), and invisible creeps. Towers can only target invisible creeps inside detection range, which currently comes from the Nosy Neighbor tower or the Snitch Network run upgrade; Phase 4 moves detection into each race. Placeholder models for every new creep and the tower come from `tools/blender/creeps_phase3.py` and `human_nosy_neighbor.py`.
+- [x] Balance tooling: `tests/balance_harness.gd` plays whole runs headless with bots that build only through builder orders (a greedy mazer and a lazy wall, 1–9 players) and reports leaks, lives and the gold curve per level; a full run takes about 5 minutes. See [BALANCE.md](BALANCE.md) for the knobs, targets and current results.
 
-**Exit:** A full classic 30+ level run can be completed solo and with 2–4 players, and the balance harness covers every level.
+**Exit:** met by the harness. The maze bot wins solo and with 2 and 4 players, and the lazy bot loses at level 22. Every level is covered. Human playtests still decide whether it is fun.
+
+Found while tuning, for later phases:
+- Late-game gold piles up once a position is full: Phase 4's bigger rosters and branching upgrades must add gold sinks.
+- Team gold is shared, so bigger lobbies start with more of it (+60 per extra player) as a stopgap; Phase 6 retunes the economy per lobby size.
+- The busiest level is now level 29 at nine-player scale: 286 creeps at once (wave 9 peaked at 100). Headless game logic still averages 7.2 ms per frame (p99 14 ms), but rendering it on the Iris 550 needs re-profiling in Phase 6.
 
 ### Phase 4: Builder races (about 3–4 weeks for the framework, then 3–5 weeks per race)
 
 **Goal:** 3–4 distinct races, each with a full tower roster.
 
-- [ ] Race framework: a `RaceDefinition` resource (builder model, tower tree, race-specific upgrades), race selection in the lobby, and catalog validation for races.
-- [ ] Branching upgrade trees, replacing the current two linear tiers.
-- [ ] About 8–10 towers per race, escalating from mundane to absurd, and covering ground, air, splash, slow and support roles plus detection. Each race ships with placeholder art first and final art from the modeler. The existing Bolt, Cannon and Frost towers get folded into a race or retired.
+- [x] Race framework: a `RaceDefinition` resource (builder model, the towers its builder builds), a race picker in the lobby (Steam member data `race`, remembered in settings, shown on the roster), per-peer races in `RunState` and the snapshot, host validation that a builder only builds its own race's towers, and catalog validation for races (every tower in exactly one race, every race can detect). Race-specific run upgrades exist for Bugs (Pheromone Trails, Swarm Tactics), and offers are race-aware.
+- [x] Classic Wintermaul upgrade trees replace the two linear tiers: an upgrade turns a tower into another tower (paying that tower's cost), and some towers branch (the Guy With a Sword becomes a Crossbow Enthusiast or a Knight on a Budget). Sell value follows the gold invested.
+- [x] 9–11 towers per race, escalating from mundane to absurd and covering ground, air, splash, slow, armor piercing and detection. All content lives in `tools/race_content.py`; `tools/generate_races.py` writes the resources and `tools/blender/race_towers.py` the placeholder models (37 new towers and three new builders). Final art from the modeler is still to come. Bolt, Cannon, Frost and the Nosy Neighbor were folded in: Humans, Orcs, Elves and Humans respectively, keeping their IDs.
 
-| Race | Early towers | Mid towers | Late towers |
-|---|---|---|---|
-| **Humans** | A guy with a sword | A car full of people with machine guns | A streamer at a computer hurling insults |
-| **Orcs** | An orc with an axe | Makeshift cars with guns bolted on | An orc riding a giant lizard |
-| **Elves** | Archers | Hippogryph riders | Ents and water summons |
-| **Race 4** (name TBD) | Ninjas | Samurai | An AI chip maker |
+| Race | Tier 1 (builder) | Upgrades | Ultimate | Detection |
+|---|---|---|---|---|
+| **Humans** | Guy With a Sword, Nosy Neighbor | Crossbow Enthusiast → Musketeer; Knight on a Budget → Minivan of Uncles; Neighborhood Watch → HOA President | Rage Streamer (magic splash) | Nosy Neighbor line |
+| **Orcs** | Orc With an Axe, Junk Cannon, Sniffer Boar | Axe Juggler → Lizard Rider; Scrap Mortar → Battle Wagon or Flak Goblin (anti-air); Truffle Hog of War | Big Lizard Energy, War Rig | Sniffer Boar line |
+| **Elves** | Elf Archer, Water Spirit, Sapling | Ranger → Hippogryph Rider, or Owl Post; Tide Caller → Water Elemental; Treant → Ancient Ent | Water Elemental (area slow), Ancient Ent | Owl Post |
+| **Bugs** | Worker Ant (5 gold), Dung Beetle, Firefly, Mosquito | Soldier Ant → Army Ant Platoon; Stag Beetle → Rhino Beetle; Lantern Bug; Horsefly | The Hive Queen (the only Bug splash) | Firefly line |
 
-Race 4 keeps its ninja, samurai and AI chip maker towers, but its name and framing must not be based on a real ethnicity. Point the joke at the absurdity instead, for example a mega-corporation ninja clan. Real brand and platform names (such as Twitch) are avoided in tower names; use generic stand-ins like "streamer".
-- [ ] Balance each race against the Phase 3 harness.
+Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash until the Hive Queen. Real brand names are avoided (the Rage Streamer is a "streamer").
+- [ ] Balance each race against the Phase 3 harness: first pass done (see [BALANCE.md](BALANCE.md)); needs playtests.
 
-**Exit:** 3–4 races can each finish a classic run, and no race dominates in playtests.
+**Exit:** 3–4 races can each finish a classic run, and no race dominates in playtests. The harness has each race finishing solo; playtests are still to come.
 
 ### Phase 5: Roguelike layer, retuned (about 2–3 weeks)
 
@@ -184,21 +192,21 @@ Race 4 keeps its ninja, samurai and AI chip maker towers, but its name and frami
 
 ## 6. Open questions
 
-- **Solo and small lobbies:** should solo control all nine positions with one builder, get several builders, have positions merged or disabled, or get AI help?
-- **Race 4's name and framing** (see Phase 4), and whether races share any towers.
+- **Solo and small lobbies:** for now solo controls all nine positions with one builder at double speed (Phase 2). Revisit after Playtest gate A: several builders, merged or disabled positions, or AI help are still options, and Phase 6 has to settle 2–4 player lobbies too.
+- ~~Race 4's name and framing~~: Bugs, a cheap mazing race. Races share no towers.
 - **Final game name.**
 
 ## 7. Asset spec for the modeler
 
 These conventions keep placeholder and final models interchangeable. The placeholder scripts in `tools/blender/` follow them and are working examples.
 
-- **Format:** `.glb` (glTF binary) exported from Blender with +Y up (the exporter default). One file per tower, creep or builder. A tower tier can have its own file (`TowerUpgradeTier.visual_scene`); otherwise it reuses the base model.
-- **Where:** `assets/models/towers/`, `assets/models/creeps/` and, later, `assets/models/builders/`. File names use the content ID in snake_case (for example `human_swordsman.glb`).
+- **Format:** `.glb` (glTF binary) exported from Blender with +Y up (the exporter default). One file per tower, creep or builder; every tower in an upgrade tree is its own tower with its own file.
+- **Where:** `assets/models/towers/`, `assets/models/creeps/` and `assets/models/builders/`. File names use the content ID in snake_case (for example `human_swordsman.glb`).
 - **Scale:** 1 Blender unit = 1 map tile. Towers are 2×2 tiles, so a tower fits a 2×2-unit square, base included. Creeps are about half a tile across. The game does not rescale models, so author them at size.
 - **Pivot:** the object origin is at the center of the footprint, on the ground (z = 0).
 - **Facing:** the model's front faces −Y in Blender (the side Blender's Front view shows). After export that becomes +Z, which the game treats as forward.
 - **Turning:** on towers, everything that should turn toward the target sits under an empty named `Turret`. Creeps turn as a whole to face where they're walking.
-- **Animations:** action names become the in-game animation names. Towers use `idle` (looping) and `attack` (plays once per shot, then returns to `idle`). Creeps use `walk` (looping) and `death` (plays once, up to about 1.2 s, then the corpse sinks; a sideways fall reads best from the WC3 camera). Planned: `build` for builders and construction. Keep each animation on as few objects as possible; the placeholders animate one pivot empty per animation.
+- **Animations:** action names become the in-game animation names. Towers use `idle` (looping) and `attack` (plays once per shot, then returns to `idle`). Creeps use `walk` (looping) and `death` (plays once, up to about 1.2 s, then the corpse sinks; a sideways fall reads best from the WC3 camera). Builders use `idle`, `walk` (looping), `build` (plays when construction starts) and `trip` (the fall-over easter egg). Keep each animation on as few objects as possible; the placeholders animate one pivot empty per animation.
 - **Materials:** use a Principled BSDF with base color, roughness and optionally one texture. Avoid Blender-only shader nodes, which glTF can't export. Colors pass through as linear light: Blender's color picker already handles this, but values typed into a script must be converted from sRGB (the placeholder helper does this). Keep emission strength below about 1, or glowing parts wash out to white in game.
 - **Budget (from the Phase 1 performance check):** draw calls matter far more than triangles on the Iris 550 (each separate mesh-and-material pair is one draw call). A tower should be at most 3–4 meshes (base, the `Turret`, and one extra moving part if animated) and a creep 1–2, each with a single material using one texture atlas per race. Keep roughly 1–3k triangles per tower and 0.5–1.5k per creep. Don't rely on real-time shadows: they are off by default, so bake contact shading into the texture.
 

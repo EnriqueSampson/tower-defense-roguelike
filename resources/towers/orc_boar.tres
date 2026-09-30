@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://cpk7eyf3jr7gb" path="res://assets/models/towers/orc_boar.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "orc_boar"
+display_name = "Sniffer Boar"
+role = "Detection"
+description = "Trained to find truffles. Finds invisible creeps instead. Nobody corrected it."
+primary_color = Color(0.45, 0.3, 0.25, 1)
+accent_color = Color(0.9, 0.7, 0.6, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 35
+damage = 4
+attack_range = 196.0
+attack_cooldown = 0.9
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 336.0
+default_targeting = 0
+tier = 1
+upgrade_options = PackedStringArray("orc_warboar")
+sell_refund_percent = 70

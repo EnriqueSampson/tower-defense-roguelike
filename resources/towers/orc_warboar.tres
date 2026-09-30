@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://boqmc4swhx5wq" path="res://assets/models/towers/orc_warboar.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "orc_warboar"
+display_name = "Truffle Hog of War"
+role = "Detection"
+description = "Armored, caffeinated, and very good at finding things that do not want to be found."
+primary_color = Color(0.4, 0.28, 0.24, 1)
+accent_color = Color(0.8, 0.8, 0.85, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 70
+damage = 14
+attack_range = 224.0
+attack_cooldown = 0.8
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 448.0
+default_targeting = 0
+tier = 2
+upgrade_options = PackedStringArray()
+sell_refund_percent = 70

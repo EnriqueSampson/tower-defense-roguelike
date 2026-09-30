@@ -30,6 +30,7 @@ enum Placement {
 	UNAFFORDABLE,
 	LOCKED,
 	NO_TOWER_SELECTED,
+	WRONG_RACE,
 }
 
 const RouteRunnerScene = preload("res://scripts/actors/route_runner.gd")
@@ -60,6 +61,9 @@ var _occupied_cells: Dictionary = {}
 var _positions: Array[Dictionary] = []
 var _path_grid: PathGrid
 var _last_creep_positions: Dictionary = {}
+## creep_id -> {start_position, start_stage, start_distance} of killed creeps,
+## so the host can spawn a splitter's children where it fell.
+var _last_creep_routes: Dictionary = {}
 ## Active creeps shared by every caller within a frame (towers, impacts,
 ## minimap); rebuilt on the next frame or when creeps spawn, die or leave.
 var _active_creeps_cache: Array = []
@@ -123,7 +127,32 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	# Runs before the Towers and RouteRunners children, so targeting this
+	# frame sees fresh detection.
+	refresh_detection()
 	_dynamic_canvas.queue_redraw()
+
+
+## Reveals invisible creeps inside any tower's detection range. Deterministic
+## from the replicated tower stats, so every peer shows the same creeps.
+func refresh_detection() -> void:
+	var detectors: Array = []
+	for creep: RouteRunner in get_active_creeps():
+		if not creep.invisible:
+			continue
+		if detectors.is_empty():
+			for child in %Towers.get_children():
+				if child is Tower and not child.is_queued_for_deletion() and child.detection_range() > 0.0:
+					detectors.append(child)
+			if detectors.is_empty():
+				detectors.append(null)
+		var seen := false
+		for tower in detectors:
+			if tower != null and tower.plane_position.distance_squared_to(creep.plane_position) <= tower.detection_range() * tower.detection_range():
+				seen = true
+				break
+		if seen != creep.detected:
+			creep.set_detected(seen)
 
 
 ## Called by the battlefield camera so screen picking and label projection
@@ -155,8 +184,9 @@ func _on_view_changed() -> void:
 # --- Creeps -------------------------------------------------------------------
 
 ## Positions with several spawners alternate between them by creep id so every
-## peer picks the same pad without extra replication.
-func spawn_creep(creep_id: int, lane_id: int, definition: CreepDefinition, health := -1, speed_multiplier := 1.0) -> RouteRunner:
+## peer picks the same pad without extra replication. `start` (split children)
+## may hold start_position, start_stage and start_distance.
+func spawn_creep(creep_id: int, lane_id: int, definition: CreepDefinition, health := -1, speed_multiplier := 1.0, start := {}) -> RouteRunner:
 	_ensure_map_data()
 	if lane_id < 0 or lane_id >= _routes.size() or definition == null:
 		return null
@@ -165,6 +195,21 @@ func spawn_creep(creep_id: int, lane_id: int, definition: CreepDefinition, healt
 	var runner := RouteRunnerScene.new() as RouteRunner
 	%RouteRunners.add_child(runner)
 	_invalidate_active_creeps()
+	var options := {
+		"color": definition.color,
+		"definition_id": definition.id,
+		"armor": definition.armor,
+		"regen_per_second": definition.regen_per_second,
+		"slow_immune": definition.slow_immune or definition.magic_immune,
+		"is_boss": definition.is_boss,
+		"is_air": definition.is_air,
+		"magic_immune": definition.magic_immune,
+		"invisible": definition.invisible,
+		"radius": definition.radius,
+		"speed_multiplier": speed_multiplier,
+		"visual_scene": definition.visual_scene,
+	}
+	options.merge(start, true)
 	runner.setup(
 		creep_id,
 		lane_id,
@@ -174,17 +219,7 @@ func spawn_creep(creep_id: int, lane_id: int, definition: CreepDefinition, healt
 		LANE_COLORS[lane_id],
 		definition.health if health < 0 else health,
 		self,
-		{
-			"color": definition.color,
-			"definition_id": definition.id,
-			"armor": definition.armor,
-			"regen_per_second": definition.regen_per_second,
-			"slow_immune": definition.slow_immune,
-			"is_boss": definition.is_boss,
-			"radius": definition.radius,
-			"speed_multiplier": speed_multiplier,
-			"visual_scene": definition.visual_scene,
-		}
+		options
 	)
 	runner.finished.connect(_on_runner_finished)
 	runner.killed.connect(_on_runner_killed)
@@ -236,6 +271,11 @@ func get_active_creeps() -> Array:
 
 func _invalidate_active_creeps() -> void:
 	_active_creeps_frame = -1
+
+
+## Where a creep killed this frame fell (empty once creep_killed returns).
+func last_creep_route(creep_id: int) -> Dictionary:
+	return _last_creep_routes.get(creep_id, {})
 
 
 func show_bounty(creep_id: int, amount: int) -> void:
@@ -303,7 +343,7 @@ func reconcile_creeps(records: Array, creep_lookup: Callable, speed_multiplier :
 
 # --- Towers -------------------------------------------------------------------
 
-func spawn_tower(tower_id: int, cell: Vector2i, definition: TowerDefinition, tier := 0, targeting := -1, stats := {}, position_index := -1) -> Tower:
+func spawn_tower(tower_id: int, cell: Vector2i, definition: TowerDefinition, targeting := -1, stats := {}, position_index := -1) -> Tower:
 	_ensure_map_data()
 	if definition == null:
 		return null
@@ -319,9 +359,9 @@ func spawn_tower(tower_id: int, cell: Vector2i, definition: TowerDefinition, tie
 	%Towers.add_child(tower)
 	tower.plane_position = footprint_center(cell, definition.footprint)
 	var resolved_targeting := targeting if TowerTargeting.is_valid_mode(targeting) else definition.default_targeting
-	var resolved_stats := stats if not stats.is_empty() else definition.stats_for_tier(tier)
+	var resolved_stats := stats if not stats.is_empty() else definition.stats()
 	var resolved_position := position_index if position_index >= 0 else get_cell_position_index(cell)
-	tower.setup(tower_id, cell, definition, tier, resolved_targeting, resolved_stats, resolved_position)
+	tower.setup(tower_id, cell, definition, resolved_targeting, resolved_stats, resolved_position)
 	tower.fired.connect(_on_tower_fired)
 	effects.ring(tower.plane_position, definition.accent_color, TILE_SIZE * 0.7 * definition.footprint.x)
 	_refresh_preview()
@@ -344,12 +384,12 @@ func remove_tower(tower_id: int) -> bool:
 	return true
 
 
-func update_tower(tower_id: int, tier: int, targeting: int, stats: Dictionary) -> bool:
+func update_tower(tower_id: int, definition: TowerDefinition, targeting: int, stats: Dictionary) -> bool:
 	var tower := get_tower(tower_id)
-	if tower == null:
+	if tower == null or definition == null:
 		return false
-	var upgraded := tier > tower.tier
-	tower.apply_stats(tier, targeting, stats)
+	var upgraded := definition != tower.definition
+	tower.apply_stats(definition, targeting, stats)
 	if upgraded:
 		effects.ring(tower.plane_position, Color("9ff2d1"), TILE_SIZE * 0.9)
 	return true
@@ -395,6 +435,8 @@ func creep_at_screen(screen_position: Vector2) -> RouteRunner:
 	var best: RouteRunner = null
 	var best_distance := INF
 	for runner: RouteRunner in get_active_creeps():
+		if runner.is_hidden():
+			continue
 		var center := project_to_screen(runner.plane_position, runner.get_visual_height() * 0.5)
 		var pick_radius := maxf(14.0, runner.radius * unit_scale * 1.8)
 		var distance := center.distance_to(screen_position)
@@ -424,7 +466,8 @@ func get_builder(owner_peer: int) -> Builder:
 
 ## Mirrors BuilderSystem records by owner. `authoritative` places them
 ## exactly (host); clients extrapolate toward each record's target.
-func reconcile_builders(records: Array, speed_pixels: float, authoritative: bool) -> void:
+## `scene_for_owner(owner_peer) -> PackedScene` picks each builder's race model.
+func reconcile_builders(records: Array, speed_pixels: float, authoritative: bool, scene_for_owner := Callable()) -> void:
 	var seen: Dictionary = {}
 	for record in records:
 		var owner_peer := int(record["owner"])
@@ -437,6 +480,8 @@ func reconcile_builders(records: Array, speed_pixels: float, authoritative: bool
 			builder.plane_position = Vector2(float(record["x"]), float(record["y"]))
 			builder.set_selected(owner_peer == _selected_builder_owner and owner_peer != 0)
 		builder.speed_pixels = speed_pixels
+		if scene_for_owner.is_valid():
+			builder.set_model_scene(scene_for_owner.call(owner_peer))
 		builder.apply_record(record, authoritative)
 	for child in _builders().get_children():
 		if child is Builder and not seen.has(child.owner_peer):
@@ -519,13 +564,13 @@ func reconcile_towers(records: Array, definition_lookup: Callable, stats_lookup:
 			var definition: TowerDefinition = definition_lookup.call(str(record["definition_id"]))
 			if definition == null:
 				continue
-			var spawned := spawn_tower(tower_id, record["cell"], definition, int(record["tier"]), int(record["targeting"]), stats, int(record.get("position", -1)))
+			var spawned := spawn_tower(tower_id, record["cell"], definition, int(record["targeting"]), stats, int(record.get("position", -1)))
 			if spawned != null:
 				spawned.apply_progress(record)
 				summary["added"] += 1
 			continue
-		elif tower.tier != int(record["tier"]) or tower.targeting != int(record["targeting"]) or tower.stats != stats:
-			update_tower(tower_id, int(record["tier"]), int(record["targeting"]), stats)
+		elif tower.definition == null or tower.definition.id != str(record["definition_id"]) or tower.targeting != int(record["targeting"]) or tower.stats != stats:
+			update_tower(tower_id, definition_lookup.call(str(record["definition_id"])), int(record["targeting"]), stats)
 			summary["updated"] += 1
 		tower.apply_progress(record)
 	for child in %Towers.get_children():
@@ -547,6 +592,9 @@ func fire_projectile(tower: Tower, target: RouteRunner) -> Projectile:
 		"slow_factor": float(tower.stats.get("slow_factor", 0.0)),
 		"slow_duration": float(tower.stats.get("slow_duration", 0.0)),
 		"armor_pierce": int(tower.stats.get("armor_pierce", 0)),
+		"magic": bool(tower.stats.get("magic", false)),
+		"targets_ground": bool(tower.stats.get("targets_ground", true)),
+		"targets_air": bool(tower.stats.get("targets_air", true)),
 	}
 	var projectile := ProjectileScene.new() as Projectile
 	%Projectiles.add_child(projectile)
@@ -707,6 +755,8 @@ static func placement_text(result: int) -> String:
 			return "Building is locked"
 		Placement.NO_TOWER_SELECTED:
 			return "Select a tower from the palette"
+		Placement.WRONG_RACE:
+			return "Your builder cannot build that"
 	return "Unknown"
 
 
@@ -859,10 +909,13 @@ func get_position_world_rect(position_index: int) -> Rect2:
 	return Rect2(Vector2(bounds.position) * TILE_SIZE, Vector2(bounds.size) * TILE_SIZE)
 
 
+## Ground creeps only: flyers never block building or care about the maze.
 func _get_active_creep_cells() -> Array[Vector2i]:
 	var active_cells: Array[Vector2i] = []
 	var seen_cells: Dictionary = {}
 	for child in get_active_creeps():
+		if child.is_air:
+			continue
 		var cell := world_to_grid(child.plane_position)
 		if not seen_cells.has(cell):
 			seen_cells[cell] = true
@@ -873,6 +926,8 @@ func _get_active_creep_cells() -> Array[Vector2i]:
 func _get_active_creep_segments() -> Array[Dictionary]:
 	var segments: Array[Dictionary] = []
 	for child in get_active_creeps():
+		if child.is_air:
+			continue
 		segments.append({
 			"start": world_to_grid(child.plane_position),
 			"target": child.get_current_target(),
@@ -1172,6 +1227,8 @@ func _paint_static_canvas(canvas: CanvasItem) -> void:
 func _paint_dynamic_canvas(canvas: CanvasItem) -> void:
 	var unit_scale := get_screen_scale()
 	for runner: RouteRunner in get_active_creeps():
+		if runner.is_hidden():
+			continue
 		var anchor := project_to_screen(runner.plane_position, runner.get_visual_height())
 		# Scales with zoom but stays readable when zoomed out and tidy up close.
 		var bar_width := clampf(runner.radius * 3.0 * unit_scale, 18.0, 64.0)
@@ -1334,8 +1391,14 @@ func _on_runner_killed(creep_id: int) -> void:
 		effects.death(runner.plane_position, runner.body_color, runner.radius)
 		_spawn_corpse(runner)
 		_last_creep_positions[creep_id] = runner.plane_position
+		_last_creep_routes[creep_id] = {
+			"start_position": runner.plane_position,
+			"start_stage": runner.get_stage_index(),
+			"start_distance": runner.get_progress() - runner.get_stage_index() * RouteRunner.STAGE_PROGRESS_WEIGHT,
+		}
 		runner.queue_free()
 	creep_killed.emit(creep_id)
+	_last_creep_routes.erase(creep_id)
 
 
 ## Presentation only: the killed creep's visual falls or plays `death`, then

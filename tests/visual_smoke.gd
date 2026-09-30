@@ -20,8 +20,8 @@ func _start() -> void:
 	_game = (load("res://scenes/game/Game.tscn") as PackedScene).instantiate()
 	root.add_child(_game)
 	_game.call("_try_place_tower", "bolt", Vector2i(34, 20))
-	_game.call("_try_place_tower", "cannon", Vector2i(80, 136))
-	_game.call("_try_place_tower", "frost", Vector2i(60, 132))
+	_game.call("_try_place_tower", "sentry", Vector2i(80, 136))
+	_game.call("_try_place_tower", "bolt", Vector2i(60, 132))
 	_game.call("_on_palette_selected", "bolt")
 	_game.set("build_countdown", 0.5)
 

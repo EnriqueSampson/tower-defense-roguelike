@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="TowerDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/tower_definition.gd" id="1_tower"]
+[ext_resource type="PackedScene" uid="uid://cihg6ing5c2cw" path="res://assets/models/towers/elf_ranger.glb" id="2_model"]
+
+[resource]
+script = ExtResource("1_tower")
+id = "elf_ranger"
+display_name = "Ranger"
+role = "Long range"
+description = "Has walked every trail and reviewed each one. Faster, longer shots."
+primary_color = Color(0.2, 0.4, 0.25, 1)
+accent_color = Color(0.85, 1.0, 0.75, 1)
+footprint = Vector2i(2, 2)
+visual_scene = ExtResource("2_model")
+cost = 50
+damage = 12
+attack_range = 364.0
+attack_cooldown = 0.5
+projectile_speed = 620.0
+splash_radius = 0.0
+slow_factor = 0.0
+slow_duration = 0.0
+armor_pierce = 0
+can_target_ground = true
+can_target_air = true
+is_magic = false
+detection_range = 0.0
+default_targeting = 0
+tier = 2
+upgrade_options = PackedStringArray("elf_hippogryph")
+sell_refund_percent = 70
