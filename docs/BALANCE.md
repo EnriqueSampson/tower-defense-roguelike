@@ -11,7 +11,7 @@ How the 30-level run is tuned and what the harness says about it. Update the tab
 | Boss health per level | `BOSS_HEALTH_GROWTH` (on top of each boss's own health) | ×1.03 per level |
 | Bounty per level | `BOUNTY_GROWTH` (regular creeps only; bosses keep their own bounty) | ×1.06 per level |
 | Build time | `BalanceConfig.BUILD_DURATION`; boss levels `BOSS_BUILD_SECONDS` | 25 s; 35 s |
-| Starting gold | `BalanceConfig.starting_gold(players)` | 120 + 60 per extra player |
+| Starting gold | `BalanceConfig.starting_gold(players)` | 120 + 60 per extra player, split evenly between the players' accounts; income is split by position (see ARCHITECTURE §2) |
 | Creeps per position | `ClassicWintermaulLayout.WAVE_MULTIPLIERS` × `BalanceConfig.player_scale` | 0.4× solo to 1.0× at nine players |
 
 Rerun `python3 tools/generate_waves.py` after changing a curve; never hand-edit `resources/waves/`.
@@ -61,6 +61,7 @@ Tuning history:
 - With races and upgrade trees the bots got stronger. First pass at 1.16: Humans 20 lives, Bugs 18, Elves 6, Orcs lost at level 29 (no air coverage once the axe line became the ground-only Lizard Rider). The Lizard line now hits air, the Minivan and Musketeer lost some damage, Elves' Ranger, Hippogryph and Owl hit harder, and the Ancient Ent now hits air. Growth rose to 1.18 (Humans 20, Orcs 22, Elves 17, Bugs 19; lazy bot lost at 28).
 - New branches and ultimates: Elves went to 25 lives with no leaks; the Thornbush (now 30 gold, weaker slow) and Moon Well (less damage and splash) were trimmed, with no change in the result.
 - Map retrace (82×84 towers, twin centre spawns split left and right), Humans, seed 42: solo Victory with 19 lives (1 leak; was 14 lives on the old map). Four players, Relics: Defeat at level 28, against level 24 on the old map in the same run. The new map leaks 7 on level 1 in four-player lobbies, because bots start at their home positions and little gold reaches the shared funnel in time. Watch the opening in playtests.
+- Gold per player (starting gold split evenly, income split by position, so the host earns the shares of the positions it covers), Humans, seed 42: solo unchanged (Victory, 19 lives). Four players: the level-1 leak is gone and the team now falls only to the final boss (Defeat at level 30, 18 of its 20 leaks there), against level 28 with the shared pool. The bots never send gold; pooling gold into Position 9 before the boss is exactly what the Send Gold buttons are for.
 
 ## Known gaps
 

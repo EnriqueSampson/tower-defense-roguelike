@@ -441,12 +441,33 @@ func _test_leak_resolves_once() -> void:
 
 func _test_team_economy() -> void:
 	var state := RunStateModel.new(1, 20, 25)
-	_check(state.spend_gold(25) and state.team_gold == 0, "tower purchase spends authoritative team gold")
-	_check(not state.spend_gold(1), "tower purchase rejects insufficient team gold")
-	state.award_gold(5)
-	_check(state.team_gold == 5, "creep bounty rewards authoritative team gold")
-	state.refund_gold(10)
-	_check(state.team_gold == 15 and state.stats["gold_earned"] == 5 and state.stats["gold_spent"] == 25, "refunds return gold without inflating earned bounty")
+	_check(state.spend_gold(1, 25) and state.gold_of(1) == 0, "tower purchase spends authoritative team gold")
+	_check(not state.spend_gold(1, 1), "tower purchase rejects insufficient team gold")
+	state.award_gold(1, 5)
+	_check(state.gold_of(1) == 5, "creep bounty rewards authoritative team gold")
+	state.refund_gold(1, 10)
+	_check(state.gold_of(1) == 15 and state.stats["gold_earned"] == 5 and state.stats["gold_spent"] == 25, "refunds return gold without inflating earned bounty")
+
+	# Four players: accounts, income by position, sending, leaving.
+	var team := RunStateModel.new(1, 20, 0)
+	team.position_owners = PackedInt32Array([1, 2, 3, 4, 0, 0, 0, 0, 0])
+	team.open_accounts([2, 3, 4], 302)
+	_check(team.gold_of(1) == 77 and team.gold_of(2) == 75 and team.gold_of(3) == 75 and team.gold_of(4) == 75, "starting gold splits evenly between players, the host keeping the remainder")
+	_check(not team.spend_gold(2, 76) and team.spend_gold(2, 75) and team.gold_of(2) == 0 and team.gold_of(1) == 77, "each player spends only their own gold")
+	team.award_shared_gold(90)
+	_check(team.gold_of(1) == 77 + 60 and team.gold_of(2) == 10 and team.gold_of(3) == 85 and team.stats["gold_earned"] == 90, "bounties split by position: the host earns the shares of the five empty positions")
+	team.award_shared_gold(4)
+	team.award_shared_gold(5)
+	_check(team.gold_of(2) == 11 and team.total_gold() == 302 - 75 + 90 + 9, "fractions of small bounties carry over until they make a whole coin")
+	_check(team.transfer_gold(3, 2, 50) and team.gold_of(2) == 61 and team.gold_of(3) == 36 and team.stats["gold_sent"] == 50, "a player can send gold to a teammate")
+	_check(not team.transfer_gold(3, 2, 999) and not team.transfer_gold(3, 3, 1) and not team.transfer_gold(3, 9, 1) and not team.transfer_gold(3, 2, 0), "sending refuses overdrafts, yourself, unknown players and nothing")
+	var host_before := team.gold_of(1)
+	var leaving := team.gold_of(4)
+	team.close_account(4, 1)
+	_check(leaving == 86 and not team.peer_gold.has(4) and team.gold_of(1) == host_before + leaving, "a leaving player's gold goes to the host")
+	var restored_team := RunStateModel.new()
+	restored_team.restore(team.snapshot(0.0))
+	_check(restored_team.peer_gold == team.peer_gold, "snapshots carry every player's gold")
 
 
 func _test_snapshot_round_trip() -> void:
@@ -459,14 +480,14 @@ func _test_snapshot_round_trip() -> void:
 	state.apply_upgrade("bolt_damage")
 	state.pending_offer = ["war_chest", "extra_lives"]
 	state.elapsed_seconds = 42.5
-	state.spend_gold(30)
+	state.spend_gold(1, 30)
 	var snapshot := state.snapshot(12.0)
 	var restored := RunStateModel.new()
 	restored.restore(snapshot)
 	_check(restored.run_seed == 987654 and restored.position_owners == state.position_owners, "snapshot restores seed and position owners")
 	_check(restored.towers.size() == 2 and restored.get_tower(1)["definition_id"] == "human_crossbow" and int(restored.get_tower(1)["invested"]) == 45 and restored.get_tower(2)["definition_id"] == "frost", "snapshot restores tower records by stable id")
 	_check(restored.applied_upgrades == ["bolt_damage"] and restored.pending_offer == ["war_chest", "extra_lives"], "snapshot restores applied upgrades and pending offer")
-	_check(restored.team_gold == 90 and is_equal_approx(restored.elapsed_seconds, 42.5) and restored.stats["towers_built"] == 2, "snapshot restores economy, timer, and stats")
+	_check(restored.gold_of(1) == 90 and is_equal_approx(restored.elapsed_seconds, 42.5) and restored.stats["towers_built"] == 2, "snapshot restores economy, timer, and stats")
 	_check(restored.snapshot(12.0) == snapshot, "snapshot serialization is stable across a round trip")
 	_check(restored.allocate_tower_id() == 3, "snapshot restores id allocation so new ids never collide")
 
@@ -527,13 +548,15 @@ func _test_unauthorized_client_build_rejected() -> void:
 	root.add_child(game)
 	var state: RunState = game.get("run_state")
 	state.position_owners[0] = 2
-	var starting_gold := state.team_gold
+	state.open_accounts([2], 2 * BalanceConfig.STARTING_GOLD)
+	var starting_gold := state.gold_of(1)
 	var p1_cell := P1_OPEN
 	var p2_cell := P2_OPEN
 	_check(game.call("_try_place_tower", "bolt", p1_cell, 3) == WintermaulMap.Placement.NOT_OWNED, "a client cannot build in another player's position")
 	_check(game.call("_try_place_tower", "bolt", p1_cell, 1) == WintermaulMap.Placement.NOT_OWNED, "the host cannot build in an assigned client position")
-	_check(state.team_gold == starting_gold and state.towers.is_empty(), "rejected ownership requests spend no gold")
+	_check(state.gold_of(1) == starting_gold and state.towers.is_empty(), "rejected ownership requests spend no gold")
 	_check(game.call("_try_place_tower", "bolt", p1_cell, 2) == WintermaulMap.Placement.OK, "the assigned client builds in its own position")
+	_check(state.gold_of(2) == BalanceConfig.STARTING_GOLD - Bolt.cost and state.gold_of(1) == starting_gold, "the client pays from their own gold, not the host's")
 	_check(game.call("_try_place_tower", "bolt", p2_cell, 1) == WintermaulMap.Placement.OK, "the host builds in unfilled positions")
 	_check(game.call("_try_place_tower", "ghost_tower", P1_OPEN_B, 1) == WintermaulMap.Placement.NO_TOWER_SELECTED, "unknown tower ids are rejected")
 	_check(game.call("_try_place_tower", "bolt", Vector2i(-5, 400), 1) == WintermaulMap.Placement.OUT_OF_BOUNDS, "malformed cells are rejected")
@@ -1064,7 +1087,7 @@ func _test_mid_wave_tower_placement() -> void:
 	game.call("_try_place_tower", "bolt", P1_OPEN)
 	var towers := game.get_node(MAP_PATH + "/Towers")
 	_check(towers.get_child_count() == 1, "host placement handler spawns towers during active waves")
-	_check(state.team_gold == BalanceConfig.STARTING_GOLD - Bolt.cost, "mid-wave tower placement charges authoritative gold")
+	_check(state.gold_of(1) == BalanceConfig.STARTING_GOLD - Bolt.cost, "mid-wave tower placement charges authoritative gold")
 	_check(state.towers.size() == 1 and state.tower_records()[0]["cell"] == P1_OPEN, "authoritative tower records mirror placed towers")
 	game.queue_free()
 
@@ -1117,12 +1140,12 @@ func _test_blocked_placement_preserves_gold() -> void:
 	var game: Node = _instantiate_game()
 	root.add_child(game)
 	var state: RunState = game.get("run_state")
-	var starting_gold := state.team_gold
+	var starting_gold := state.gold_of(1)
 	_seal_lane_one_except(game.get_node(MAP_PATH) as WintermaulMap, SEAL_CELL)
 	_check(game.call("_try_place_tower", "bolt", SEAL_CELL) == WintermaulMap.Placement.BLOCKS_ROUTE, "host reports why a sealing tower was rejected")
 	var towers := game.get_node(MAP_PATH + "/Towers")
 	_check(towers.get_child_count() == SEAL_NEIGHBOURS.size(), "host rejects a tower that seals a creep route")
-	_check(state.team_gold == starting_gold, "rejected collision placement does not spend gold")
+	_check(state.gold_of(1) == starting_gold, "rejected collision placement does not spend gold")
 	game.queue_free()
 
 
@@ -1131,16 +1154,16 @@ func _test_upgrade_and_sell_economy() -> void:
 	root.add_child(game)
 	var state: RunState = game.get("run_state")
 	var map := game.get_node(MAP_PATH) as WintermaulMap
-	state.team_gold = 500
+	state.set_gold(1, 500)
 	_check(game.call("_try_place_tower", "bolt", P1_OPEN) == WintermaulMap.Placement.OK, "bolt tower is placed for the economy test")
 	var tower_id: int = state.tower_records()[0]["id"]
-	var gold_after_build := state.team_gold
+	var gold_after_build := state.gold_of(1)
 	var knight := Catalog.get_tower("human_knight")
 	var crossbow := Catalog.get_tower("human_crossbow")
 	var musket := Catalog.get_tower("human_musket")
 	_check(not game.call("_try_upgrade_tower", tower_id, "human_musket"), "a tower cannot skip to a tower outside its options")
 	_check(game.call("_try_upgrade_tower", tower_id, "human_crossbow"), "owner picks one branch of the upgrade tree")
-	_check(state.team_gold == gold_after_build - crossbow.cost and state.get_tower(tower_id)["definition_id"] == "bolt" and map.get_tower(tower_id).is_upgrading(), "upgrades charge the target's cost up front and keep the old tower while in progress")
+	_check(state.gold_of(1) == gold_after_build - crossbow.cost and state.get_tower(tower_id)["definition_id"] == "bolt" and map.get_tower(tower_id).is_upgrading(), "upgrades charge the target's cost up front and keep the old tower while in progress")
 	_check(not game.call("_try_upgrade_tower", tower_id, "human_knight"), "a tower cannot start a second upgrade mid-upgrade")
 	game.call("_tick_construction", 60.0)
 	_check(state.get_tower(tower_id)["definition_id"] == "human_crossbow" and not map.get_tower(tower_id).is_upgrading(), "the upgrade completes into the chosen tower")
@@ -1150,13 +1173,13 @@ func _test_upgrade_and_sell_economy() -> void:
 	game.call("_tick_construction", 60.0)
 	var invested := Bolt.cost + crossbow.cost + musket.cost
 	_check(int(state.get_tower(tower_id)["invested"]) == invested and knight != null, "the record tracks every gold paid into the tower")
-	var gold_before_sell := state.team_gold
+	var gold_before_sell := state.gold_of(1)
 	_check(game.call("_try_sell_tower", tower_id), "owner sells a tower")
-	_check(state.team_gold == gold_before_sell + musket.sell_value(invested), "selling refunds the documented percentage of total investment")
-	_check(not game.call("_try_sell_tower", tower_id) and state.team_gold == gold_before_sell + musket.sell_value(invested), "duplicate sell requests are ignored")
+	_check(state.gold_of(1) == gold_before_sell + musket.sell_value(invested), "selling refunds the documented percentage of total investment")
+	_check(not game.call("_try_sell_tower", tower_id) and state.gold_of(1) == gold_before_sell + musket.sell_value(invested), "duplicate sell requests are ignored")
 	_check(map.get_tower(tower_id) == null and map.can_place_tower(P1_OPEN), "sold towers leave the map and free their cell")
 	_check(state.stats["towers_built"] == 1 and state.stats["towers_upgraded"] == 2 and state.stats["towers_sold"] == 1, "run stats track builds, upgrades, and sells")
-	state.team_gold = 0
+	state.set_gold(1, 0)
 	_check(game.call("_try_place_tower", "bolt", P1_OPEN_B) == WintermaulMap.Placement.UNAFFORDABLE, "unaffordable builds report the reason and spend nothing")
 	game.queue_free()
 
@@ -1293,7 +1316,7 @@ func _test_splitters() -> void:
 		parent._process(0.1)
 	var fell_at := parent.plane_position
 	var stage := parent.get_stage_index()
-	var gold := state.team_gold
+	var gold := state.gold_of(1)
 	parent.take_damage(100000, 100)
 	var children := map.get_active_creeps()
 	_check(children.size() == slime.split_count and state.active_creeps.size() == slime.split_count, "a splitter's death spawns and registers its children")
@@ -1302,10 +1325,10 @@ func _test_splitters() -> void:
 		placed = placed and child.definition_id == "slimelet" and child.plane_position.distance_to(fell_at) < WintermaulMap.TILE_SIZE and child.get_stage_index() == stage
 		placed = placed and child.max_health == roundi(slime.split_into.health * 2.0)
 	_check(placed, "children appear where the parent fell, on its stage, with its health multiplier")
-	_check(state.team_gold == gold + roundi(slime.bounty * 1.5) and not state.is_wave_clear(), "the parent pays its bounty and the wave waits for the children")
+	_check(state.gold_of(1) == gold + roundi(slime.bounty * 1.5) and not state.is_wave_clear(), "the parent pays its bounty and the wave waits for the children")
 	for child: RouteRunner in children:
 		child.take_damage(100000, 100)
-	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 1 and state.team_gold == gold + roundi(slime.bounty * 1.5) + slime.split_count * roundi(slime.split_into.bounty * 1.5), "killing every child clears the level and pays scaled bounties")
+	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 1 and state.gold_of(1) == gold + roundi(slime.bounty * 1.5) + slime.split_count * roundi(slime.split_into.bounty * 1.5), "killing every child clears the level and pays scaled bounties")
 	var looped := CreepDefinition.new()
 	looped.id = "loop"
 	looped.split_into = looped
@@ -1351,16 +1374,16 @@ func _test_builder_orders_and_construction() -> void:
 	var state: RunState = game.get("run_state")
 	var map := game.get_node(MAP_PATH) as WintermaulMap
 	var builders: BuilderSystem = game.get("builder_system")
-	state.team_gold = 1000
+	state.set_gold(1, 1000)
 	_check(builders != null and builders.has_builder(1) and map.get_builder(1) != null, "the host starts with a builder")
 	_check(is_equal_approx(BalanceConfig.builder_speed_pixels(true), 2.0 * BalanceConfig.builder_speed_pixels(false)), "the solo builder runs twice as fast")
 	var start := builders.get_position(1)
 	_check(map.get_position_world_rect(8).has_point(start), "the solo builder starts in Position 9")
-	var gold := state.team_gold
+	var gold := state.gold_of(1)
 	_check(game.call("_try_order_build", 1, "bolt", P9_OPEN, false) == WintermaulMap.Placement.OK, "a valid build order is accepted")
-	_check(state.team_gold == gold and state.towers.is_empty(), "ordering a build spends nothing until the builder arrives")
+	_check(state.gold_of(1) == gold and state.towers.is_empty(), "ordering a build spends nothing until the builder arrives")
 	_run_builders(game, 5.0)
-	_check(state.towers.size() == 1 and state.team_gold == gold - Bolt.cost, "the builder walks to the site, starts construction and pays")
+	_check(state.towers.size() == 1 and state.gold_of(1) == gold - Bolt.cost, "the builder walks to the site, starts construction and pays")
 	var tower := map.get_tower(state.tower_records()[0]["id"])
 	_check(tower != null and tower.is_under_construction() and tower.progress_ratio() >= 0.0, "a new tower starts under construction")
 	var creep := map.spawn_creep(7001, 8, _creep(1.0, 10))
@@ -1379,16 +1402,16 @@ func _test_builder_orders_and_construction() -> void:
 	builders.stop(1)
 	# Cancelling construction refunds in full.
 	_check(game.call("_try_order_build", 1, "sentry", P9_OPEN + Vector2i(4, 0), false) == WintermaulMap.Placement.OK, "a second build order is accepted")
-	gold = state.team_gold
+	gold = state.gold_of(1)
 	_run_builders(game, 5.0)
 	var building_id: int = state.tower_records()[-1]["id"]
-	_check(state.team_gold == gold - Catalog.get_tower("sentry").cost and game.call("_try_sell_tower", building_id) and state.team_gold == gold, "cancelling construction refunds the full cost")
+	_check(state.gold_of(1) == gold - Catalog.get_tower("sentry").cost and game.call("_try_sell_tower", building_id) and state.gold_of(1) == gold, "cancelling construction refunds the full cost")
 	# A site taken while walking fails on arrival without charging.
 	_check(game.call("_try_order_build", 1, "bolt", P9_OPEN + Vector2i(0, 4), false) == WintermaulMap.Placement.OK, "a third build order is accepted")
 	game.call("_try_place_tower", "bolt", P9_OPEN + Vector2i(0, 4))
-	gold = state.team_gold
+	gold = state.gold_of(1)
 	_run_builders(game, 5.0)
-	_check(state.team_gold == gold and builders.get_orders(1).is_empty(), "an order whose site was taken fails on arrival and spends nothing")
+	_check(state.gold_of(1) == gold and builders.get_orders(1).is_empty(), "an order whose site was taken fails on arrival and spends nothing")
 	# Move orders walk the builder to the point.
 	var target := map.grid_to_world(P9_OPEN + Vector2i(-6, -10))
 	_check(game.call("_try_order_move", 1, target, false), "move orders are accepted")
@@ -1406,7 +1429,7 @@ func _test_races_gate_building_and_offers() -> void:
 	var game: Node = _instantiate_game()
 	root.add_child(game)
 	var state: RunState = game.get("run_state")
-	state.team_gold = 1000
+	state.set_gold(1, 1000)
 	_check(state.race_of(1) == "bugs", "the host builds with the race picked in the lobby")
 	_check(game.call("_try_order_build", 1, "bolt", P9_OPEN, false) == WintermaulMap.Placement.WRONG_RACE, "a builder cannot order another race's tower")
 	_check(game.call("_try_place_tower", "bug_soldier_ant", P9_OPEN, 1) == WintermaulMap.Placement.WRONG_RACE, "a builder cannot build an upgrade directly")
@@ -1438,7 +1461,7 @@ func _test_midpoint_choice() -> void:
 	var humans := Catalog.get_race("humans")
 	var midpoint := BalanceConfig.midpoint_wave_index(state.wave_count)
 	_check(midpoint == 14, "the halfway choice comes after level 15 of 30")
-	state.team_gold = 5000
+	state.set_gold(1, 5000)
 	_check(game.call("_try_order_build", 1, humans.ultimate.id, P9_OPEN, false) == WintermaulMap.Placement.NEEDS_RELIC, "the race ultimate needs a Relic")
 	# Clear level 15.
 	state.current_wave_index = midpoint
@@ -1456,12 +1479,12 @@ func _test_midpoint_choice() -> void:
 	var snapshot: Dictionary = game.call("_make_state_snapshot")
 	_check(snapshot["relics"] == {1: 1} and snapshot["midpoint"] == [], "snapshots carry Relics and pending choices")
 	# Build the ultimate: gold and the Relic are paid when construction starts.
-	var gold := state.team_gold
+	var gold := state.gold_of(1)
 	_check(game.call("_try_place_tower", humans.ultimate.id, P9_OPEN, 1, 5.0) == WintermaulMap.Placement.OK, "a Relic unlocks the race ultimate")
-	_check(state.team_gold == gold - humans.ultimate.cost and state.relics_of(1) == 0, "the ultimate costs gold plus the Relic")
+	_check(state.gold_of(1) == gold - humans.ultimate.cost and state.relics_of(1) == 0, "the ultimate costs gold plus the Relic")
 	_check(game.call("_try_place_tower", humans.ultimate.id, P9_OPEN + Vector2i(4, 0), 1) == WintermaulMap.Placement.NEEDS_RELIC, "one Relic buys one ultimate")
 	var ultimate_id: int = state.tower_records()[-1]["id"]
-	_check(game.call("_try_sell_tower", ultimate_id) and state.relics_of(1) == 1 and state.team_gold == gold, "cancelling the ultimate's construction refunds gold and the Relic")
+	_check(game.call("_try_sell_tower", ultimate_id) and state.relics_of(1) == 1 and state.gold_of(1) == gold, "cancelling the ultimate's construction refunds gold and the Relic")
 	_check(game.call("_try_place_tower", humans.ultimate.id, P9_OPEN, 1) == WintermaulMap.Placement.OK and map.get_tower(state.tower_records()[-1]["id"]).definition == humans.ultimate, "the refunded Relic builds the ultimate again")
 	# Recruiting a second race.
 	state.midpoint_pending = [1]
@@ -1488,7 +1511,7 @@ func _test_builder_stop_and_trip() -> void:
 	var state: RunState = game.get("run_state")
 	var map := game.get_node(MAP_PATH) as WintermaulMap
 	var builders: BuilderSystem = game.get("builder_system")
-	state.team_gold = 1000
+	state.set_gold(1, 1000)
 	_check(is_equal_approx(builders.trip_chance, BalanceConfig.BUILDER_TRIP_CHANCE) and builders.trip_chance < 0.1, "builders trip only now and then")
 	# Stop clears queued orders; a peer without a builder cannot issue one.
 	game.call("_try_order_build", 1, "bolt", P9_OPEN, true)
@@ -1497,7 +1520,7 @@ func _test_builder_stop_and_trip() -> void:
 	_check(not game.call("_try_order_stop", 7), "peers without a builder cannot issue Stop")
 	_check(((game.get("_builder_records") as Array)[0]["sites"] as Array).is_empty(), "Stop clears the replicated build site markers")
 	_run_builders(game, 3.0)
-	_check(state.towers.is_empty() and state.team_gold == 1000, "stopped build orders never start construction or charge")
+	_check(state.towers.is_empty() and state.gold_of(1) == 1000, "stopped build orders never start construction or charge")
 	# Trip: forced on, a move that ends beside a building knocks the builder over.
 	game.call("_try_place_tower", "bolt", P9_OPEN)
 	var tower := map.get_tower(state.tower_records()[0]["id"])
@@ -1637,7 +1660,7 @@ func _test_controller_wave_loop_with_offer() -> void:
 		_check(state.active_creeps.is_empty() and state.shared_lives == starting_lives, "wave %d clears through kills without leaks" % wave_number)
 		game.call("_finish_creep_resolution")
 	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 3, "three cleared waves return to build for wave four")
-	_check(state.stats["kills"] > 0 and state.team_gold > BalanceConfig.STARTING_GOLD, "kills award team gold and count toward results")
+	_check(state.stats["kills"] > 0 and state.gold_of(1) > BalanceConfig.STARTING_GOLD, "kills award team gold and count toward results")
 	_check(state.has_pending_offer() and state.pending_offer.size() == BalanceConfig.OFFER_CHOICE_COUNT, "clearing wave three offers a team upgrade")
 	var countdown_before: float = game.get("build_countdown")
 	game.call("_process", 1.0)

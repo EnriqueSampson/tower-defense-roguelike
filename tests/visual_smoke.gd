@@ -30,7 +30,7 @@ func _process(_delta: float) -> bool:
 	_frames += 1
 	if _frames == 200:
 		var state: RunState = _game.get("run_state")
-		print("SMOKE phase=", state.phase, " active=", state.active_creeps.size(), " gold=", state.team_gold, " fps=", Engine.get_frames_per_second(),
+		print("SMOKE phase=", state.phase, " active=", state.active_creeps.size(), " gold=", state.total_gold(), " fps=", Engine.get_frames_per_second(),
 			" process_ms=%.2f" % (Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0),
 			" draw_calls=", Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 			" frames_drawn=", _draws, "/", _frames,

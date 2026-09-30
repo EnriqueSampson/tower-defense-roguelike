@@ -17,6 +17,8 @@ signal return_requested
 signal selection_cleared
 ## WC3 Stop (S): clears the local builder's order queue.
 signal builder_stop_requested
+## Send `amount` of your gold to another player.
+signal gold_send_requested(to_peer: int, amount: int)
 
 const RunStateModel = preload("res://scripts/game/run_state.gd")
 const COLOR_OK := Color("8ed8c6")
@@ -40,6 +42,8 @@ const SLOT_STOP := 5
 const SLOT_CANCEL := 11
 ## Card-sized names for TowerTargeting.Mode (FIRST, LAST, STRONGEST, NEAREST).
 const TARGETING_SHORT_NAMES: Array[String] = ["First", "Last", "Strong", "Near"]
+## Quick amounts on the multiboard's Send Gold buttons.
+const SEND_GOLD_AMOUNTS: Array[int] = [25, 100]
 
 var _catalog: ContentCatalog
 var _card_slots: Array[Button] = []
@@ -81,6 +85,10 @@ var _toast_timer := 0.0
 var _message_timer := 0.0
 var _end_screen_shown := false
 var _offer_ids: Array[String] = []
+## Multiboard player rows (name, gold, Send Gold buttons), rebuilt only when
+## a balance or name changes.
+var _players_list: VBoxContainer
+var _players_signature := ""
 
 @onready var phase_label: Label = %PhaseLabel
 @onready var wave_label: Label = %WaveLabel
@@ -163,6 +171,7 @@ func _ready() -> void:
 	toast_label.visible = false
 	placement_hint.text = ""
 	_build_position_rows()
+	_build_players_list()
 
 
 func setup(catalog: ContentCatalog) -> void:
@@ -201,7 +210,7 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 	phase_label.text = _phase_name(phase)
 	wave_label.text = "WAVE  %s / %s" % [snapshot["wave_index"] + 1, snapshot["wave_count"]]
 	lives_label.text = "LIVES  %s" % snapshot["lives"]
-	gold_label.text = "GOLD  %s" % snapshot["gold"]
+	gold_label.text = "GOLD  %s" % int(context.get("gold", 0))
 	active_label.text = "CREEPS  %s    TOWERS  %s" % [snapshot["active_count"], snapshot.get("tower_count", 0)]
 	if phase == RunStateModel.Phase.BUILD:
 		if waiting_for > 0:
@@ -231,7 +240,7 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 	_race = context.get("race") as RaceDefinition
 	_bonus_race = context.get("bonus_race") as RaceDefinition
 	_relics = int(context.get("relics", 0))
-	_gold = snapshot["gold"]
+	_gold = int(context.get("gold", 0))
 	_modifiers = modifiers
 	_refresh_card()
 	if not _selected_definition_id.is_empty():
@@ -252,6 +261,7 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 
 	_update_wave_preview(phase, wave, snapshot)
 	_update_position_rows(snapshot, owners, context)
+	_update_player_rows(snapshot, context)
 
 	var lines := modifiers.summary_lines()
 	modifiers_list.text = "\n".join(PackedStringArray(lines)) if not lines.is_empty() else "None yet. Offers appear after selected waves."
@@ -314,6 +324,59 @@ func _update_position_rows(snapshot: Dictionary, owners: PackedInt32Array, conte
 		elif owner != 0 and owner != BuildPermissionPolicy.HOST_PEER_ID:
 			owner_text = str(names.get(owner, "ALLY"))
 		row.text = "P%d  %-6s  SPAWNED %02d  QUEUED %02d" % [position_index + 1, owner_text, spawned[position_index], queued[position_index]]
+
+
+## A GOLD section under the position rows: every player's balance, with
+## Send Gold buttons on your teammates' rows.
+func _build_players_list() -> void:
+	var heading := Label.new()
+	heading.text = "PLAYER GOLD"
+	heading.add_theme_font_size_override("font_size", 11)
+	heading.add_theme_color_override("font_color", Color(0.616, 0.584, 0.51))
+	_players_list = VBoxContainer.new()
+	_players_list.add_theme_constant_override("separation", 1)
+	var layout := positions_list.get_parent()
+	layout.add_child(heading)
+	layout.move_child(heading, positions_list.get_index() + 1)
+	layout.add_child(_players_list)
+	layout.move_child(_players_list, heading.get_index() + 1)
+
+
+func _update_player_rows(snapshot: Dictionary, context: Dictionary) -> void:
+	var gold: Dictionary = snapshot.get("gold", {})
+	var names: Dictionary = context.get("owner_names", {})
+	var local_peer: int = context["local_peer"]
+	var peers: Array = gold.keys()
+	peers.sort()
+	var ended := int(snapshot["phase"]) in [RunStateModel.Phase.VICTORY, RunStateModel.Phase.DEFEAT]
+	var signature := "%s|%s|%s|%s" % [gold, names, local_peer, ended]
+	if signature == _players_signature:
+		return
+	_players_signature = signature
+	for child in _players_list.get_children():
+		child.queue_free()
+	for peer_id in peers:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
+		var label := Label.new()
+		label.add_theme_font_size_override("font_size", 12)
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var name := "YOU" if int(peer_id) == local_peer else str(names.get(int(peer_id), "HOST" if int(peer_id) == BuildPermissionPolicy.HOST_PEER_ID else "ALLY"))
+		label.text = "%-10s %5dg" % [name.left(10), int(gold[peer_id])]
+		label.add_theme_color_override("font_color", Color("f0d868") if int(peer_id) == local_peer else Color("d5e2dd"))
+		row.add_child(label)
+		if int(peer_id) != local_peer and not ended:
+			for amount in SEND_GOLD_AMOUNTS:
+				var send := Button.new()
+				send.text = "+%d" % amount
+				send.tooltip_text = "Send %d of your gold to %s" % [amount, name]
+				send.add_theme_font_size_override("font_size", 10)
+				send.custom_minimum_size = Vector2(34, 18)
+				send.focus_mode = Control.FOCUS_NONE
+				send.disabled = _gold < amount
+				send.pressed.connect(func() -> void: gold_send_requested.emit(int(peer_id), amount))
+				row.add_child(send)
+		_players_list.add_child(row)
 
 
 func _phase_name(phase: int) -> String:

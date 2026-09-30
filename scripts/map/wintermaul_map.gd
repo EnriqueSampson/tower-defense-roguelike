@@ -80,7 +80,8 @@ var _terrain_texture: ImageTexture
 var _build_enabled := false
 var _build_definition: TowerDefinition
 var _build_cost := 0
-var _team_gold := 0
+## The local player's gold (affordability of the placement preview).
+var _gold := 0
 var _controllable_positions: Array[int] = []
 var _owners := PackedInt32Array()
 var _local_peer_id := 1
@@ -665,13 +666,13 @@ func set_build_context(enabled: bool, definition: TowerDefinition, cost: int, go
 		enabled != _build_enabled
 		or definition != _build_definition
 		or cost != _build_cost
-		or gold != _team_gold
+		or gold != _gold
 		or controllable_positions != _controllable_positions
 	)
 	_build_enabled = enabled
 	_build_definition = definition
 	_build_cost = cost
-	_team_gold = gold
+	_gold = gold
 	_controllable_positions = controllable_positions.duplicate()
 	if not enabled:
 		_preview_visible = false
@@ -735,7 +736,7 @@ func evaluate_build(cell: Vector2i) -> int:
 		return geometry
 	if not get_cell_position_index(cell) in _controllable_positions:
 		return Placement.NOT_OWNED
-	if _team_gold < _build_cost:
+	if _gold < _build_cost:
 		return Placement.UNAFFORDABLE
 	return Placement.OK
 
@@ -761,7 +762,7 @@ static func placement_text(result: int) -> String:
 		Placement.NOT_OWNED:
 			return "Not your position"
 		Placement.UNAFFORDABLE:
-			return "Not enough team gold"
+			return "Not enough gold"
 		Placement.LOCKED:
 			return "Building is locked"
 		Placement.NO_TOWER_SELECTED:

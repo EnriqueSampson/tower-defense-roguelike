@@ -4,8 +4,9 @@ extends RefCounted
 ## Central tuning knobs recorded from playtests. Content lives in resources;
 ## these are run-wide constants that are not tower or creep specific.
 const STARTING_GOLD := 120
-## Team gold is shared, so each extra player adds starting gold for their
-## first towers (a Phase 6 retune will scale income too).
+## The lobby's starting gold, split evenly between the players' accounts: each
+## extra player adds some so everyone can afford first towers (a Phase 6
+## retune will scale income too).
 const STARTING_GOLD_PER_EXTRA_PLAYER := 60
 const STARTING_LIVES := 20
 const BUILD_DURATION := 25.0

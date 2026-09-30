@@ -16,7 +16,9 @@ var current_wave_index := 0
 var wave_count := 0
 var position_count := 9
 var shared_lives := 20
-var team_gold := 100
+## peer id -> gold. Every player has their own account (lives stay shared);
+## the host's account also covers the positions it controls for absent players.
+var peer_gold: Dictionary = {}
 var roguelike_enabled := true
 var lane_queued := PackedInt32Array()
 var lane_spawned := PackedInt32Array()
@@ -51,17 +53,20 @@ var stats := {
 	"leaks": 0,
 	"gold_spent": 0,
 	"gold_earned": 0,
+	"gold_sent": 0,
 	"boss_kills": 0,
 }
 
 var _next_tower_id := 1
 var _next_creep_id := 1
+## Host-only fractions of split bounties, carried until they make a whole coin.
+var _gold_fractions: Dictionary = {}
 
 
 func _init(total_waves := 5, starting_lives := 20, starting_gold := 100, position_count := 9) -> void:
 	wave_count = total_waves
 	shared_lives = starting_lives
-	team_gold = starting_gold
+	peer_gold = {BuildPermissionPolicy.HOST_PEER_ID: starting_gold}
 	self.position_count = position_count
 	lane_queued.resize(self.position_count)
 	lane_spawned.resize(self.position_count)
@@ -158,23 +163,104 @@ func advance_after_clear() -> void:
 		phase = Phase.BUILD
 
 
-func spend_gold(amount: int) -> bool:
-	if amount < 0 or team_gold < amount:
+# --- Gold (one account per player) -------------------------------------------
+
+## Opens an account for every player and splits `starting_total` evenly;
+## the host takes any remainder.
+func open_accounts(peers: Array, starting_total: int) -> void:
+	var host := BuildPermissionPolicy.HOST_PEER_ID
+	var players: Array[int] = [host]
+	for peer_id in peers:
+		if not players.has(int(peer_id)):
+			players.append(int(peer_id))
+	peer_gold.clear()
+	_gold_fractions.clear()
+	var share := maxi(0, starting_total) / players.size()
+	for peer_id in players:
+		peer_gold[peer_id] = share
+	peer_gold[host] += maxi(0, starting_total) - share * players.size()
+
+
+func gold_of(peer_id: int) -> int:
+	return int(peer_gold.get(peer_id, 0))
+
+
+func set_gold(peer_id: int, amount: int) -> void:
+	peer_gold[peer_id] = maxi(0, amount)
+
+
+## Total gold across every account.
+func total_gold() -> int:
+	var total := 0
+	for peer_id in peer_gold:
+		total += int(peer_gold[peer_id])
+	return total
+
+
+## The player who controls (builds in, and earns for) a position.
+func controller_of(position_index: int) -> int:
+	var owner := position_owners[position_index] if position_index >= 0 and position_index < position_owners.size() else 0
+	return owner if owner > 0 else BuildPermissionPolicy.HOST_PEER_ID
+
+
+func spend_gold(peer_id: int, amount: int) -> bool:
+	if amount < 0 or gold_of(peer_id) < amount:
 		return false
-	team_gold -= amount
+	peer_gold[peer_id] = gold_of(peer_id) - amount
 	stats["gold_spent"] += amount
 	return true
 
 
-func award_gold(amount: int) -> void:
+## Pays one player directly (counts as earned gold).
+func award_gold(peer_id: int, amount: int) -> void:
 	var clamped := maxi(0, amount)
-	team_gold += clamped
+	peer_gold[peer_id] = gold_of(peer_id) + clamped
 	stats["gold_earned"] += clamped
 
 
+## Splits team income (bounties, run-upgrade gold) into one share per
+## position, paid to each position's controller, so income follows the
+## positions a player defends. Fractions carry over between payouts.
+func award_shared_gold(amount: int) -> void:
+	var clamped := maxi(0, amount)
+	if clamped == 0 or position_count <= 0:
+		return
+	stats["gold_earned"] += clamped
+	var shares: Dictionary = {}
+	for position_index in range(position_count):
+		var peer_id := controller_of(position_index)
+		shares[peer_id] = int(shares.get(peer_id, 0)) + 1
+	for peer_id in shares:
+		var exact := float(_gold_fractions.get(peer_id, 0.0)) + clamped * float(shares[peer_id]) / position_count
+		var whole := floori(exact + 0.000001)
+		_gold_fractions[peer_id] = exact - whole
+		peer_gold[peer_id] = gold_of(peer_id) + whole
+
+
 ## Sell refunds return gold without counting as earned bounty.
-func refund_gold(amount: int) -> void:
-	team_gold += maxi(0, amount)
+func refund_gold(peer_id: int, amount: int) -> void:
+	peer_gold[peer_id] = gold_of(peer_id) + maxi(0, amount)
+
+
+## Sends gold between players. Returns false when the sender cannot cover it
+## or the recipient has no account.
+func transfer_gold(from_peer: int, to_peer: int, amount: int) -> bool:
+	if amount <= 0 or from_peer == to_peer or not peer_gold.has(to_peer) or gold_of(from_peer) < amount:
+		return false
+	peer_gold[from_peer] = gold_of(from_peer) - amount
+	peer_gold[to_peer] = gold_of(to_peer) + amount
+	stats["gold_sent"] += amount
+	return true
+
+
+## A leaving player's gold (and pending fractions) goes to `to_peer`.
+func close_account(peer_id: int, to_peer: int) -> void:
+	if peer_id == to_peer or not peer_gold.has(peer_id):
+		return
+	peer_gold[to_peer] = gold_of(to_peer) + gold_of(peer_id)
+	_gold_fractions[to_peer] = float(_gold_fractions.get(to_peer, 0.0)) + float(_gold_fractions.get(peer_id, 0.0))
+	peer_gold.erase(peer_id)
+	_gold_fractions.erase(peer_id)
 
 
 func add_lives(amount: int) -> void:
@@ -304,7 +390,7 @@ func snapshot(countdown: float) -> Dictionary:
 		"wave_index": current_wave_index,
 		"wave_count": wave_count,
 		"lives": shared_lives,
-		"gold": team_gold,
+		"gold": peer_gold.duplicate(),
 		"queued": lane_queued,
 		"spawned": lane_spawned,
 		"active_count": active_creeps.size(),
@@ -332,7 +418,11 @@ func restore(data: Dictionary) -> void:
 	current_wave_index = int(data.get("wave_index", current_wave_index))
 	wave_count = int(data.get("wave_count", wave_count))
 	shared_lives = int(data.get("lives", shared_lives))
-	team_gold = int(data.get("gold", team_gold))
+	var gold: Dictionary = data.get("gold", {})
+	if not gold.is_empty():
+		peer_gold.clear()
+		for peer_id in gold:
+			peer_gold[int(peer_id)] = int(gold[peer_id])
 	lane_queued = PackedInt32Array(data.get("queued", lane_queued))
 	lane_spawned = PackedInt32Array(data.get("spawned", lane_spawned))
 	position_owners = PackedInt32Array(data.get("owners", position_owners))
@@ -374,5 +464,5 @@ func results() -> Dictionary:
 		"upgrades": applied_upgrades.duplicate(),
 		"stats": stats.duplicate(),
 		"lives": shared_lives,
-		"gold": team_gold,
+		"gold": peer_gold.duplicate(),
 	}

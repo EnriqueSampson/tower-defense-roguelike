@@ -42,7 +42,8 @@ func _start() -> void:
 	root.add_child(_game)
 	_map = _game.get_node(MAP_PATH) as WintermaulMap
 	_state = _game.get("run_state")
-	_state.team_gold = 100000000
+	for peer_id in _state.peer_gold.keys():
+		_state.set_gold(peer_id, 100000000)
 	var placed := _place_towers(int(OS.get_environment("PERF_TOWERS")) if OS.has_environment("PERF_TOWERS") else 300)
 	var camera := _game.get_node(CAMERA_PATH) as BattlefieldCamera
 	camera.set_zoom_level(float(OS.get_environment("PERF_ZOOM")) if OS.has_environment("PERF_ZOOM") else BattlefieldCamera.MIN_ZOOM)

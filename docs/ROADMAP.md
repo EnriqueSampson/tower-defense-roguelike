@@ -24,7 +24,7 @@ A faithful co-op Wintermaul for modern players:
 
 - Host-authoritative co-op over Steam lobbies, plus solo on `OfflineMultiplayerPeer`. Nine positions, with the host controlling unfilled and disconnected positions.
 - A WC3-style builder per player: right-click to move, shift-queued build orders, Stop, construction over time, and cancel for a full refund. Solo uses one builder at double speed.
-- Mazing on a 164×168 grid (82×84 two-by-two towers, retraced from the classic Wintermaul map): A* rerouting, anti-block placement, relay checkpoints into Position 9, and shared lives and gold.
+- Mazing on a 164×168 grid (82×84 two-by-two towers, retraced from the classic Wintermaul map): A* rerouting, anti-block placement, relay checkpoints into Position 9, shared lives, and gold per player with Send Gold.
 - Four builder races picked in the lobby (Humans, Orcs, Elves, Bugs) with 58 towers: classic Wintermaul upgrade trees (branching, up to four tiers) plus one Relic-gated ultimate per race, selling, and four target priorities.
 - A halfway choice after level 15: each player takes a Relic (their race's ultimate tower, for gold plus the Relic) or recruits a second race.
 - A classic 30-level run: 17 creeps including air, invisible, magic-immune, swarm and splitting creeps, with a boss every fifth level.
@@ -131,7 +131,7 @@ Found while testing, for later phases:
 ### Before Playtest gate A (added September 30)
 
 - [ ] Main menu and lobby finder redesign with Dungeon Crawler Carl theming.
-- [ ] Gold per player: `RunState` keeps a balance per peer (bounties and income split between players, host takes unfilled positions' share), spending checks the builder owner's gold, the HUD shows your gold and the multiboard everyone's, and a Send Gold command. Protocol bump.
+- [x] Gold per player: `RunState.peer_gold` holds one account per player. Starting gold is split evenly; each bounty is split into nine position shares paid to each position's controller, so the host earns the shares of the positions it covers; build, upgrade and sell use the requester's account; a leaver's gold goes to the host. The top bar shows your gold, and the multiboard shows everyone's with +25 / +100 Send Gold buttons (host-validated `_request_send_gold`). Protocol 10.
 - [ ] In-game chat (Enter to talk, lobby-wide), with a gold command (for example `/give 50 Name`) beside the HUD's Send Gold.
 - [ ] The System announcer: reactive, sarcastic lines for run events.
 - [ ] End-of-run awards on the end screen.
@@ -157,7 +157,7 @@ Found while testing, for later phases:
 
 Found while tuning, for later phases:
 - Late-game gold piles up once a position is full: Phase 4's bigger rosters and branching upgrades must add gold sinks.
-- Team gold is shared, so bigger lobbies start with more of it (+60 per extra player) as a stopgap; Phase 6 retunes the economy per lobby size.
+- Bigger lobbies start with more gold (+60 per extra player, now split evenly between the players' accounts) as a stopgap; Phase 6 retunes the economy per lobby size.
 - The busiest level is now level 29 at nine-player scale: 286 creeps at once (wave 9 peaked at 100). Headless game logic still averages 7.2 ms per frame (p99 14 ms), but rendering it on the Iris 550 needs re-profiling in Phase 6.
 
 ### Phase 4: Builder races (about 3–4 weeks for the framework, then 3–5 weeks per race)

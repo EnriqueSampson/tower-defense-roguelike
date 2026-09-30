@@ -104,6 +104,7 @@ func _assign_positions(players: int) -> void:
 	for index in range(1, players):
 		owners[index] = HOST + index
 	_state.position_owners = owners
+	_state.open_accounts(Array(owners), BalanceConfig.starting_gold(players))
 	_game.call("_ensure_builders")
 	_game.call("_sync_builder_view")
 
@@ -162,7 +163,10 @@ func _ready_up_when_built() -> void:
 	var idle := true
 	for peer_id in _builders.builders:
 		idle = idle and _builders.get_orders(peer_id).is_empty()
-	if idle and _state.team_gold < cheapest:
+	var richest := 0
+	for peer_id in _builders.builders:
+		richest = maxi(richest, _state.gold_of(peer_id))
+	if idle and richest < cheapest:
 		_game.call("_on_ready_pressed")
 
 
@@ -194,7 +198,7 @@ func _try_build_ultimate(peer_id: int) -> bool:
 		return false
 	var ultimate := _catalog.get_race(_state.race_of(peer_id)).ultimate
 	var cost := (_game.get("modifiers") as RunModifiers).build_cost(ultimate.cost)
-	if _state.team_gold < cost:
+	if _state.gold_of(peer_id) < cost:
 		return true
 	var site := _next_site(peer_id, ultimate.id)
 	if site.x < 0:
@@ -243,7 +247,7 @@ func _play(peer_id: int) -> void:
 	var built: int = _built_by.get(peer_id, 0)
 	var definition_id := _next_definition(peer_id, built)
 	var cost: int = (_game.get("modifiers") as RunModifiers).build_cost(_catalog.get_tower(definition_id).cost)
-	if _state.team_gold >= cost:
+	if _state.gold_of(peer_id) >= cost:
 		var site := _next_site(peer_id, definition_id)
 		if site.x >= 0:
 			if _game.call("_try_order_build", peer_id, definition_id, site, false) == WintermaulMap.Placement.OK:
@@ -251,7 +255,7 @@ func _play(peer_id: int) -> void:
 				_built_by[peer_id] = built + 1
 				_purchases[peer_id] = purchases + 1
 			return
-	if _out_of_sites(peer_id) or _state.team_gold >= UPGRADE_RESERVE + cost:
+	if _out_of_sites(peer_id) or _state.gold_of(peer_id) >= UPGRADE_RESERVE + cost:
 		if _upgrade_cheapest(peer_id):
 			_purchases[peer_id] = purchases + 1
 
@@ -276,7 +280,7 @@ func _upgrade_cheapest(peer_id: int) -> bool:
 			best_cost = cost
 			best_id = int(record["id"])
 			best_target = target
-	return best_id != 0 and _state.team_gold >= best_cost and _game.call("_try_upgrade_tower", best_id, best_target, peer_id)
+	return best_id != 0 and _state.gold_of(peer_id) >= best_cost and _game.call("_try_upgrade_tower", best_id, best_target, peer_id)
 
 
 # --- Strategies ---------------------------------------------------------------
@@ -415,7 +419,7 @@ func _track_levels() -> void:
 		_level_start = {
 			"level": wave + 1,
 			"title": (_catalog.waves[wave] as WaveDefinition).title,
-			"gold_start": _state.team_gold,
+			"gold_start": _state.total_gold(),
 			"lives_start": _state.shared_lives,
 			"leaks_start": int(_state.stats["leaks"]),
 			"earned_start": int(_state.stats["gold_earned"]),

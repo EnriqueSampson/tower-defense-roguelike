@@ -86,9 +86,9 @@ func _on_client_connected(peer_id: int) -> void:
 	_game = (load(GAME_SCENE_PATH) as PackedScene).instantiate()
 	root.add_child(_game)
 	var state: RunState = _game.get("run_state")
-	state.team_gold = 1000
 	# Position 1 belongs to the client; the host keeps the other eight.
 	state.position_owners[0] = peer_id
+	state.open_accounts([peer_id], 2000)
 	# The client plays Elves (as if picked in the lobby); the host plays Humans
 	# whatever this machine's saved race preference is.
 	state.peer_races[1] = "humans"
@@ -127,7 +127,8 @@ func _compare_build_state() -> void:
 	_check(state.towers.size() == 4, "host built two towers and the client two (got %d)" % state.towers.size())
 	_check(client["towers"] == host["towers"], "client tower records match the host\n  host   %s\n  client %s" % [host["towers"], client["towers"]])
 	_check(client["map_towers"] == host["map_towers"], "client tower nodes match the host's (%s vs %s)" % [client["map_towers"], host["map_towers"]])
-	_check(int(client["gold"]) == int(host["gold"]), "client gold matches the host (%d vs %d)" % [client["gold"], host["gold"]])
+	_check(client["gold"] == host["gold"] and (host["gold"] as Dictionary).size() == 2, "client sees every player's gold as the host has it (%s vs %s)" % [client["gold"], host["gold"]])
+	_check(int(state.stats["gold_sent"]) == 40, "the client sent 40 gold to the host and an overdraft was refused (sent %d)" % int(state.stats["gold_sent"]))
 	_check(state.get_tower(_tower_id_at(P2_OPEN)).is_empty(), "the client could not build in a host position")
 	var client_tower := state.get_tower(_tower_id_at(P1_OPEN + Vector2i(4, 0)))
 	_check(not client_tower.is_empty() and client_tower["definition_id"] == "elf_tide", "the client's builder built an Elf tower and upgraded it along its tree")
@@ -204,6 +205,10 @@ func _client_step(delta: float) -> void:
 		for record in (_game.get("_latest_snapshot") as Dictionary).get("towers", []):
 			if record["cell"] == P1_OPEN + Vector2i(4, 0):
 				_game.call("_on_upgrade_requested", int(record["id"]), "elf_tide")
+	if _once("client_send_gold", 8.8):
+		_game.call("_on_send_gold_requested", 1, 40)
+		# More than the client has: the host must refuse it.
+		_game.call("_on_send_gold_requested", 1, 999999)
 	if _once("client_move", 9.0):
 		_game.call("_clear_selection")
 		_game.call("_on_move_requested", _client_move_target(), false)
@@ -250,7 +255,7 @@ func _digest() -> Dictionary:
 		creeps[creep_id] = [point.x, point.y]
 	var races: Dictionary = snapshot.get("races", {})
 	var elves := 1 if str(races.get(_game.multiplayer.get_unique_id(), "")) == "elves" else 0
-	return {"race": elves, "gold": int(snapshot.get("gold", -1)), "towers": towers, "map_towers": map_towers, "builders": builders, "creeps": creeps}
+	return {"race": elves, "gold": snapshot.get("gold", {}), "towers": towers, "map_towers": map_towers, "builders": builders, "creeps": creeps}
 
 
 func _creep_positions() -> Dictionary:

@@ -96,6 +96,7 @@ func _ready() -> void:
 	hud.selection_cleared.connect(_clear_selection)
 	hud.ready_requested.connect(_on_ready_pressed)
 	hud.builder_stop_requested.connect(_on_builder_stop_requested)
+	hud.gold_send_requested.connect(_on_send_gold_requested)
 
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
@@ -134,9 +135,9 @@ func _home_position_index() -> int:
 
 func _initialize_host_run() -> void:
 	run_state.run_seed = randi()
-	run_state.team_gold = BalanceConfig.starting_gold(SteamSession.player_count())
 	run_state.roguelike_enabled = SteamSession.roguelike_enabled
 	run_state.position_owners = _resolve_position_owners()
+	run_state.open_accounts(_run_players(), BalanceConfig.starting_gold(SteamSession.player_count()))
 	run_state.peer_races = _resolve_peer_races()
 	if multiplayer.has_multiplayer_peer():
 		_awaiting_peers.assign(multiplayer.get_peers())
@@ -149,6 +150,18 @@ func _initialize_host_run() -> void:
 		_wave_one_total = _wave_one_pending_ready.size()
 	_start_build_phase()
 	_broadcast_state()
+
+
+## Every player in the run: the host, connected peers and position owners.
+func _run_players() -> Array[int]:
+	var players: Array[int] = [HOST_PEER_ID]
+	var candidates: Array = Array(run_state.position_owners)
+	if multiplayer.has_multiplayer_peer():
+		candidates.append_array(multiplayer.get_peers())
+	for peer_id in candidates:
+		if int(peer_id) > 0 and not players.has(int(peer_id)):
+			players.append(int(peer_id))
+	return players
 
 
 ## peer id -> race id from the lobby roster; the host's comes from its own
@@ -383,7 +396,7 @@ func _on_creep_killed(creep_id: int) -> void:
 		if definition != null and definition.splits() and not fell_at.is_empty():
 			_spawn_split_children(definition, int(record["position"]), float(record.get("health_multiplier", 1.0)), float(_creep_bounty_multipliers.get(creep_id, 1.0)), fell_at)
 		var bounty := int(_creep_bounties.get(creep_id, 0))
-		run_state.award_gold(bounty)
+		run_state.award_shared_gold(bounty)
 		if bool(_creep_is_boss.get(creep_id, false)):
 			run_state.stats["boss_kills"] += 1
 		_creep_bounties.erase(creep_id)
@@ -496,7 +509,10 @@ func _apply_state_snapshot(snapshot: Dictionary) -> void:
 		modifiers.rebuild(snapshot.get("upgrades", []))
 		run_state.position_owners = PackedInt32Array(snapshot.get("owners", run_state.position_owners))
 		run_state.phase = int(snapshot.get("phase", run_state.phase))
-		run_state.team_gold = int(snapshot.get("gold", run_state.team_gold))
+		var gold: Dictionary = snapshot.get("gold", {})
+		run_state.peer_gold.clear()
+		for peer_id in gold:
+			run_state.peer_gold[int(peer_id)] = int(gold[peer_id])
 		var races: Dictionary = snapshot.get("races", {})
 		for peer_id in races:
 			run_state.peer_races[int(peer_id)] = str(races[peer_id])
@@ -539,7 +555,7 @@ func _refresh_local_context() -> void:
 	var owners: PackedInt32Array = _latest_snapshot.get("owners", PackedInt32Array())
 	var controllable := BuildPermissionPolicy.controlled_positions(local_peer, owners, HOST_PEER_ID)
 	var phase: int = _latest_snapshot["phase"]
-	var gold: int = _latest_snapshot["gold"]
+	var gold := _local_gold()
 	var definition := CATALOG.get_tower(_selected_definition_id) if not _selected_definition_id.is_empty() else null
 	var cost := modifiers.build_cost(definition.cost) if definition else 0
 	var build_enabled := phase in [RunStateModel.Phase.BUILD, RunStateModel.Phase.WAVE]
@@ -558,6 +574,7 @@ func _refresh_local_context() -> void:
 		"bonus_race": CATALOG.get_race(run_state.bonus_race_of(local_peer)),
 		"relics": run_state.relics_of(local_peer),
 		"build_cost": cost,
+		"gold": gold,
 		"wave_one_ready_pressed": _wave_one_ready_pressed,
 	}
 	hud.update_state(_latest_snapshot, context)
@@ -586,6 +603,12 @@ func _refresh_local_context() -> void:
 
 	if _latest_snapshot.has("results"):
 		hud.show_end_screen(_latest_snapshot["results"], CATALOG)
+
+
+## The local player's gold from the latest snapshot.
+func _local_gold() -> int:
+	var gold: Dictionary = _latest_snapshot.get("gold", {})
+	return int(gold.get(multiplayer.get_unique_id(), 0))
 
 
 ## Effective tower stats, cached per definition and Position 9 flag
@@ -649,7 +672,7 @@ func _try_order_build(peer_id: int, definition_id: String, cell: Vector2i, queue
 		return geometry
 	if not BuildPermissionPolicy.can_control(peer_id, wintermaul_map.get_cell_position_index(cell), run_state.position_owners, HOST_PEER_ID):
 		return WintermaulMap.Placement.NOT_OWNED
-	if run_state.team_gold < modifiers.build_cost(definition.cost):
+	if run_state.gold_of(peer_id) < modifiers.build_cost(definition.cost):
 		return WintermaulMap.Placement.UNAFFORDABLE
 	builder_system.issue_build(peer_id, definition.id, cell, wintermaul_map.footprint_center(cell, definition.footprint), queue)
 	_sync_builder_view()
@@ -847,7 +870,7 @@ func _try_place_tower(definition_id: String, cell: Vector2i, peer_id := HOST_PEE
 	var ultimate := _is_ultimate(definition)
 	if ultimate and run_state.relics_of(peer_id) <= 0:
 		return WintermaulMap.Placement.NEEDS_RELIC
-	if not run_state.spend_gold(cost):
+	if not run_state.spend_gold(peer_id, cost):
 		return WintermaulMap.Placement.UNAFFORDABLE
 	if ultimate:
 		run_state.spend_relic(peer_id)
@@ -938,7 +961,7 @@ func _try_upgrade_tower(tower_id: int, target_id: String, peer_id := HOST_PEER_I
 	if definition == null or target == null or not definition.upgrade_options.has(target_id):
 		return false
 	var cost := modifiers.upgrade_cost(target.cost)
-	if not run_state.spend_gold(cost):
+	if not run_state.spend_gold(peer_id, cost):
 		return false
 	var seconds := BalanceConfig.construction_seconds(cost)
 	record["upgrade_to"] = target_id
@@ -987,7 +1010,7 @@ func _try_sell_tower(tower_id: int, peer_id := HOST_PEER_ID) -> bool:
 	elif float(record.get("upgrade_remaining", 0.0)) > 0.0:
 		refund += int(record.get("upgrade_paid", 0))
 	run_state.remove_tower(tower_id)
-	run_state.refund_gold(refund)
+	run_state.refund_gold(peer_id, refund)
 	_remove_tower_visual.rpc(tower_id)
 	_play_event.rpc("sell")
 	_mark_dirty()
@@ -1017,6 +1040,39 @@ func _try_set_targeting(tower_id: int, mode: int, peer_id := HOST_PEER_ID) -> bo
 	if not run_state.set_tower_targeting(tower_id, mode):
 		return false
 	_update_tower_visual.rpc(run_state.get_tower(tower_id), _stats_for_record(run_state.get_tower(tower_id)))
+	_mark_dirty()
+	return true
+
+
+# --- Sending gold ---------------------------------------------------------------
+
+func _on_send_gold_requested(to_peer: int, amount: int) -> void:
+	if multiplayer.is_server():
+		_transaction_feedback(_try_send_gold(HOST_PEER_ID, to_peer, amount), "Gold sent", "Could not send gold")
+	else:
+		_request_send_gold.rpc_id(HOST_PEER_ID, to_peer, amount)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_send_gold(to_peer: int, amount: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	_transaction_feedback.rpc_id(sender, _try_send_gold(sender, to_peer, amount), "Gold sent", "Could not send gold")
+
+
+## Moves gold between two players' accounts; the recipient gets a notice.
+func _try_send_gold(from_peer: int, to_peer: int, amount: int) -> bool:
+	if run_state.phase in [RunStateModel.Phase.VICTORY, RunStateModel.Phase.DEFEAT]:
+		return false
+	if not run_state.transfer_gold(from_peer, to_peer, amount):
+		return false
+	var sender_name := str(SteamSession.get_peer_names().get(from_peer, "A teammate"))
+	var text := "%s sent you %d gold." % [sender_name, amount]
+	if to_peer == multiplayer.get_unique_id():
+		_show_notice(text, false)
+	elif multiplayer.has_multiplayer_peer() and multiplayer.get_peers().has(to_peer):
+		_show_notice.rpc_id(to_peer, text, false)
 	_mark_dirty()
 	return true
 
@@ -1106,7 +1162,7 @@ func _try_choose_upgrade(upgrade_id: String, peer_id := HOST_PEER_ID) -> bool:
 		return false
 	modifiers.apply(upgrade)
 	if upgrade.immediate_gold > 0:
-		run_state.award_gold(upgrade.immediate_gold)
+		run_state.award_shared_gold(upgrade.immediate_gold)
 	if upgrade.extra_lives != 0:
 		run_state.add_lives(upgrade.extra_lives)
 	_refresh_tower_stats()
@@ -1231,7 +1287,7 @@ func _refresh_tower_panel() -> void:
 		refund = int(record.get("build_paid", refund))
 	elif float(record.get("upgrade_remaining", 0.0)) > 0.0:
 		refund += int(record.get("upgrade_paid", 0))
-	hud.show_tower(record, definition, _stats_for_record(record), options, refund, can_control, int(_latest_snapshot.get("gold", 0)))
+	hud.show_tower(record, definition, _stats_for_record(record), options, refund, can_control, _local_gold())
 
 
 func _find_tower_record(tower_id: int) -> Dictionary:
@@ -1301,6 +1357,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	_wave_one_pending_ready.erase(peer_id)
 	var before := run_state.position_owners.duplicate()
 	run_state.position_owners = BuildPermissionPolicy.transfer_to_host(run_state.position_owners, peer_id, HOST_PEER_ID)
+	run_state.close_account(peer_id, HOST_PEER_ID)
 	if builder_system != null:
 		builder_system.remove_builder(peer_id)
 		_sync_builder_view()

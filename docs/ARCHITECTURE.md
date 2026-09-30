@@ -17,7 +17,8 @@ This document freezes the invariants that the MVP depends on. Change them delibe
 | Field | Meaning |
 | --- | --- |
 | `phase`, `current_wave_index`, `wave_count` | Run progression |
-| `shared_lives`, `team_gold` | Shared economy and defense |
+| `shared_lives` | Shared defense |
+| `peer_gold` | `peer_id -> gold`, one account per player; the host's also covers unfilled positions. `open_accounts` splits the lobby's starting gold evenly (remainder to the host); `award_shared_gold` splits each bounty and run-upgrade gold into one share per position, paid to that position's controller (fractions carry over); build, upgrade and sell use the requester's account; `close_account` hands a leaver's gold to the host |
 | `lane_queued`, `lane_spawned` | Per-position spawn bookkeeping |
 | `active_creeps` | `creep_id -> {position, definition_id, health_multiplier}` |
 | `towers` | `tower_id -> {id, definition_id, cell, position, targeting, invested}`; an upgrade replaces `definition_id` with the chosen option from the tower's upgrade tree and adds its price to `invested` (which sets the sell value); `cell` is the footprint anchor (top-left cell of the tower's `TowerDefinition.footprint`, 2×2 for shipped towers). Work in progress adds `build_remaining`/`build_total`/`build_paid` (construction) or `upgrade_to`/`upgrade_remaining`/`upgrade_total`/`upgrade_paid` (timed upgrade); the host counts them down in `_tick_construction` |
@@ -85,14 +86,15 @@ Every client intent carries the sender peer ID (`multiplayer.get_remote_sender_i
 
 | Request | Checks |
 | --- | --- |
-| Build order | phase allows building; definition ID exists; requester has a builder; the tower is one of the requester's race roots (`RaceDefinition.towers`, else `WRONG_RACE`); the placement checks below pass; requester controls the position; team gold covers the modified cost. Nothing is spent yet. A plain order replaces the queue, a shift order appends |
+| Build order | phase allows building; definition ID exists; requester has a builder; the tower is one of the requester's race roots (`RaceDefinition.towers`, else `WRONG_RACE`); the placement checks below pass; requester controls the position; the requester's gold covers the modified cost. Nothing is spent yet. A plain order replaces the queue, a shift order appends |
 | Construction start (builder arrives within `BUILDER_REACH_CELLS`) | the full place-tower check again, since the maze, creeps or gold may have changed; failure drops the order with a reason to its owner and spends nothing |
-| Place tower | phase allows building; definition ID exists; race root as above; every footprint cell in bounds, buildable, inside one position, unoccupied, and free of creeps; the footprint as a whole does not seal any required route or active creep segment; requester controls the position; team gold covers the modified cost. Builder orders start the tower under construction (it holds its footprint but does not attack) |
+| Place tower | phase allows building; definition ID exists; race root as above; every footprint cell in bounds, buildable, inside one position, unoccupied, and free of creeps; the footprint as a whole does not seal any required route or active creep segment; requester controls the position; the requester's gold covers the modified cost (and pays it). Builder orders start the tower under construction (it holds its footprint but does not attack) |
 | Move / Stop order | requester has a builder; move target inside the world rect. Builders walk anywhere and never touch the path grid |
 | Halfway choice (`choice`, `race_id`) | requester is still pending; `race` names a known race other than its own; recorded once |
 | Upgrade tower (`tower_id`, `target_id`) | phase; tower exists; requester controls its position; not under construction or already upgrading; `target_id` is one of the tower's `upgrade_options`; gold covers the target's modified cost. Paid up front; the tower keeps fighting as itself until the timer ends, then becomes the target |
 | Sell tower | phase; tower exists; requester controls its position; exactly-once (second sell finds no record). Selling during construction cancels it for a full refund; selling mid-upgrade also returns the upgrade payment |
 | Set targeting | tower exists; mode is valid; requester controls its position |
+| Send gold (`to_peer`, `amount`) | run not over; `amount` > 0; the recipient has an account and is not the sender; the sender's gold covers it. The recipient gets a notice; `stats.gold_sent` counts it |
 | Choose upgrade | requester is the host; upgrade is in the pending offer; not already applied |
 | Creep resolution | `resolve_creep` erases the creep first so duplicate kill/leak reports are no-ops. A splitter's children are registered with `register_split` (outside the spawn queue) before the level can clear |
 
