@@ -10,6 +10,11 @@ signal build_cell_requested(cell: Vector2i)
 signal placement_rejected(cell: Vector2i, reason: int)
 signal tower_clicked(tower_id: int)
 signal creep_clicked(creep_id: int)
+signal builder_clicked(owner_peer: int)
+## Right-click on the ground (WC3 move order); `queue` when shift is held.
+signal move_requested(plane: Vector2, queue: bool)
+## Right-click while placing a tower cancels placement, as in WC3.
+signal placement_cancelled
 signal selection_cleared
 signal tower_fired(tower_id: int, creep_id: int)
 signal impact_resolved(tower_id: int, hit_count: int, killed_count: int)
@@ -31,6 +36,7 @@ const RouteRunnerScene = preload("res://scripts/actors/route_runner.gd")
 const TowerScene = preload("res://scripts/actors/tower.gd")
 const ProjectileScene = preload("res://scripts/actors/projectile.gd")
 const CorpseScene = preload("res://scripts/actors/corpse.gd")
+const BuilderScene = preload("res://scripts/actors/builder.gd")
 const PathGridModel = preload("res://scripts/pathfinding/path_grid.gd")
 const Layout = preload("res://scripts/data/classic_wintermaul_layout.gd")
 const GRID_SIZE := Layout.GRID_SIZE
@@ -76,6 +82,8 @@ var _preview_cell := Vector2i.ZERO
 var _preview_visible := false
 var _selected_tower_id := 0
 var _selected_creep_id := 0
+var _selected_builder_owner := 0
+var _site_markers: Array[MeshInstance3D] = []
 var _camera: BattlefieldCamera
 var _ground_material: StandardMaterial3D
 var _hover_material: ShaderMaterial
@@ -396,6 +404,90 @@ func creep_at_screen(screen_position: Vector2) -> RouteRunner:
 	return best
 
 
+# --- Builders -------------------------------------------------------------------
+
+func _builders() -> Node3D:
+	var container := get_node_or_null("Builders") as Node3D
+	if container == null:
+		container = Node3D.new()
+		container.name = "Builders"
+		add_child(container)
+	return container
+
+
+func get_builder(owner_peer: int) -> Builder:
+	for child in _builders().get_children():
+		if child is Builder and child.owner_peer == owner_peer and not child.is_queued_for_deletion():
+			return child
+	return null
+
+
+## Mirrors BuilderSystem records by owner. `authoritative` places them
+## exactly (host); clients extrapolate toward each record's target.
+func reconcile_builders(records: Array, speed_pixels: float, authoritative: bool) -> void:
+	var seen: Dictionary = {}
+	for record in records:
+		var owner_peer := int(record["owner"])
+		seen[owner_peer] = true
+		var builder := get_builder(owner_peer)
+		if builder == null:
+			builder = BuilderScene.new() as Builder
+			builder.owner_peer = owner_peer
+			_builders().add_child(builder)
+			builder.plane_position = Vector2(float(record["x"]), float(record["y"]))
+			builder.set_selected(owner_peer == _selected_builder_owner and owner_peer != 0)
+		builder.speed_pixels = speed_pixels
+		builder.apply_record(record, authoritative)
+	for child in _builders().get_children():
+		if child is Builder and not seen.has(child.owner_peer):
+			child.queue_free()
+
+
+func builder_at_screen(screen_position: Vector2) -> Builder:
+	var best: Builder = null
+	var best_distance := INF
+	for child in _builders().get_children():
+		if not child is Builder:
+			continue
+		var center := project_to_screen(child.plane_position, MapProjection.units(10.0))
+		var distance := center.distance_to(screen_position)
+		if distance <= maxf(16.0, get_screen_scale() * 12.0) and distance < best_distance:
+			best = child
+			best_distance = distance
+	return best
+
+
+func set_selected_builder(owner_peer: int) -> void:
+	var previous := get_builder(_selected_builder_owner)
+	if previous:
+		previous.set_selected(false)
+	_selected_builder_owner = owner_peer
+	var current := get_builder(owner_peer)
+	if current:
+		current.set_selected(true)
+
+
+## Footprint markers for the local builder's queued build orders.
+func show_build_sites(sites: Array) -> void:
+	while _site_markers.size() < sites.size():
+		var marker := MeshInstance3D.new()
+		marker.mesh = MeshPalette.unit_quad()
+		marker.material_override = MeshPalette.new_ring_material(Color("7fd0ff"), 0.8, 0.18, true)
+		marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(marker)
+		_site_markers.append(marker)
+	for index in range(_site_markers.size()):
+		var marker := _site_markers[index]
+		marker.visible = index < sites.size()
+		if not marker.visible:
+			continue
+		var site: Dictionary = sites[index]
+		var definition_footprint: Vector2i = site.get("footprint", Vector2i(2, 2))
+		var center := footprint_center(site["cell"], definition_footprint)
+		marker.position = MapProjection.to_3d(center, DECAL_HEIGHT * 3.0)
+		marker.scale = Vector3(definition_footprint.x * 0.5, 1.0, definition_footprint.y * 0.5)
+
+
 func set_selected_creep(creep_id: int) -> void:
 	var previous := get_creep(_selected_creep_id)
 	if previous:
@@ -429,10 +521,13 @@ func reconcile_towers(records: Array, definition_lookup: Callable, stats_lookup:
 				continue
 			var spawned := spawn_tower(tower_id, record["cell"], definition, int(record["tier"]), int(record["targeting"]), stats, int(record.get("position", -1)))
 			if spawned != null:
+				spawned.apply_progress(record)
 				summary["added"] += 1
+			continue
 		elif tower.tier != int(record["tier"]) or tower.targeting != int(record["targeting"]) or tower.stats != stats:
 			update_tower(tower_id, int(record["tier"]), int(record["targeting"]), stats)
 			summary["updated"] += 1
+		tower.apply_progress(record)
 	for child in %Towers.get_children():
 		if child is Tower and not seen.has(child.tower_id) and not child.is_queued_for_deletion():
 			remove_tower(child.tower_id)
@@ -802,11 +897,24 @@ func _is_cell_in_bounds(cell: Vector2i) -> bool:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		_update_preview_from_viewport(event.position)
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		_update_preview_from_viewport(event.position)
+		if _build_definition != null:
+			placement_cancelled.emit()
+		elif _preview_visible:
+			move_requested.emit(_hover_plane, event.shift_pressed)
+			effects.ring(_hover_plane, Color("5ce36b"), TILE_SIZE * 0.6)
+		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		_update_preview_from_viewport(event.position)
 		if not _preview_visible:
 			return
 		if _build_definition == null or not _build_enabled:
+			var builder := builder_at_screen(event.position)
+			if builder != null:
+				builder_clicked.emit(builder.owner_peer)
+				get_viewport().set_input_as_handled()
+				return
 			var creep := creep_at_screen(event.position)
 			if creep != null:
 				creep_clicked.emit(creep.creep_id)
@@ -1074,6 +1182,7 @@ func _paint_dynamic_canvas(canvas: CanvasItem) -> void:
 		var bar_color := Color("4fe06d") if health_ratio > 0.5 else (Color("f0d23c") if health_ratio > 0.25 else Color("f04a3e"))
 		bar_rect.size.x *= health_ratio
 		canvas.draw_rect(bar_rect, bar_color)
+	_paint_tower_progress(canvas, unit_scale)
 	if not _build_enabled or not _preview_visible or _build_definition == null or get_tower_at(_hover_cell) != null:
 		return
 	var result := evaluate_build(_preview_cell)
@@ -1082,6 +1191,23 @@ func _paint_dynamic_canvas(canvas: CanvasItem) -> void:
 	var preview_color := _preview_color(result)
 	var center := project_to_screen(footprint_center(_preview_cell, _build_definition.footprint))
 	canvas.draw_string(ThemeDB.fallback_font, center + Vector2(-40, -TILE_SIZE * unit_scale), placement_text(result), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, preview_color.lightened(0.4))
+
+
+## Construction (blue) and upgrade (gold) bars above towers in progress.
+func _paint_tower_progress(canvas: CanvasItem, unit_scale: float) -> void:
+	for child in %Towers.get_children():
+		var tower := child as Tower
+		if tower == null:
+			continue
+		var ratio := tower.progress_ratio()
+		if ratio < 0.0:
+			continue
+		var anchor := project_to_screen(tower.plane_position, MapProjection.units(TILE_SIZE * 1.4))
+		var width := clampf(TILE_SIZE * 1.6 * unit_scale, 28.0, 90.0)
+		var rect := Rect2(anchor.x - width * 0.5, anchor.y - 8.0, width, 5.0)
+		canvas.draw_rect(rect.grow(1.0), Color(0.02, 0.02, 0.02, 0.9))
+		rect.size.x *= ratio
+		canvas.draw_rect(rect, Color("5aa8f0") if tower.is_under_construction() else Color("e2bf62"))
 
 
 ## One texture for the whole battlefield: hedges, ground, spawn pads, exit,

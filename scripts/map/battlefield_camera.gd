@@ -165,7 +165,8 @@ func _move_camera(direction: Vector2, delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
-		if event.button_index in [MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE]:
+		# Middle-drag pans; right-click belongs to builder orders, as in WC3.
+		if event.button_index == MOUSE_BUTTON_MIDDLE:
 			_dragging = event.pressed
 			get_viewport().set_input_as_handled()
 		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:

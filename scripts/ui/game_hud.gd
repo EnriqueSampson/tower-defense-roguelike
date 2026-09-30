@@ -48,6 +48,8 @@ var _tower_targeting := 0
 var _tower_can_control := false
 var _upgrade_cost := -1
 var _sell_value := 0
+var _tower_building := false
+var _tower_upgrading := false
 ## Creep inspection (click a creep); its panel refreshes from the controller.
 var _creep_definition: CreepDefinition
 ## 3D portrait: the selected unit's model rendered in its own small world.
@@ -323,6 +325,8 @@ func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictiona
 	_tower_can_control = can_control
 	_upgrade_cost = upgrade_cost
 	_sell_value = sell_value
+	_tower_building = float(record.get("build_remaining", 0.0)) > 0.0
+	_tower_upgrading = float(record.get("upgrade_remaining", 0.0)) > 0.0
 	_gold = gold
 	_creep_definition = null
 	tower_panel.visible = true
@@ -339,6 +343,10 @@ func show_tower(record: Dictionary, definition: TowerDefinition, stats: Dictiona
 	if int(stats.get("armor_pierce", 0)) > 0:
 		lines.append("Armor pierce %d" % stats["armor_pierce"])
 	lines.append("Target: %s    Invested %d g" % [TowerTargeting.mode_name(_tower_targeting), definition.total_invested(_tower_tier)])
+	if _tower_building:
+		lines.insert(0, "Under construction  ·  %d%%" % roundi(100.0 * (1.0 - float(record["build_remaining"]) / maxf(float(record.get("build_total", 1.0)), 0.01))))
+	elif _tower_upgrading:
+		lines.insert(0, "Upgrading to %s  ·  %d%%" % [definition.tier_name(_tower_tier + 1), roundi(100.0 * (1.0 - float(record["upgrade_remaining"]) / maxf(float(record.get("upgrade_total", 1.0)), 0.01)))])
 	tower_stats.text = "\n".join(lines)
 	_refresh_card()
 	if not can_control:
@@ -525,7 +533,7 @@ func _card_state_signature() -> String:
 	if _creep_definition != null and _shown_tower_id == 0:
 		return "creep"
 	if _shown_tower_id != 0 and _tower_definition != null:
-		return "tower|%d|%d|%d|%s|%d|%d|%s" % [_shown_tower_id, _tower_tier, _tower_targeting, _tower_can_control, _upgrade_cost, _sell_value, _upgrade_cost >= 0 and _gold >= _upgrade_cost]
+		return "tower|%d|%d|%d|%s|%d|%d|%s|%s|%s" % [_shown_tower_id, _tower_tier, _tower_targeting, _tower_can_control, _upgrade_cost, _sell_value, _upgrade_cost >= 0 and _gold >= _upgrade_cost, _tower_building, _tower_upgrading]
 	if _catalog == null:
 		return "empty"
 	var parts := PackedStringArray(["build", _selected_definition_id])
@@ -547,7 +555,9 @@ func _fill_build_card() -> void:
 
 
 func _fill_tower_card() -> void:
-	if _upgrade_cost >= 0:
+	if _tower_building or _tower_upgrading:
+		_set_card_slot(SLOT_UPGRADE, "Building" if _tower_building else "Upgrading", "Wait for the current work to finish", Callable(), false)
+	elif _upgrade_cost >= 0:
 		_set_card_slot(SLOT_UPGRADE, "Upgrade\n%dg" % _upgrade_cost, "Upgrade to %s for %d gold" % [_tower_definition.tier_name(_tower_tier + 1), _upgrade_cost],
 			func() -> void: upgrade_requested.emit(_shown_tower_id), _tower_can_control and _gold >= _upgrade_cost)
 	else:
@@ -555,8 +565,12 @@ func _fill_tower_card() -> void:
 	for mode in range(mini(TowerTargeting.Mode.size(), 4)):
 		_set_card_slot(SLOT_FIRST_TARGETING + mode, TARGETING_SHORT_NAMES[mode], "Target the %s creep in range" % TowerTargeting.mode_name(mode).to_lower(),
 			func() -> void: targeting_requested.emit(_shown_tower_id, mode), _tower_can_control, mode == _tower_targeting)
-	_set_card_slot(SLOT_SELL, "Sell\n%dg" % _sell_value, "Sell for %d gold (%d%% refund)" % [_sell_value, _tower_definition.sell_refund_percent],
-		func() -> void: sell_requested.emit(_shown_tower_id), _tower_can_control)
+	if _tower_building:
+		_set_card_slot(SLOT_SELL, "Cancel\n%dg" % _sell_value, "Cancel construction for a full refund of %d gold" % _sell_value,
+			func() -> void: sell_requested.emit(_shown_tower_id), _tower_can_control)
+	else:
+		_set_card_slot(SLOT_SELL, "Sell\n%dg" % _sell_value, "Sell for %d gold (%d%% refund)" % [_sell_value, _tower_definition.sell_refund_percent],
+			func() -> void: sell_requested.emit(_shown_tower_id), _tower_can_control)
 	_set_card_slot(SLOT_CANCEL, "Cancel", "Deselect", func() -> void: selection_cleared.emit())
 
 

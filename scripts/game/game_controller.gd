@@ -41,6 +41,12 @@ var _stats_cache: Dictionary = {}
 var _selected_creep_id := 0
 var _creep_panel_timer := 0.0
 const CREEP_PANEL_INTERVAL := 0.2
+## Host-authoritative builders (null on clients); latest replicated records.
+var builder_system: BuilderSystem
+var _builder_records: Array = []
+var _builder_snapshot_timer := 0.0
+var _builder_selected := false
+const BUILDER_SNAPSHOT_INTERVAL := 0.15
 var _stats_cache_revision := -1
 @onready var battlefield_view: Control = %BattlefieldView
 @onready var sun: DirectionalLight3D = $WorldClip/BattlefieldView/BattlefieldViewport/World/Sun
@@ -66,6 +72,9 @@ func _ready() -> void:
 	wintermaul_map.placement_rejected.connect(_on_placement_rejected)
 	wintermaul_map.tower_clicked.connect(_select_tower)
 	wintermaul_map.creep_clicked.connect(_select_creep)
+	wintermaul_map.builder_clicked.connect(func(owner_peer: int) -> void: _select_builder(owner_peer == multiplayer.get_unique_id(), false))
+	wintermaul_map.move_requested.connect(_on_move_requested)
+	wintermaul_map.placement_cancelled.connect(func() -> void: _on_palette_selected(""))
 	wintermaul_map.selection_cleared.connect(_clear_selection)
 	wintermaul_map.tower_fired.connect(_on_tower_fired)
 	wintermaul_map.impact_resolved.connect(func(_tower_id: int, _hits: int, _killed: int) -> void: AudioDirector.play("impact"))
@@ -87,7 +96,11 @@ func _ready() -> void:
 	SteamSession.game_end_requested.connect(_on_game_end_requested)
 
 	if multiplayer.is_server():
+		builder_system = BuilderSystem.new(BalanceConfig.builder_speed_pixels(SteamSession.is_solo_session), BalanceConfig.BUILDER_REACH_CELLS * WintermaulMap.TILE_SIZE)
 		_initialize_host_run()
+		_ensure_builders()
+		_sync_builder_view()
+		_select_builder(true, true)
 	else:
 		_request_state.rpc_id(HOST_PEER_ID)
 		_acknowledge_loaded.rpc_id(HOST_PEER_ID)
@@ -153,6 +166,8 @@ func _process(delta: float) -> void:
 		return
 	if run_state.phase in [RunStateModel.Phase.BUILD, RunStateModel.Phase.WAVE]:
 		run_state.elapsed_seconds += delta
+		_tick_builders(delta)
+		_tick_construction(delta)
 
 	match run_state.phase:
 		RunStateModel.Phase.BUILD:
@@ -176,6 +191,12 @@ func _process(delta: float) -> void:
 		_state_snapshot_timer = STATE_SNAPSHOT_INTERVAL
 		_state_dirty = false
 		_broadcast_state()
+
+	_builder_snapshot_timer -= delta
+	if _builder_snapshot_timer <= 0.0:
+		_builder_snapshot_timer = BUILDER_SNAPSHOT_INTERVAL
+		if multiplayer.has_multiplayer_peer() and not multiplayer.get_peers().is_empty():
+			_apply_builder_snapshot.rpc(_builder_records)
 
 	_creep_snapshot_timer -= delta
 	if _creep_snapshot_timer <= 0.0:
@@ -357,6 +378,7 @@ func _mark_wave_one_ready(peer_id: int) -> void:
 
 func _make_state_snapshot() -> Dictionary:
 	var snapshot := run_state.snapshot(build_countdown)
+	snapshot["builders"] = _builder_records
 	snapshot["tower_count"] = run_state.towers.size()
 	snapshot["waiting_for"] = _awaiting_peers.size()
 	snapshot["player_count"] = SteamSession.player_count()
@@ -376,7 +398,21 @@ func _apply_state_snapshot(snapshot: Dictionary) -> void:
 		run_state.phase = int(snapshot.get("phase", run_state.phase))
 		run_state.team_gold = int(snapshot.get("gold", run_state.team_gold))
 		wintermaul_map.reconcile_towers(snapshot.get("towers", []), CATALOG.get_tower, _stats_for_record)
+		_apply_builder_records(snapshot.get("builders", []))
 	_refresh_local_context()
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _apply_builder_snapshot(records: Array) -> void:
+	if multiplayer.is_server():
+		return
+	_apply_builder_records(records)
+
+
+func _apply_builder_records(records: Array) -> void:
+	_builder_records = records
+	wintermaul_map.reconcile_builders(records, BalanceConfig.builder_speed_pixels(SteamSession.is_solo_session), false)
+	_refresh_build_sites()
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
@@ -449,26 +485,187 @@ func _stats_for_record(record: Dictionary) -> Dictionary:
 
 # --- Tower transactions (host validation) -----------------------------------
 
+## Left-click with a tower picked: order the local builder to build it there.
+## Shift queues the order and keeps placement mode, as in WC3.
 func _on_build_cell_requested(cell: Vector2i) -> void:
 	if _selected_definition_id.is_empty():
 		hud.show_placement_message(WintermaulMap.placement_text(WintermaulMap.Placement.NO_TOWER_SELECTED), true)
 		return
+	var queue := Input.is_key_pressed(KEY_SHIFT)
 	if multiplayer.is_server():
-		_placement_feedback(_try_place_tower(_selected_definition_id, cell, HOST_PEER_ID))
+		_order_feedback(_try_order_build(HOST_PEER_ID, _selected_definition_id, cell, queue))
 	else:
-		_request_place_tower.rpc_id(HOST_PEER_ID, _selected_definition_id, cell)
+		_request_build_order.rpc_id(HOST_PEER_ID, _selected_definition_id, cell, queue)
+	if not queue:
+		_on_palette_selected("")
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_place_tower(definition_id: String, cell: Vector2i) -> void:
+func _request_build_order(definition_id: String, cell: Vector2i, queue: bool) -> void:
 	if not multiplayer.is_server():
 		return
 	var sender := multiplayer.get_remote_sender_id()
-	_placement_feedback.rpc_id(sender, _try_place_tower(definition_id, cell, sender))
+	_order_feedback.rpc_id(sender, _try_order_build(sender, definition_id, cell, queue))
 
 
-## Validates and applies a build. Returns a WintermaulMap.Placement code.
-func _try_place_tower(definition_id: String, cell: Vector2i, peer_id := HOST_PEER_ID) -> int:
+## Host check when a build is ordered (the site is checked again on arrival).
+func _try_order_build(peer_id: int, definition_id: String, cell: Vector2i, queue: bool) -> int:
+	if not run_state.can_build():
+		return WintermaulMap.Placement.LOCKED
+	var definition := CATALOG.get_tower(definition_id)
+	if definition == null:
+		return WintermaulMap.Placement.NO_TOWER_SELECTED
+	if builder_system == null or not builder_system.has_builder(peer_id):
+		return WintermaulMap.Placement.LOCKED
+	var geometry := wintermaul_map.evaluate_placement(cell, definition.footprint)
+	if geometry != WintermaulMap.Placement.OK:
+		return geometry
+	if not BuildPermissionPolicy.can_control(peer_id, wintermaul_map.get_cell_position_index(cell), run_state.position_owners, HOST_PEER_ID):
+		return WintermaulMap.Placement.NOT_OWNED
+	if run_state.team_gold < modifiers.build_cost(definition.cost):
+		return WintermaulMap.Placement.UNAFFORDABLE
+	builder_system.issue_build(peer_id, definition.id, cell, wintermaul_map.footprint_center(cell, definition.footprint), queue)
+	_sync_builder_view()
+	_mark_dirty()
+	return WintermaulMap.Placement.OK
+
+
+@rpc("authority", "call_local", "reliable")
+func _order_feedback(result: int) -> void:
+	if result == WintermaulMap.Placement.OK:
+		hud.show_placement_message("Builder on the way", false)
+		AudioDirector.play("ui_confirm")
+	else:
+		hud.show_placement_message(WintermaulMap.placement_text(result), true)
+		AudioDirector.play("ui_error")
+
+
+func _on_move_requested(point: Vector2, queue: bool) -> void:
+	if _selected_tower_id != 0 or _selected_creep_id != 0:
+		return
+	_select_builder(true, false)
+	if multiplayer.is_server():
+		_try_order_move(HOST_PEER_ID, point, queue)
+	else:
+		_request_move_order.rpc_id(HOST_PEER_ID, point, queue)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_move_order(point: Vector2, queue: bool) -> void:
+	if multiplayer.is_server():
+		_try_order_move(multiplayer.get_remote_sender_id(), point, queue)
+
+
+func _try_order_move(peer_id: int, point: Vector2, queue: bool) -> bool:
+	if builder_system == null or not wintermaul_map.get_world_rect().has_point(point):
+		return false
+	var ok := builder_system.issue_move(peer_id, point, queue)
+	if ok:
+		_sync_builder_view()
+		_mark_dirty()
+	return ok
+
+
+# --- Builders (host) ------------------------------------------------------------
+
+## One builder per controlling player (the host always has one), starting in
+## the middle of that player's first position.
+func _ensure_builders() -> void:
+	var peers: Array[int] = [HOST_PEER_ID]
+	for owner in run_state.position_owners:
+		if owner != 0 and not peers.has(owner):
+			peers.append(owner)
+	for peer_id in peers:
+		# The host starts at its own roster position (Position 9 in solo, where
+		# every lane meets the gate); other players at their first position.
+		var start_position := _home_position_index() if peer_id == HOST_PEER_ID else _first_position_of(peer_id)
+		builder_system.ensure_builder(peer_id, wintermaul_map.get_position_world_rect(start_position).get_center())
+
+
+func _first_position_of(peer_id: int) -> int:
+	for position_index in range(run_state.position_owners.size()):
+		if run_state.position_owners[position_index] == peer_id:
+			return position_index
+	return POSITION_COUNT - 1
+
+
+func _tick_builders(delta: float) -> void:
+	if builder_system == null:
+		return
+	var events := builder_system.tick(delta, _start_construction)
+	for event in events:
+		if event["kind"] == "build_failed":
+			var peer := int(event["peer"])
+			if peer == HOST_PEER_ID:
+				_order_feedback(int(event["result"]))
+			elif multiplayer.get_peers().has(peer):
+				_order_feedback.rpc_id(peer, int(event["result"]))
+	_sync_builder_view()
+	if not events.is_empty():
+		_mark_dirty()
+
+
+func _sync_builder_view() -> void:
+	if builder_system == null:
+		return
+	_builder_records = builder_system.records()
+	wintermaul_map.reconcile_builders(_builder_records, builder_system.speed_pixels, true)
+	_refresh_build_sites()
+
+
+## Builder arrived: start construction if the site is still valid.
+func _start_construction(peer_id: int, definition_id: String, cell: Vector2i) -> int:
+	var definition := CATALOG.get_tower(definition_id)
+	if definition == null:
+		return WintermaulMap.Placement.NO_TOWER_SELECTED
+	var seconds := BalanceConfig.construction_seconds(modifiers.build_cost(definition.cost))
+	var result := _try_place_tower(definition_id, cell, peer_id, seconds)
+	if result == WintermaulMap.Placement.OK:
+		_builder_started_build.rpc(peer_id)
+	return result
+
+
+@rpc("authority", "call_local", "reliable")
+func _builder_started_build(peer_id: int) -> void:
+	var builder := wintermaul_map.get_builder(peer_id)
+	if builder != null:
+		builder.play_build()
+
+
+## Counts down construction and timed upgrades on the host.
+func _tick_construction(delta: float) -> void:
+	for tower_id in run_state.towers.keys():
+		var record: Dictionary = run_state.towers[tower_id]
+		if float(record.get("build_remaining", 0.0)) > 0.0:
+			record["build_remaining"] = maxf(0.0, float(record["build_remaining"]) - delta)
+			if record["build_remaining"] <= 0.0:
+				_update_tower_visual.rpc(record, _stats_for_record(record))
+				_play_event.rpc("build")
+				_mark_dirty()
+		elif float(record.get("upgrade_remaining", 0.0)) > 0.0:
+			record["upgrade_remaining"] = maxf(0.0, float(record["upgrade_remaining"]) - delta)
+			if record["upgrade_remaining"] <= 0.0:
+				record.erase("upgrade_paid")
+				run_state.upgrade_tower(int(tower_id))
+				_update_tower_visual.rpc(run_state.get_tower(int(tower_id)), _stats_for_record(run_state.get_tower(int(tower_id))))
+				_play_event.rpc("upgrade")
+				_mark_dirty()
+
+
+func _refresh_build_sites() -> void:
+	var sites: Array = []
+	for record in _builder_records:
+		if int(record["owner"]) == multiplayer.get_unique_id():
+			for site in record.get("sites", []):
+				var definition := CATALOG.get_tower(str(site["definition_id"]))
+				sites.append({"cell": site["cell"], "footprint": definition.footprint if definition else Vector2i(2, 2)})
+	wintermaul_map.show_build_sites(sites)
+
+
+## Validates and places a tower now. Returns a WintermaulMap.Placement code.
+## `construction_seconds` > 0 starts it under construction (builder orders);
+## 0 places it finished (tests, tooling).
+func _try_place_tower(definition_id: String, cell: Vector2i, peer_id := HOST_PEER_ID, construction_seconds := 0.0) -> int:
 	if not run_state.can_build():
 		return WintermaulMap.Placement.LOCKED
 	var definition := CATALOG.get_tower(definition_id)
@@ -484,6 +681,10 @@ func _try_place_tower(definition_id: String, cell: Vector2i, peer_id := HOST_PEE
 	if not run_state.spend_gold(cost):
 		return WintermaulMap.Placement.UNAFFORDABLE
 	var record := run_state.add_tower(definition.id, cell, position_index, definition.default_targeting)
+	if construction_seconds > 0.0:
+		record["build_remaining"] = construction_seconds
+		record["build_total"] = construction_seconds
+		record["build_paid"] = cost
 	_spawn_tower_visual.rpc(record, _stats_for_record(record))
 	_play_event.rpc("build")
 	_mark_dirty()
@@ -509,12 +710,17 @@ func _spawn_tower_visual(record: Dictionary, stats: Dictionary) -> void:
 	var definition := CATALOG.get_tower(str(record["definition_id"]))
 	if definition == null:
 		return
-	wintermaul_map.spawn_tower(int(record["id"]), record["cell"], definition, int(record["tier"]), int(record["targeting"]), stats, int(record.get("position", -1)))
+	var tower := wintermaul_map.spawn_tower(int(record["id"]), record["cell"], definition, int(record["tier"]), int(record["targeting"]), stats, int(record.get("position", -1)))
+	if tower != null:
+		tower.apply_progress(record)
 
 
 @rpc("authority", "call_local", "reliable")
 func _update_tower_visual(record: Dictionary, stats: Dictionary) -> void:
 	wintermaul_map.update_tower(int(record["id"]), int(record["tier"]), int(record["targeting"]), stats)
+	var tower := wintermaul_map.get_tower(int(record["id"]))
+	if tower != null:
+		tower.apply_progress(record)
 	if int(record["id"]) == _selected_tower_id:
 		_refresh_tower_panel()
 
@@ -549,14 +755,21 @@ func _try_upgrade_tower(tower_id: int, peer_id := HOST_PEER_ID) -> bool:
 		return false
 	if not BuildPermissionPolicy.can_control(peer_id, int(record["position"]), run_state.position_owners, HOST_PEER_ID):
 		return false
+	if float(record.get("build_remaining", 0.0)) > 0.0 or float(record.get("upgrade_remaining", 0.0)) > 0.0:
+		return false
 	var definition := CATALOG.get_tower(str(record["definition_id"]))
 	var base_cost := definition.upgrade_cost(int(record["tier"])) if definition else -1
 	if base_cost < 0:
 		return false
-	if not run_state.spend_gold(modifiers.upgrade_cost(base_cost)):
+	var cost := modifiers.upgrade_cost(base_cost)
+	if not run_state.spend_gold(cost):
 		return false
-	run_state.upgrade_tower(tower_id)
-	_update_tower_visual.rpc(run_state.get_tower(tower_id), _stats_for_record(run_state.get_tower(tower_id)))
+	# The tower keeps fighting at its current tier until the upgrade completes.
+	var seconds := BalanceConfig.construction_seconds(cost)
+	record["upgrade_remaining"] = seconds
+	record["upgrade_total"] = seconds
+	record["upgrade_paid"] = cost
+	_update_tower_visual.rpc(record, _stats_for_record(record))
 	_play_event.rpc("upgrade")
 	_mark_dirty()
 	return true
@@ -589,6 +802,11 @@ func _try_sell_tower(tower_id: int, peer_id := HOST_PEER_ID) -> bool:
 	if definition == null:
 		return false
 	var refund := definition.sell_value(int(record["tier"]), modifiers.sell_refund_bonus())
+	if float(record.get("build_remaining", 0.0)) > 0.0:
+		# Cancelling construction refunds everything, as in WC3.
+		refund = int(record.get("build_paid", modifiers.build_cost(definition.cost)))
+	elif float(record.get("upgrade_remaining", 0.0)) > 0.0:
+		refund += int(record.get("upgrade_paid", 0))
 	run_state.remove_tower(tower_id)
 	run_state.refund_gold(refund)
 	_remove_tower_visual.rpc(tower_id)
@@ -683,6 +901,9 @@ func _on_palette_selected(definition_id: String) -> void:
 
 func _select_tower(tower_id: int) -> void:
 	_set_selected_creep(0)
+	if tower_id != 0:
+		_builder_selected = false
+		wintermaul_map.set_selected_builder(0)
 	_selected_tower_id = tower_id
 	wintermaul_map.set_selected_tower(tower_id)
 	if tower_id != 0:
@@ -694,6 +915,8 @@ func _select_tower(tower_id: int) -> void:
 ## Clicking a creep inspects it (live health, traits, bounty); it replaces any
 ## tower selection or palette pick, as selecting a unit does in WC3.
 func _select_creep(creep_id: int) -> void:
+	_builder_selected = false
+	wintermaul_map.set_selected_builder(0)
 	_selected_tower_id = 0
 	_selected_definition_id = ""
 	wintermaul_map.set_selected_tower(0)
@@ -725,7 +948,24 @@ func _refresh_creep_panel() -> void:
 	})
 
 
+## Selects (or deselects) the local builder; `center` also moves the camera
+## to it (F1, like a WC3 hero hotkey).
+func _select_builder(selected: bool, center: bool) -> void:
+	_builder_selected = selected
+	var local_peer := multiplayer.get_unique_id()
+	if selected:
+		_set_selected_creep(0)
+		_selected_tower_id = 0
+		wintermaul_map.set_selected_tower(0)
+	wintermaul_map.set_selected_builder(local_peer if selected else 0)
+	var builder := wintermaul_map.get_builder(local_peer)
+	if center and builder != null:
+		battlefield_camera.focus_on(builder.plane_position)
+	_refresh_local_context()
+
+
 func _clear_selection() -> void:
+	_select_builder(false, false)
 	_set_selected_creep(0)
 	_selected_tower_id = 0
 	_selected_definition_id = ""
@@ -750,7 +990,12 @@ func _refresh_tower_panel() -> void:
 	var owners: PackedInt32Array = _latest_snapshot.get("owners", PackedInt32Array())
 	var can_control := BuildPermissionPolicy.can_control(multiplayer.get_unique_id(), int(record["position"]), owners, HOST_PEER_ID)
 	var upgrade_cost := modifiers.upgrade_cost(definition.upgrade_cost(int(record["tier"])))
-	hud.show_tower(record, definition, _stats_for_record(record), upgrade_cost, definition.sell_value(int(record["tier"]), modifiers.sell_refund_bonus()), can_control, int(_latest_snapshot.get("gold", 0)))
+	var refund := definition.sell_value(int(record["tier"]), modifiers.sell_refund_bonus())
+	if float(record.get("build_remaining", 0.0)) > 0.0:
+		refund = int(record.get("build_paid", refund))
+	elif float(record.get("upgrade_remaining", 0.0)) > 0.0:
+		refund += int(record.get("upgrade_paid", 0))
+	hud.show_tower(record, definition, _stats_for_record(record), upgrade_cost, refund, can_control, int(_latest_snapshot.get("gold", 0)))
 
 
 func _find_tower_record(tower_id: int) -> Dictionary:
@@ -777,6 +1022,10 @@ func _on_ready_pressed() -> void:
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
+		_select_builder(true, true)
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		if hud.close_top_overlay():
 			return
@@ -816,6 +1065,9 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	_wave_one_pending_ready.erase(peer_id)
 	var before := run_state.position_owners.duplicate()
 	run_state.position_owners = BuildPermissionPolicy.transfer_to_host(run_state.position_owners, peer_id, HOST_PEER_ID)
+	if builder_system != null:
+		builder_system.remove_builder(peer_id)
+		_sync_builder_view()
 	var transferred := PackedStringArray()
 	for position_index in range(before.size()):
 		if before[position_index] != run_state.position_owners[position_index]:

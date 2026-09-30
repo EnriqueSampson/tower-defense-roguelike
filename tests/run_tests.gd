@@ -96,6 +96,8 @@ func _run_tests() -> void:
 	_test_mid_wave_tower_placement()
 	_test_blocked_placement_preserves_gold()
 	_test_upgrade_and_sell_economy()
+	# Builder
+	_test_builder_orders_and_construction()
 	# Roguelike layer
 	_test_run_modifiers()
 	_test_upgrade_offer_rules_and_determinism()
@@ -782,7 +784,7 @@ func _test_battlefield_camera_controls() -> void:
 	_check(camera.screen_to_plane(anchor_screen).distance_to(anchor_plane) < 1.0, "wheel zoom keeps the ground under the cursor fixed")
 	var initial_center := camera.get_visible_plane_rect().get_center()
 	var drag_start := InputEventMouseButton.new()
-	drag_start.button_index = MOUSE_BUTTON_RIGHT
+	drag_start.button_index = MOUSE_BUTTON_MIDDLE
 	drag_start.pressed = true
 	camera._unhandled_input(drag_start)
 	var drag_motion := InputEventMouseMotion.new()
@@ -1029,9 +1031,13 @@ func _test_upgrade_and_sell_economy() -> void:
 	var tower_id: int = state.tower_records()[0]["id"]
 	var gold_after_build := state.team_gold
 	_check(game.call("_try_upgrade_tower", tower_id), "owner upgrades a tower to tier one")
-	_check(state.team_gold == gold_after_build - Bolt.upgrade_cost(0) and state.get_tower(tower_id)["tier"] == 1, "upgrade charges the tier cost and records the tier")
+	_check(state.team_gold == gold_after_build - Bolt.upgrade_cost(0) and state.get_tower(tower_id)["tier"] == 0 and map.get_tower(tower_id).is_upgrading(), "upgrades charge up front and keep the old tier while in progress")
+	_check(not game.call("_try_upgrade_tower", tower_id), "a tower cannot start a second upgrade mid-upgrade")
+	game.call("_tick_construction", 60.0)
+	_check(state.get_tower(tower_id)["tier"] == 1 and not map.get_tower(tower_id).is_upgrading(), "the upgrade completes after its build time and records the tier")
 	_check(map.get_tower(tower_id).tier == 1 and map.get_tower(tower_id).damage() == Bolt.stats_for_tier(1)["damage"], "upgraded tower visual adopts the new tier stats")
 	_check(game.call("_try_upgrade_tower", tower_id), "owner upgrades a tower to tier two")
+	game.call("_tick_construction", 60.0)
 	_check(not game.call("_try_upgrade_tower", tower_id), "upgrading past the final tier is rejected")
 	var gold_before_sell := state.team_gold
 	_check(game.call("_try_sell_tower", tower_id), "owner sells a tower")
@@ -1041,6 +1047,68 @@ func _test_upgrade_and_sell_economy() -> void:
 	_check(state.stats["towers_built"] == 1 and state.stats["towers_upgraded"] == 2 and state.stats["towers_sold"] == 1, "run stats track builds, upgrades, and sells")
 	state.team_gold = 0
 	_check(game.call("_try_place_tower", "bolt", P1_OPEN_B) == WintermaulMap.Placement.UNAFFORDABLE, "unaffordable builds report the reason and spend nothing")
+	game.queue_free()
+
+
+# --- Builder --------------------------------------------------------------------
+
+func _run_builders(game: Node, seconds: float) -> void:
+	var step := 0.05
+	var elapsed := 0.0
+	while elapsed < seconds:
+		game.call("_tick_builders", step)
+		elapsed += step
+
+
+func _test_builder_orders_and_construction() -> void:
+	var steam_session := root.get_node("SteamSession")
+	steam_session.set("is_solo_session", true)
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	var map := game.get_node(MAP_PATH) as WintermaulMap
+	var builders: BuilderSystem = game.get("builder_system")
+	state.team_gold = 1000
+	_check(builders != null and builders.has_builder(1) and map.get_builder(1) != null, "the host starts with a builder")
+	_check(is_equal_approx(BalanceConfig.builder_speed_pixels(true), 2.0 * BalanceConfig.builder_speed_pixels(false)), "the solo builder runs twice as fast")
+	var start := builders.get_position(1)
+	_check(map.get_position_world_rect(8).has_point(start), "the solo builder starts in Position 9")
+	var gold := state.team_gold
+	_check(game.call("_try_order_build", 1, "bolt", P9_OPEN, false) == WintermaulMap.Placement.OK, "a valid build order is accepted")
+	_check(state.team_gold == gold and state.towers.is_empty(), "ordering a build spends nothing until the builder arrives")
+	_run_builders(game, 5.0)
+	_check(state.towers.size() == 1 and state.team_gold == gold - Bolt.cost, "the builder walks to the site, starts construction and pays")
+	var tower := map.get_tower(state.tower_records()[0]["id"])
+	_check(tower != null and tower.is_under_construction() and tower.progress_ratio() >= 0.0, "a new tower starts under construction")
+	var creep := map.spawn_creep(7001, 8, _creep(1.0, 10))
+	creep.plane_position = tower.plane_position + Vector2(20, 0)
+	tower._process(0.01)
+	_check(map.get_node("Projectiles").get_child_count() == 0, "towers under construction do not attack")
+	game.call("_tick_construction", 10.0)
+	_check(not state.towers.values()[0].has("build_remaining") or float(state.towers.values()[0]["build_remaining"]) <= 0.0, "construction completes after its build time")
+	# Queued orders show as sites; a plain order replaces the queue.
+	_check(game.call("_try_order_build", 1, "cannon", P9_OPEN + Vector2i(4, 0), true) == WintermaulMap.Placement.OK and game.call("_try_order_build", 1, "frost", P9_OPEN + Vector2i(8, 0), true) == WintermaulMap.Placement.OK, "shift-queued build orders are accepted")
+	var records: Array = game.get("_builder_records")
+	_check((records[0]["sites"] as Array).size() == 2, "queued build sites are replicated for markers")
+	builders.stop(1)
+	# Cancelling construction refunds in full.
+	_check(game.call("_try_order_build", 1, "cannon", P9_OPEN + Vector2i(4, 0), false) == WintermaulMap.Placement.OK, "a second build order is accepted")
+	gold = state.team_gold
+	_run_builders(game, 5.0)
+	var building_id: int = state.tower_records()[-1]["id"]
+	_check(state.team_gold == gold - Cannon.cost and game.call("_try_sell_tower", building_id) and state.team_gold == gold, "cancelling construction refunds the full cost")
+	# A site taken while walking fails on arrival without charging.
+	_check(game.call("_try_order_build", 1, "frost", P9_OPEN + Vector2i(0, 4), false) == WintermaulMap.Placement.OK, "a third build order is accepted")
+	game.call("_try_place_tower", "bolt", P9_OPEN + Vector2i(0, 4))
+	gold = state.team_gold
+	_run_builders(game, 5.0)
+	_check(state.team_gold == gold and builders.get_orders(1).is_empty(), "an order whose site was taken fails on arrival and spends nothing")
+	# Move orders walk the builder to the point.
+	var target := map.grid_to_world(P9_OPEN + Vector2i(-6, -10))
+	_check(game.call("_try_order_move", 1, target, false), "move orders are accepted")
+	_run_builders(game, 4.0)
+	_check(builders.get_position(1).distance_to(target) < 1.0 and map.get_builder(1).plane_position.distance_to(target) < 1.0, "the builder and its visual reach the move target")
+	steam_session.set("is_solo_session", false)
 	game.queue_free()
 
 

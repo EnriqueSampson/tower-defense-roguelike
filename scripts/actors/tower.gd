@@ -42,6 +42,12 @@ var _turret_rest_height := 0.0
 var _model: Node3D
 var _model_scene: PackedScene
 var _model_turret: Node3D
+## Construction / timed-upgrade progress mirrored from the tower record and
+## counted down locally between snapshots.
+var _build_remaining := 0.0
+var _build_total := 0.0
+var _upgrade_remaining := 0.0
+var _upgrade_total := 0.0
 
 
 func _ready() -> void:
@@ -75,6 +81,32 @@ func set_selected(value: bool) -> void:
 	_refresh_selection_circle()
 
 
+## Adopts build_remaining/build_total and upgrade_remaining/upgrade_total.
+func apply_progress(record: Dictionary) -> void:
+	_build_remaining = float(record.get("build_remaining", 0.0))
+	_build_total = float(record.get("build_total", 0.0))
+	_upgrade_remaining = float(record.get("upgrade_remaining", 0.0))
+	_upgrade_total = float(record.get("upgrade_total", 0.0))
+	_apply_construction_offset()
+
+
+func is_under_construction() -> bool:
+	return _build_remaining > 0.0
+
+
+func is_upgrading() -> bool:
+	return _upgrade_remaining > 0.0
+
+
+## 0..1 while building or upgrading, -1 otherwise.
+func progress_ratio() -> float:
+	if _build_remaining > 0.0 and _build_total > 0.0:
+		return 1.0 - _build_remaining / _build_total
+	if _upgrade_remaining > 0.0 and _upgrade_total > 0.0:
+		return 1.0 - _upgrade_remaining / _upgrade_total
+	return -1.0
+
+
 func attack_range() -> float:
 	return float(stats.get("range", definition.attack_range if definition else 100.0))
 
@@ -92,6 +124,12 @@ func play_fire_animation() -> void:
 
 
 func _process(delta: float) -> void:
+	if _build_remaining > 0.0:
+		_build_remaining = maxf(0.0, _build_remaining - delta)
+		_apply_construction_offset()
+		return
+	if _upgrade_remaining > 0.0:
+		_upgrade_remaining = maxf(0.0, _upgrade_remaining - delta)
 	if _recoil > 0.0:
 		_recoil = maxf(0.0, _recoil - delta)
 		_update_turret_height()
@@ -186,6 +224,16 @@ func _refresh_model() -> bool:
 	_body = null
 	_turret = null
 	return true
+
+
+## Under construction the tower rises out of the ground as progress grows.
+func _apply_construction_offset() -> void:
+	var sink := 0.0
+	if _build_remaining > 0.0 and _build_total > 0.0:
+		sink = -(_build_remaining / _build_total) * 1.2 * _footprint_scale() * 0.7
+	for visual in [_model, _body, _turret]:
+		if visual != null:
+			visual.position.y = sink + (_turret_rest_height if visual == _turret else 0.0)
 
 
 func _update_turret_height() -> void:
