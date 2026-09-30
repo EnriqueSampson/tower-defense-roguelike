@@ -12,6 +12,7 @@ A faithful co-op Wintermaul for modern players:
 
 - **Wintermaul first.** Build mazes with a builder unit, hold nine connected positions, and defend the shared Position 9 gate across a long run of levels. The roguelike layer adds run-to-run variety on top of that. It does not replace it.
 - **Tone: funny and a bit out there.** Think *Dungeon Crawler Carl*: absurd escalation, sarcastic flavor text, and towers that start mundane and end ridiculous. The comedy targets absurdity, corporations and the system, not real groups of people.
+- **The run is a broadcast.** As in *Dungeon Crawler Carl*, the defense is a show: an audience watches, ratings reward playing with flair, sponsors pay in loot boxes, and the System meddles for ratings. This premise is the roguelike layer, not decoration on it.
 - **The WC3 look.** A fixed, tilted perspective camera, chunky and readable fantasy models, animation, and spell effects.
 - **Builder races.** Several builders, each with its own tower set and upgrade trees. Early Access ships with 3–4 races.
 - **Classic length.** 30+ levels per run. Other run-length presets are a post-MVP nice-to-have.
@@ -60,13 +61,16 @@ A faithful co-op Wintermaul for modern players:
 
 ### Stock-take, September 30, 2026
 
-Nobody but the developer has played a full run yet, so fun is unproven. The balance harness hints at a flat middle: bots fill their home position by levels 11–18 and then bank gold, and only boss levels cost lives. Decisions:
+The developer has played a full run and the direction is to keep refining, not rework. No one else has played yet. The balance harness hints at a flat middle: bots fill their home position by levels 11–18 and then bank gold, and only boss levels cost lives. Decisions:
 
 - **Gold per player, not a team pool,** as in WC3: each player earns and spends their own gold and can send gold to teammates, including from chat. Lives stay shared. Unfilled positions' gold goes to the host, who controls them.
 - **The Dungeon Crawler Carl framing, not only funny names:** a snarky "System" announcer reacting to play (first leak, bosses, builder trips, selling sprees, near-death saves), run-upgrade offers presented as sponsor loot boxes with rarities, and achievements with sarcastic titles.
 - **Per-player end-of-run awards** from the multiboard stats ("Employee of the Month", "Most Leaks Allowed").
 - **A late-game gold sink with real choices,** since gold piles up once a position is full.
 - **Variety between runs** (wave mutators, boss variants), but only once playtests show runs feel samey.
+- **The run is a broadcast** (the next-level hook). A ratings meter rises for playing with flair: clutch saves on the last tile, long mazes, kill combos, fast boss kills, comebacks. The System calls each one out on screen so it is never a mystery. Ratings milestones pay out sponsor loot boxes (Bronze, Silver, Gold, Legendary), which replace the fixed every-third-level upgrade offers. Before some levels the System offers a twist for bonus ratings ("every creep flies this level"), voted by the team or opted into per position. Team ratings plus a personal fan-favourite count feed the end-of-run awards. Ratings must reward good mazing, never replace it.
+- **One active ability per builder,** on a cooldown (for example Humans' "Performance Review" stun), so waves are something to play, not only watch. Builders still cannot die.
+- **Market check:** no standalone co-op Wintermaul-style game is on Steam. The nearest are Legion TD 2 (lane building and sending, from a WC3 map; the reference for the Wars mode) and Element TD 2 (mazing, from a WC3 map, no builders or shared positions).
 - **A 3v3 "Wintermaul Wars" mode before Early Access** (creep sending between teams, in the spirit of Legion TD). Not started; keep maps and modes data-driven so a Wars map is another `DESIGN_MAP`.
 
 ## 4. Phases
@@ -77,7 +81,7 @@ Each phase ends with exit criteria and a short solo play session. The headless s
 
 **Goal:** Know what the current game actually feels like, and make it possible to drop in real models.
 
-- [ ] Play 3+ full solo runs of the current build and record what feels wrong (use [PLAYTEST_FEEDBACK_TEMPLATE.md](PLAYTEST_FEEDBACK_TEMPLATE.md)). This is the baseline for every later change.
+- [ ] Play 3+ full solo runs of the current build and record what feels wrong (use [PLAYTEST_FEEDBACK_TEMPLATE.md](PLAYTEST_FEEDBACK_TEMPLATE.md)). This is the baseline for every later change. One full run played (September 30): the core works; keep refining rather than reworking.
 - [x] Set up the Blender MCP for placeholder models (Blender 4.5 LTS, the last release for Intel Macs).
 - [x] Add a model hook: `visual_scene` on `TowerDefinition`, `TowerUpgradeTier` and `CreepDefinition`, falling back to today's procedural meshes when it is empty (`ActorModel` helpers).
 - [x] Write an asset spec for the modeler (§7): format, scale, pivot, facing, the `Turret` node, animation names, materials, and the draw-call and triangle budget from the Phase 1 performance check.
@@ -131,6 +135,8 @@ Found while testing, for later phases:
 - [ ] In-game chat (Enter to talk, lobby-wide), with a gold command (for example `/give 50 Name`) beside the HUD's Send Gold.
 - [ ] The System announcer: reactive, sarcastic lines for run events.
 - [ ] End-of-run awards on the end screen.
+- [ ] Broadcast prototype: a ratings meter with System call-outs for a few flair events, whose milestones trigger the existing upgrade offers.
+- [ ] One builder ability, Humans only, to test whether active waves land.
 
 ### Playtest gate A: First friends playtest
 
@@ -182,7 +188,8 @@ Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash 
 
 - [x] Halfway choice (added from playtest feedback): after level 15 every builder takes a Relic, a one-time resource that lets them build their race's unique ultimate for gold plus the Relic, or recruits a second race whose towers their builder can also build. The wave timer waits for everyone (60 s, then a Relic). See ARCHITECTURE.md §9.
 - [ ] Retune when offers appear and how large the upgrade pool is for long runs. Offers are already race-aware (Phase 4).
-- [ ] Run-upgrade offers as sponsor loot boxes with rarities, voiced by the System.
+- [ ] The full broadcast: sponsor loot boxes with rarities paid by ratings milestones (replacing fixed offers), System twists before some levels with team voting or per-position opt-in, and a personal fan-favourite count. Tune from the Playtest gate A reaction to the prototype.
+- [ ] Builder abilities for every race, if the Humans prototype lands.
 - [ ] Achievements with sarcastic titles.
 - [ ] A late-game gold sink with real choices (for example pricier ultimates, paid run events, or rewards for banked gold).
 - [ ] Optional run events or modifiers, only if Playtest gate A or B shows runs feel samey.
@@ -227,6 +234,8 @@ Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash 
 - **Solo and small lobbies:** for now solo controls all nine positions with one builder at double speed (Phase 2). Revisit after Playtest gate A: several builders, merged or disabled positions, or AI help are still options, and Phase 6 has to settle 2–4 player lobbies too.
 - ~~Race 4's name and framing~~: Bugs, a cheap mazing race. Races share no towers.
 - **Final game name.**
+- **Public repository.** The GitHub repo is public and search-indexed. Decide whether it goes private before the store page.
+- **Duke Wintermaul.** A 2011 forum post mentions a tower defense made with the original map's author. Look into it during the naming review.
 
 ## 7. Asset spec for the modeler
 
