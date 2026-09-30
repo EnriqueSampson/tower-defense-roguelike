@@ -72,6 +72,7 @@ func _run_tests() -> void:
 	_test_team_economy()
 	_test_chat_commands()
 	_test_chat_relay_and_give()
+	_test_broadcast_menus()
 	_test_snapshot_round_trip()
 	_test_full_run_victory_and_defeat_model()
 	# Ownership and authority
@@ -510,6 +511,30 @@ func _test_chat_relay_and_give() -> void:
 		game.call("_handle_chat", 1, "spam %d" % index)
 	_check(hud.chat_history().size() - before == burst, "the host drops chat floods past %d lines" % burst)
 	game.queue_free()
+
+
+func _test_broadcast_menus() -> void:
+	_check(LiveBadge.format_count(1204337) == "1,204,337" and LiveBadge.format_count(999) == "999" and LiveBadge.format_count(1000) == "1,000", "viewer counts get thousands separators")
+	var arena := ClassicWintermaulLayout.preview_image()
+	var gate := (ClassicWintermaulLayout.FINAL_GATE - Vector2i.ONE) / ClassicWintermaulLayout.SCALE
+	_check(arena.get_size() == ClassicWintermaulLayout.DESIGN_GRID_SIZE and arena.get_pixelv(gate).is_equal_approx(Color("d0404a")) and arena.get_pixel(0, 0).a == 0.0, "the arena preview draws the layout (exit in red, void clear)")
+	var menu: Node = (load("res://scenes/MainMenu.tscn") as PackedScene).instantiate()
+	root.add_child(menu)
+	_check(menu.theme != null and menu.get_node("%PlayButton").text == "ENTER THE SHOW" and not str(menu.get_node("%SystemLine").call("current_text")).is_empty(), "the main menu opens as a broadcast with the System talking")
+	menu.queue_free()
+	# The lobby's race picker writes SteamSession.local_race; later tests rely
+	# on it being unset (the host then builds the default race).
+	var steam_session := root.get_node("SteamSession")
+	var saved_race: String = steam_session.get("local_race")
+	var lobby: Node = (load("res://scenes/Main.tscn") as PackedScene).instantiate()
+	root.add_child(lobby)
+	var lobby_list: ItemList = lobby.get_node("%LobbyList")
+	var roster: ItemList = lobby.get_node("%RosterList")
+	_check(lobby.theme != null and lobby_list.item_count == 1 and lobby_list.is_item_disabled(0) and roster.item_count >= 1, "the lobby opens with placeholder lines instead of empty lists")
+	lobby.call("_on_roster_changed", [{"lane": 1, "name": "Host", "is_host": true, "race": "humans"}])
+	_check(roster.item_count == 9 and roster.get_item_custom_fg_color(0).is_equal_approx(ClassicWintermaulLayout.PLAYER_COLORS[0].lightened(0.2)) and lobby.get_node("%StartButton").text == "GO LIVE  1/9", "the crew list colours each position and counts the crew")
+	lobby.queue_free()
+	steam_session.set("local_race", saved_race)
 
 
 func _test_snapshot_round_trip() -> void:

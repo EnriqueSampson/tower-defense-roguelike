@@ -1,9 +1,20 @@
 extends Control
 
-const COLOR_OK := Color("8ed8c6")
-const COLOR_ERROR := Color("ff8d72")
-const COLOR_MUTED := Color("92a09d")
+## The lobby finder, styled as contestant registration for a live show.
+
+const COLOR_OK := BroadcastTheme.CYAN
+const COLOR_ERROR := BroadcastTheme.LIVE_RED
+const COLOR_MUTED := BroadcastTheme.MUTED
 const CATALOG: ContentCatalog = preload("res://resources/content_catalog.tres")
+## What the System says while players wait in the lobby.
+const SYSTEM_LINES: Array[String] = [
+	"Pick a builder. Any builder. They all trip over things eventually.",
+	"Crew tip: whoever holds Position 9 deserves your gold. And your prayers.",
+	"Solo runs get great ratings. Mostly when they go badly.",
+	"Remember: lives are shared, gold is not. Send gold with /give in chat.",
+	"The Bugs builder is very cheap. So are our production values.",
+	"Please do not feed the creeps. They grow up so fast. Into bosses.",
+]
 
 var _listed_lobby_ids: Array[int] = []
 var _pending_launch_action: Callable
@@ -22,9 +33,11 @@ var _pending_launch_action: Callable
 @onready var map_options_cancel_button: Button = %MapOptionsCancelButton
 @onready var race_picker: OptionButton = %RacePicker
 @onready var race_blurb: Label = %RaceBlurb
+@onready var system_line: SystemLowerThird = %SystemLine
 
 
 func _ready() -> void:
+	_apply_broadcast_style()
 	distance_filter.add_item("Close", Steam.LOBBY_DISTANCE_FILTER_CLOSE)
 	distance_filter.add_item("Default", Steam.LOBBY_DISTANCE_FILTER_DEFAULT)
 	distance_filter.add_item("Far", Steam.LOBBY_DISTANCE_FILTER_FAR)
@@ -59,6 +72,19 @@ func _ready() -> void:
 	_on_roster_changed(SteamSession.roster)
 	if not SteamSession.last_status.is_empty():
 		_on_status_changed(SteamSession.last_status, SteamSession.last_status_is_error)
+
+
+func _apply_broadcast_style() -> void:
+	theme = BroadcastTheme.build()
+	BroadcastTheme.headline(%Title, 44, BroadcastTheme.GOLD)
+	BroadcastTheme.headline(%BrowserHeading, 28, BroadcastTheme.CYAN, Color(0, 0, 0, 0.6))
+	BroadcastTheme.headline(%LobbyHeading, 28, BroadcastTheme.CYAN, Color(0, 0, 0, 0.6))
+	BroadcastTheme.headline(%RaceLabel, 20, BroadcastTheme.TEXT, Color(0, 0, 0, 0.6))
+	BroadcastTheme.headline(%MapOptionsTitle, 30, BroadcastTheme.GOLD)
+	%Subtitle.add_theme_color_override("font_color", BroadcastTheme.MUTED)
+	%MapOptionsHint.add_theme_color_override("font_color", BroadcastTheme.MUTED)
+	race_blurb.add_theme_color_override("font_color", BroadcastTheme.MUTED)
+	system_line.set_lines(SYSTEM_LINES)
 
 
 ## Every player picks a builder race here; the pick carries into solo runs
@@ -121,11 +147,18 @@ func _on_steam_initialization_changed(available: bool, message: String) -> void:
 	steam_identity.modulate = COLOR_OK if available else COLOR_ERROR
 	_on_status_changed(message, not available)
 	%SteamActions.visible = available
+	%BrowserTools.visible = available
+	if lobby_list.item_count == 0 or lobby_list.is_item_disabled(0):
+		lobby_list.clear()
+		lobby_list.add_item("Press REFRESH to see what's airing." if available else "Steam is off the air. GO SOLO, or start Steam to find a crew.")
+		lobby_list.set_item_disabled(0, true)
 
 
 func _on_status_changed(message: String, is_error: bool) -> void:
 	status_label.text = message
 	status_label.modulate = COLOR_ERROR if is_error else COLOR_MUTED
+	if is_error and not message.is_empty():
+		system_line.say("We are experiencing technical difficulties: %s" % message)
 
 
 func _on_lobby_list_updated(lobbies: Array) -> void:
@@ -137,10 +170,10 @@ func _on_lobby_list_updated(lobbies: Array) -> void:
 		var host_name: String = lobby["host_name"]
 		if host_name.is_empty():
 			host_name = "Steam Host"
-		var roguelike_text := "Roguelike On" if lobby["roguelike"] else "Roguelike Off"
-		lobby_list.add_item("%s   %s/%s   %s   %s" % [host_name, lobby["members"], lobby["limit"], lobby["map"], roguelike_text])
+		var roguelike_text := "Sponsor upgrades on" if lobby["roguelike"] else "Sponsor upgrades off"
+		lobby_list.add_item("%s's show   ·   %s/%s crawlers   ·   %s" % [host_name, lobby["members"], lobby["limit"], roguelike_text])
 	if lobbies.is_empty():
-		lobby_list.add_item("No compatible public lobbies found")
+		lobby_list.add_item("Nothing airing right now. Host your own show.")
 		lobby_list.set_item_disabled(0, true)
 
 
@@ -149,7 +182,7 @@ func _on_lobby_changed(current_lobby_id: int, local_is_host: bool) -> void:
 	invite_button.disabled = not in_lobby
 	%LeaveButton.disabled = not in_lobby
 	start_button.disabled = not in_lobby or not local_is_host
-	%LobbyHeading.text = "Current Lobby  #%s" % current_lobby_id if in_lobby else "Current Lobby"
+	%LobbyHeading.text = "YOUR CREW  ·  SHOW #%s" % str(current_lobby_id).right(6) if in_lobby else "YOUR CREW"
 
 
 func _on_roster_changed(members: Array) -> void:
@@ -157,15 +190,22 @@ func _on_roster_changed(members: Array) -> void:
 	for member in members:
 		var host_marker := "  HOST" if member["is_host"] else ""
 		var race := CATALOG.get_race(CATALOG.resolve_race_id(str(member.get("race", ""))))
-		roster_list.add_item("Position %s   %s   %s%s" % [member["lane"], member["name"], race.display_name if race else "", host_marker])
+		var index := roster_list.add_item("Position %s   %s   %s%s" % [member["lane"], member["name"], race.display_name if race else "", host_marker])
+		roster_list.set_item_custom_fg_color(index, _position_color(int(member["lane"])))
 	if not members.is_empty():
 		for lane_number in range(members.size() + 1, SteamSession.MAX_PLAYERS + 1):
-			roster_list.add_item("Position %s   OPEN  •  HOST CONTROL" % lane_number)
-		start_button.text = "Start Defense  %s/%s" % [members.size(), SteamSession.MAX_PLAYERS]
+			var index := roster_list.add_item("Position %s   OPEN  ·  HOST CONTROL" % lane_number)
+			roster_list.set_item_custom_fg_color(index, _position_color(lane_number).darkened(0.5))
+		start_button.text = "GO LIVE  %s/%s" % [members.size(), SteamSession.MAX_PLAYERS]
 	else:
-		roster_list.add_item("Create or join a lobby to assemble the team")
+		roster_list.add_item("Host or join a show to assemble your crew")
 		roster_list.set_item_disabled(0, true)
-		start_button.text = "Start Defense"
+		start_button.text = "GO LIVE"
+
+
+func _position_color(lane_number: int) -> Color:
+	var index := clampi(lane_number - 1, 0, ClassicWintermaulLayout.PLAYER_COLORS.size() - 1)
+	return ClassicWintermaulLayout.PLAYER_COLORS[index].lightened(0.2)
 
 
 func _on_game_start_requested() -> void:

@@ -256,6 +256,29 @@ static func territory_bounds(position_index: int) -> Rect2i:
 	return _bounds[position_index] if position_index >= 0 and position_index < _bounds.size() else Rect2i()
 
 
+## One pixel per design cell: cliffs, walk-only ground, each position's
+## ground in its colour (spawn pads darker), the exit in red, void clear.
+## Menus show it as the arena preview.
+static func preview_image() -> Image:
+	var image := Image.create(DESIGN_GRID_SIZE.x, DESIGN_GRID_SIZE.y, false, Image.FORMAT_RGBA8)
+	for y in range(DESIGN_GRID_SIZE.y):
+		for x in range(DESIGN_GRID_SIZE.x):
+			var tile := DESIGN_MAP[y][x]
+			var color := Color(0, 0, 0, 0)
+			if tile == "#":
+				color = Color("5a5470")
+			elif tile == ".":
+				color = Color("c9d3dc")
+			elif tile == "=":
+				color = Color("d0404a")
+			elif tile.is_valid_int():
+				color = PLAYER_COLORS[int(tile) - 1]
+			elif _PAD_CHARS.contains(tile):
+				color = PLAYER_COLORS[_PAD_CHARS.find(tile)].darkened(0.45)
+			image.set_pixel(x, y, color)
+	return image
+
+
 static func _position(
 	player_id: int,
 	spawns: Array[Vector2i],
