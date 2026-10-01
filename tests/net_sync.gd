@@ -206,10 +206,15 @@ func _client_step(delta: float) -> void:
 	if _once("client_build_second", 4.5):
 		_game.call("_on_palette_selected", "frost")
 		_game.call("_on_build_cell_requested", P1_OPEN + Vector2i(4, 0))
-	if _once("client_upgrade", 8.5):
+	# Upgrade once the tower has finished building (construction time depends
+	# on frame pacing, so retry every half second instead of a fixed moment).
+	if _since_connect >= 8.5 and not _steps_done.has("client_upgrade") and _once("client_upgrade_try_%d" % int(_since_connect * 2.0), 0.0):
 		for record in (_game.get("_latest_snapshot") as Dictionary).get("towers", []):
 			if record["cell"] == P1_OPEN + Vector2i(4, 0):
-				_game.call("_on_upgrade_requested", int(record["id"]), "elf_tide")
+				if record["definition_id"] != "frost" or float(record.get("upgrade_remaining", 0.0)) > 0.0:
+					_steps_done["client_upgrade"] = true
+				elif float(record.get("build_remaining", 0.0)) <= 0.0:
+					_game.call("_on_upgrade_requested", int(record["id"]), "elf_tide")
 	if _once("client_send_gold", 8.8):
 		_game.call("_on_send_gold_requested", 1, 40)
 		# More than the client has: the host must refuse it.
