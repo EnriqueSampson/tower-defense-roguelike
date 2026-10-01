@@ -2,8 +2,8 @@ class_name SponsorTicker
 extends Control
 
 ## A news-style strip scrolling tonight's (entirely made up) sponsors.
-## Invented names only: no real brands, and nothing from the Dungeon
-## Crawler Carl books.
+## Invented names only: no real brands, and nothing from the books that
+## inspired the tone.
 
 const SPONSORS: Array[String] = [
 	"GRIMSBY'S DISCOUNT COFFINS  ·  Buy one, get buried free",

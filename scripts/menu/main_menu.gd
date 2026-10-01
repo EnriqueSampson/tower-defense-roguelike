@@ -1,10 +1,11 @@
 extends Control
 
-## The title screen, styled as the opening of a live broadcast.
+## The title screen of Frozen Gate TD LIVE!, styled as the opening of a
+## live broadcast.
 
 ## What the System says while the menu idles.
 const SYSTEM_LINES: Array[String] = [
-	"Welcome, crawler. Please keep your limbs inside the dungeon at all times.",
+	"Welcome, builder. Please keep your limbs inside the arena at all times.",
 	"Reminder: the gate is shared. So is the blame.",
 	"Tonight's contestants have a 3% survival rate. We rounded up.",
 	"Towers are non-refundable. Well. Seventy-five percent refundable.",
@@ -28,7 +29,10 @@ const SYSTEM_LINES: Array[String] = [
 
 func _ready() -> void:
 	theme = BroadcastTheme.build()
-	BroadcastTheme.headline(%Title, 112, BroadcastTheme.GOLD)
+	BroadcastTheme.headline(%Title, 96, BroadcastTheme.GOLD)
+	BroadcastTheme.headline(%TitleLive, 72, BroadcastTheme.LIVE_RED, Color(BroadcastTheme.GOLD, 0.9))
+	%TitleLive.rotation_degrees = -6.0
+	%TitleLive.pivot_offset = Vector2(0, 60)
 	BroadcastTheme.headline(%Kicker, 22, BroadcastTheme.CYAN, Color(0, 0, 0, 0.6))
 	BroadcastTheme.headline(%Tagline, 24, BroadcastTheme.TEXT)
 	BroadcastTheme.headline(%OptionsTitle, 30, BroadcastTheme.GOLD)

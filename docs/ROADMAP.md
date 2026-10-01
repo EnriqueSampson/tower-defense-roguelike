@@ -1,6 +1,7 @@
 # Roadmap
 
 **Updated:** September 30, 2026
+**Name:** Frozen Gate TD LIVE! (chosen September 30, 2026). Players are always called builders, never crawlers.
 **Goal:** A commercial Steam Early Access release of a co-op tower defense that plays like Warcraft III Wintermaul, with a light roguelike layer.
 **Pace:** Part-time (10–20 h/week). No launch date yet; phases are ordered, not scheduled. Size estimates are rough, at that pace.
 
@@ -135,7 +136,7 @@ Found while testing, for later phases:
 - [x] In-game chat: Enter to talk, Esc to cancel; the log fades above the console, names in each player's position colour. The host relays lines (trimmed, capped at 200 characters, flood-limited) and runs slash commands: `/give 50 Name` (or `p3` for Position 3's player, amount and name in either order), `/gold`, `/help`, with private System replies. The System line is the hook for the announcer. Protocol 11.
 - [x] The System announcer (`SystemAnnouncer`, host only): sarcastic lines for the run opening, the first leak, low lives, boss arrivals and kills, builder trips (by name), selling sprees, big gold gifts, close calls, the halfway choice, and victory or defeat. Ordinary lines respect an 8 s cooldown; once-per-run lines fire once; lines pick from pools seeded by the run seed. Each line shows as a broadcast banner over the battlefield and in the chat log. Protocol 12.
 - [x] End-of-run awards (`RunAwards`) on the end screen, from per-player stats (`RunState.peer_stats`): Employee of the Month (kills, credited to the killing tower's position controller), Most Leaks Allowed (leaks, charged to the creep's home position), Philanthropist of the Year (gold sent), Big Spender, Architect of Questionable Taste (towers built), Professional Faller (builder trips) and the Dragon Hoard Award (gold left). Ties go to the lower peer id.
-- [ ] Broadcast prototype: a ratings meter with System call-outs for a few flair events, whose milestones trigger the existing upgrade offers.
+- [x] Broadcast prototype: a team viewers meter (`RunState.ratings`, top bar) earned by flair: flawless levels (35K), clutch saves within 5 tiles of the gate (8K), multi-kills of 5 in 0.6 s (5K), bosses killed within 25 s (30K), nail-biter clears at 3 lives or fewer (15K), and long mazes at level end (15K at 1.6x the empty-map route, 30K at 2.5x). Clutch saves and multi-kills pay at most twice per level. Every 100K viewers a sponsor offers a run upgrade (one opens per build phase), replacing the fixed every-third-level offers; flawless play matches the old cadence. Call-outs float over the kill and stack under the System's banner, which announces each sponsor. Constants in `BalanceConfig`. Protocol 13.
 - [ ] One builder ability, Humans only, to test whether active waves land.
 
 ### Playtest gate A: First friends playtest
@@ -223,7 +224,7 @@ Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash 
 
 ## 5. Risks
 
-- **Name and IP.** "Wintermaul" is a Warcraft III community map name. Before a commercial release, choose a final game name and make sure nothing uses Blizzard names, assets or recognizable designs. Do this before the store page.
+- **Name and IP.** "Wintermaul" is a Warcraft III community map name; the game is now Frozen Gate TD LIVE!, and player-facing text no longer uses "Wintermaul". Before the store page, run a trademark search on the new name and make sure nothing uses Blizzard names, assets or recognizable designs.
 - **Performance on the Iris 550.** Real models, animation and 9 positions of creeps on GL Compatibility is the biggest technical risk. Profile at the end of Phase 1, not at the end of the project.
 - **Art throughput.** 3–4 races with 8–10 towers each means about 30–40 tower models plus creeps and builders, all from one volunteer modeler. The model hook and placeholders keep this from blocking gameplay work, but the modeler's time decides the Early Access date.
 - **Balance at scale.** 30+ levels × 3–4 races × 4 lobby sizes cannot be hand-tuned. The Phase 3 harness is essential.
@@ -233,7 +234,7 @@ Bugs are the mazing race: towers cost 5–12 gold, hit weakly, and never splash 
 
 - **Solo and small lobbies:** for now solo controls all nine positions with one builder at double speed (Phase 2). Revisit after Playtest gate A: several builders, merged or disabled positions, or AI help are still options, and Phase 6 has to settle 2–4 player lobbies too.
 - ~~Race 4's name and framing~~: Bugs, a cheap mazing race. Races share no towers.
-- **Final game name.**
+- ~~Final game name~~: Frozen Gate TD LIVE!
 - **Public repository.** The GitHub repo is public and search-indexed. Decide whether it goes private before the store page.
 - **Duke Wintermaul.** A 2011 forum post mentions a tower defense made with the original map's author. Look into it during the naming review.
 

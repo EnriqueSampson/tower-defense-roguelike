@@ -171,7 +171,7 @@ func _on_lobby_list_updated(lobbies: Array) -> void:
 		if host_name.is_empty():
 			host_name = "Steam Host"
 		var roguelike_text := "Sponsor upgrades on" if lobby["roguelike"] else "Sponsor upgrades off"
-		lobby_list.add_item("%s's show   ·   %s/%s crawlers   ·   %s" % [host_name, lobby["members"], lobby["limit"], roguelike_text])
+		lobby_list.add_item("%s's show   ·   %s/%s builders   ·   %s" % [host_name, lobby["members"], lobby["limit"], roguelike_text])
 	if lobbies.is_empty():
 		lobby_list.add_item("Nothing airing right now. Host your own show.")
 		lobby_list.set_item_disabled(0, true)

@@ -1,6 +1,6 @@
-# Wintermaul Roguelike
+# Frozen Gate TD LIVE!
 
-A cooperative Wintermaul-style tower defense roguelike built in Godot 4 with Steam lobbies. Nine positions, one shared final gate, host-authoritative simulation, and seeded in-run upgrades.
+A cooperative tower defense game show, in the style of the classic Warcraft III Wintermaul map, built in Godot 4 with Steam lobbies. Players are builders: they maze towers across nine positions while the System, the show's host, comments for an audience of viewers. Nine positions, one shared final gate, host-authoritative simulation, and seeded in-run upgrades.
 
 ## Requirements
 
