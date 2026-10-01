@@ -299,6 +299,17 @@ func show_bounty(creep_id: int, amount: int) -> void:
 	_last_creep_positions.erase(creep_id)
 
 
+## Stuns every creep (ground and air) within `radius` sim pixels of
+## `center`. Returns how many.
+func stun_creeps_in(center: Vector2, radius: float, seconds: float) -> int:
+	var count := 0
+	for runner: RouteRunner in get_active_creeps():
+		if runner.plane_position.distance_squared_to(center) <= radius * radius:
+			runner.stun(seconds)
+			count += 1
+	return count
+
+
 func find_nearest_creep(origin: Vector2, attack_range: float) -> RouteRunner:
 	return TowerTargeting.select(get_active_creeps(), origin, attack_range, TowerTargeting.Mode.NEAREST)
 

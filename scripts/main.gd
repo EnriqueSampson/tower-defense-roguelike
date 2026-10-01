@@ -106,6 +106,9 @@ func _on_race_selected(index: int, announce := true) -> void:
 		return
 	var race := CATALOG.races[index]
 	race_blurb.text = race.description
+	var ability := BuilderAbility.for_race(race.id)
+	if not ability.is_empty():
+		race_blurb.text += "\nBuilder ability, %s (C): %s" % [ability["name"], ability["description"]]
 	if announce or SteamSession.local_race != race.id:
 		SteamSession.set_local_race(race.id)
 

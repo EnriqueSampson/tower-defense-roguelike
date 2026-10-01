@@ -76,6 +76,7 @@ func _run_tests() -> void:
 	_test_system_announcer()
 	_test_run_awards()
 	_test_ratings()
+	_test_builder_ability()
 	_test_snapshot_round_trip()
 	_test_full_run_victory_and_defeat_model()
 	# Ownership and authority
@@ -661,6 +662,38 @@ func _test_ratings() -> void:
 	(boss_map.get_active_creeps()[0] as RouteRunner).take_damage(100000000, 1000)
 	_check(boss_state.ratings >= BalanceConfig.RATINGS_SPEED_BOSS, "a boss killed fast is a boss speedrun (%s)" % boss_id)
 	boss_game.queue_free()
+
+
+func _test_builder_ability() -> void:
+	var review := BuilderAbility.for_race("humans")
+	_check(not review.is_empty() and BuilderAbility.for_race("orcs").is_empty(), "Humans have the prototype builder ability; other races none yet")
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	var map := game.get_node(MAP_PATH) as WintermaulMap
+	var builders: BuilderSystem = game.get("builder_system")
+	state.peer_races[1] = "humans"
+	_check(not game.call("_try_builder_ability", 1), "the ability only works during waves")
+	state.begin_wave(PackedInt32Array([2, 0, 0, 0, 0, 0, 0, 0, 0]))
+	game.call("_spawn_entry", 0, {"creep_id": "grunt", "health_multiplier": 1.0, "bounty_multiplier": 1.0, "delay": 0.0})
+	game.call("_spawn_entry", 0, {"creep_id": "grunt", "health_multiplier": 1.0, "bounty_multiplier": 1.0, "delay": 0.0})
+	var near: RouteRunner = map.get_active_creeps()[0]
+	var far: RouteRunner = map.get_active_creeps()[1]
+	near.plane_position = builders.get_position(1) + Vector2(WintermaulMap.TILE_SIZE * 2.0, 0)
+	far.plane_position = builders.get_position(1) + Vector2(WintermaulMap.TILE_SIZE * 20.0, 0)
+	_check(game.call("_try_builder_ability", 1), "a Human builder calls a Performance Review during a wave")
+	_check(near.is_stunned() and is_zero_approx(near.current_speed()) and not far.is_stunned(), "creeps near the builder stand still; distant ones keep walking")
+	_check(not game.call("_try_builder_ability", 1) and float((game.call("_make_state_snapshot") as Dictionary)["ability_cooldowns"][1]) > 0.0, "the ability then cools down, and the snapshot carries the cooldown")
+	var before := near.plane_position
+	near._process(float(review["stun_seconds"]) * 0.5)
+	_check(near.plane_position == before, "a stunned creep does not move")
+	near._process(float(review["stun_seconds"]))
+	near._process(0.2)
+	_check(not near.is_stunned() and near.plane_position != before, "the stun wears off and the creep walks on")
+	state.peer_races[1] = "orcs"
+	game.set("_ability_cooldowns", {})
+	_check(not game.call("_try_builder_ability", 1), "races without an ability cannot use one")
+	game.queue_free()
 
 
 func _test_snapshot_round_trip() -> void:

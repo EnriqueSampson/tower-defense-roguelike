@@ -46,6 +46,8 @@ var _path_revision := 0
 var _map: WintermaulMap
 var _slow_factor := 0.0
 var _slow_remaining := 0.0
+## Seconds left standing still (a builder ability).
+var _stun_remaining := 0.0
 var _flash_remaining := 0.0
 var _regen_accumulator := 0.0
 var _distance_travelled := 0.0
@@ -141,7 +143,20 @@ func apply_slow(factor: float, duration: float) -> bool:
 	return true
 
 
+## Holds the creep in place for `seconds` (bosses for half as long).
+func stun(seconds: float) -> void:
+	if health <= 0 or seconds <= 0.0:
+		return
+	_stun_remaining = maxf(_stun_remaining, seconds * (0.5 if is_boss else 1.0))
+
+
+func is_stunned() -> bool:
+	return _stun_remaining > 0.0
+
+
 func current_speed() -> float:
+	if _stun_remaining > 0.0:
+		return 0.0
 	var slow := _slow_factor if _slow_remaining > 0.0 else 0.0
 	return _speed_pixels * speed_multiplier * (1.0 - slow)
 
@@ -225,6 +240,8 @@ func _process(delta: float) -> void:
 
 func _tick_status(delta: float) -> void:
 	var needs_redraw := false
+	if _stun_remaining > 0.0:
+		_stun_remaining = maxf(0.0, _stun_remaining - delta)
 	if _slow_remaining > 0.0:
 		_slow_remaining = maxf(0.0, _slow_remaining - delta)
 		if _slow_remaining == 0.0:

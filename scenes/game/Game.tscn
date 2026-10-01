@@ -630,6 +630,7 @@ BUILD      Pick a tower on the command card (bottom right, hotkeys Q W E R), the
 SELECT     Left-click a tower: Q upgrades, A S D F set its target (first / last / strongest / nearest), C sells or cancels construction, V or Esc deselects.
 PAN        Arrow keys, middle-drag, the screen edge, or click and drag on the minimap (bottom left).
 ZOOM       Mouse wheel.
+ABILITY    C fires your builder's race ability during waves (Humans: Performance Review stuns nearby creeps).
 MENU       F10 opens the menu.
 CHAT       Enter to talk, Esc to cancel. /give 50 Name (or p3) sends gold; the +25 / +100 buttons on the scoreboard do too.
 GOAL       Creeps leaving Positions 1-8 relay into Position 9. Only creeps crossing the final gate cost shared lives.

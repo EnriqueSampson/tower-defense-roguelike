@@ -21,6 +21,8 @@ signal builder_stop_requested
 signal gold_send_requested(to_peer: int, amount: int)
 ## A chat line or slash command typed by the local player.
 signal chat_submitted(text: String)
+## The local builder's race ability (C on the build card).
+signal builder_ability_requested
 
 const RunStateModel = preload("res://scripts/game/run_state.gd")
 const COLOR_OK := Color("8ed8c6")
@@ -42,6 +44,8 @@ const SLOT_SELL := 10
 ## Row two, column two: the S hotkey, where WC3 puts Stop.
 const SLOT_STOP := 5
 const SLOT_CANCEL := 11
+## Row three, column three (C): the builder's race ability, when it has one.
+const SLOT_ABILITY := 10
 ## Card-sized names for TowerTargeting.Mode (FIRST, LAST, STRONGEST, NEAREST).
 const TARGETING_SHORT_NAMES: Array[String] = ["First", "Last", "Strong", "Near"]
 ## Quick amounts on the multiboard's Send Gold buttons.
@@ -71,6 +75,11 @@ var _race: RaceDefinition
 ## Second race recruited at the halfway point (null until then).
 var _bonus_race: RaceDefinition
 var _relics := 0
+## The local race's builder ability ({} if none), its cooldown, and whether a
+## wave is running (abilities only work then).
+var _ability: Dictionary = {}
+var _ability_cooldown := 0.0
+var _wave_running := false
 var _midpoint_overlay: Control
 var _midpoint_cards: HBoxContainer
 var _midpoint_signature := ""
@@ -273,6 +282,9 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 	_race = context.get("race") as RaceDefinition
 	_bonus_race = context.get("bonus_race") as RaceDefinition
 	_relics = int(context.get("relics", 0))
+	_ability = context.get("ability", {})
+	_ability_cooldown = float(context.get("ability_cooldown", 0.0))
+	_wave_running = phase == RunStateModel.Phase.WAVE
 	_gold = int(context.get("gold", 0))
 	_modifiers = modifiers
 	_refresh_card()
@@ -669,7 +681,7 @@ func _card_state_signature() -> String:
 		return "tower|%d|%s|%d|%s|%s|%d|%s|%s" % [_shown_tower_id, _tower_definition.id, _tower_targeting, _tower_can_control, ",".join(option_parts), _sell_value, _tower_building, _tower_upgrading]
 	if _catalog == null:
 		return "empty"
-	var parts := PackedStringArray(["build", _selected_definition_id, _race.id if _race else "", _bonus_race.id if _bonus_race else "", str(_relics)])
+	var parts := PackedStringArray(["build", _selected_definition_id, _race.id if _race else "", _bonus_race.id if _bonus_race else "", str(_relics), str(_ability.get("name", "")), str(ceili(_ability_cooldown)), str(_wave_running)])
 	for definition in _build_roster():
 		var cost := _modifiers.build_cost(definition.cost) if _modifiers else definition.cost
 		parts.append("%d:%s" % [cost, _gold >= cost])
@@ -704,7 +716,14 @@ static func _short_name(definition: TowerDefinition) -> String:
 
 func _fill_build_card() -> void:
 	var roster := _build_roster()
-	for index in range(mini(roster.size(), BUILD_SLOTS.size())):
+	var slots := BUILD_SLOTS.duplicate()
+	if not _ability.is_empty():
+		slots.erase(SLOT_ABILITY)
+		var ready := _ability_cooldown <= 0.0
+		var status := ("READY" if _wave_running else "waves") if ready else "%ds" % ceili(_ability_cooldown)
+		var tooltip := "%s  ·  %ds cooldown\n%s" % [_ability["name"], int(_ability["cooldown"]), _ability["description"]]
+		_set_card_slot(SLOT_ABILITY, "%s\n%s" % [_ability["short"], status], tooltip, func() -> void: builder_ability_requested.emit(), ready and _wave_running, false, BroadcastTheme.CYAN)
+	for index in range(mini(roster.size(), slots.size())):
 		var definition: TowerDefinition = roster[index]
 		var cost := _modifiers.build_cost(definition.cost) if _modifiers else definition.cost
 		var label := "%s\n%dg" % [_short_name(definition), cost]
@@ -715,7 +734,7 @@ func _fill_build_card() -> void:
 			label = "%s\n%dg+R" % [_short_name(definition), cost]
 			tooltip = "%s  ·  %d gold + 1 Relic (you have %d)\n%s\n%s" % [definition.display_name, cost, _relics, definition.role, definition.description]
 			affordable = affordable and _relics > 0
-		_set_card_slot(BUILD_SLOTS[index], label, tooltip, _on_palette_button_pressed.bind(definition.id), affordable, definition.id == _selected_definition_id, definition.accent_color.lightened(0.25))
+		_set_card_slot(slots[index], label, tooltip, _on_palette_button_pressed.bind(definition.id), affordable, definition.id == _selected_definition_id, definition.accent_color.lightened(0.25))
 	if not _selected_definition_id.is_empty():
 		_set_card_slot(SLOT_CANCEL, "Cancel", "Stop placing", _on_palette_button_pressed.bind(_selected_definition_id))
 	else:

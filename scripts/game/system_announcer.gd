@@ -43,6 +43,10 @@ const LINES := {
 		"Breaking news: %s has discovered gravity.",
 		"%s fell over. The audience would like to see that again.",
 	],
+	"ability": [
+		"%s called a %s. %d creeps are reconsidering their career choices.",
+		"%s just held a %s. %d creeps froze in sheer corporate terror.",
+	],
 	"selling_spree": [
 		"%s is having a clearance sale. Everything must go!",
 		"%s is selling towers like the gate isn't right there.",
@@ -109,6 +113,12 @@ func boss_killed(boss_name: String) -> String:
 
 func tripped(player: String) -> String:
 	return _say(_pick("trip") % player)
+
+
+func ability_used(player: String, ability: String, creeps: int) -> String:
+	if creeps <= 0:
+		return ""
+	return _say(_pick("ability") % [player, ability, creeps])
 
 
 func sold(peer_id: int, player: String) -> String:

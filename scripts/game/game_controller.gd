@@ -50,6 +50,8 @@ var _boss_spawned_at: Dictionary = {}
 var _level_leaks := 0
 ## Kill flair paid this level, by label (capped by KILL_FLAIR_PER_LEVEL).
 var _level_flair: Dictionary = {}
+## Host only: peer id -> seconds until their builder ability is ready.
+var _ability_cooldowns: Dictionary = {}
 
 @onready var wintermaul_map: WintermaulMap = %WintermaulMap
 @onready var battlefield_camera: BattlefieldCamera = %BattlefieldCamera
@@ -112,6 +114,7 @@ func _ready() -> void:
 	hud.builder_stop_requested.connect(_on_builder_stop_requested)
 	hud.gold_send_requested.connect(_on_send_gold_requested)
 	hud.chat_submitted.connect(_on_chat_submitted)
+	hud.builder_ability_requested.connect(_on_builder_ability_requested)
 
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
@@ -262,6 +265,8 @@ func _process(delta: float) -> void:
 	if run_state.phase in [RunStateModel.Phase.BUILD, RunStateModel.Phase.WAVE]:
 		run_state.elapsed_seconds += delta
 		announcer.tick(delta)
+		for peer_id in _ability_cooldowns:
+			_ability_cooldowns[peer_id] = maxf(0.0, float(_ability_cooldowns[peer_id]) - delta)
 		_tick_builders(delta)
 		_tick_construction(delta)
 
@@ -598,6 +603,7 @@ func _make_state_snapshot() -> Dictionary:
 	snapshot["player_count"] = SteamSession.player_count()
 	snapshot["wave_one_ready"] = _wave_one_total - _wave_one_pending_ready.size()
 	snapshot["wave_one_total"] = _wave_one_total
+	snapshot["ability_cooldowns"] = _ability_cooldowns.duplicate()
 	if run_state.phase in [RunStateModel.Phase.VICTORY, RunStateModel.Phase.DEFEAT]:
 		var results := run_state.results()
 		results["awards"] = RunAwards.compute(run_state.peer_stats, run_state.peer_gold, _account_names())
@@ -678,6 +684,8 @@ func _refresh_local_context() -> void:
 		"relics": run_state.relics_of(local_peer),
 		"build_cost": cost,
 		"gold": gold,
+		"ability": BuilderAbility.for_race(_race_for(local_peer).id if _race_for(local_peer) else ""),
+		"ability_cooldown": float((_latest_snapshot.get("ability_cooldowns", {}) as Dictionary).get(local_peer, 0.0)),
 		"wave_one_ready_pressed": _wave_one_ready_pressed,
 	}
 	hud.update_state(_latest_snapshot, context)
@@ -1185,6 +1193,55 @@ func _try_send_gold(from_peer: int, to_peer: int, amount: int) -> bool:
 		_show_notice.rpc_id(to_peer, text, false)
 	_mark_dirty()
 	return true
+
+
+# --- Builder ability (prototype) ---------------------------------------------------
+
+func _on_builder_ability_requested() -> void:
+	if multiplayer.is_server():
+		_transaction_feedback(_try_builder_ability(HOST_PEER_ID), "", "Ability not ready")
+	else:
+		_request_builder_ability.rpc_id(HOST_PEER_ID)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_builder_ability() -> void:
+	if not multiplayer.is_server():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	_transaction_feedback.rpc_id(sender, _try_builder_ability(sender), "", "Ability not ready")
+
+
+## Fires the peer's race ability at their builder: during waves, with a
+## builder, off cooldown. Stuns creeps around the builder on every peer.
+func _try_builder_ability(peer_id: int) -> bool:
+	if run_state.phase != RunStateModel.Phase.WAVE or builder_system == null or not builder_system.has_builder(peer_id):
+		return false
+	var race := _race_for(peer_id)
+	var ability := BuilderAbility.for_race(race.id if race else "")
+	if ability.is_empty() or float(_ability_cooldowns.get(peer_id, 0.0)) > 0.0:
+		return false
+	_ability_cooldowns[peer_id] = float(ability["cooldown"])
+	var center := builder_system.get_position(peer_id)
+	var radius := float(ability["radius_tiles"]) * WintermaulMap.TILE_SIZE
+	var stunned := wintermaul_map.stun_creeps_in(center, radius, float(ability["stun_seconds"]))
+	_builder_ability_cast.rpc(peer_id, center, radius, float(ability["stun_seconds"]))
+	_announce(announcer.ability_used(_player_name(peer_id, SteamSession.get_peer_names()), str(ability["name"]), stunned))
+	_mark_dirty()
+	return true
+
+
+## Every peer: the cast's ring and the builder's swing; clients also stun the
+## same creeps (the host already did, and its snapshots stay authoritative).
+@rpc("authority", "call_local", "reliable")
+func _builder_ability_cast(peer_id: int, center: Vector2, radius: float, seconds: float) -> void:
+	if not multiplayer.is_server():
+		wintermaul_map.stun_creeps_in(center, radius, seconds)
+	wintermaul_map.effects.ring(center, BroadcastTheme.CYAN, radius)
+	var builder := wintermaul_map.get_builder(peer_id)
+	if builder != null:
+		builder.play_build()
+	AudioDirector.play("boss_warning")
 
 
 # --- Chat ----------------------------------------------------------------------
