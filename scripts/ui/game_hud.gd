@@ -105,6 +105,9 @@ var _chat_input: LineEdit
 var _chat_refresh_timer := 0.0
 ## The System's broadcast banner over the battlefield (the announcer).
 var _announcer_banner: SystemLowerThird
+## End screen: one row per award (RunAwards), rebuilt when they change.
+var _awards_box: VBoxContainer
+var _awards_signature := ""
 
 @onready var phase_label: Label = %PhaseLabel
 @onready var wave_label: Label = %WaveLabel
@@ -344,7 +347,7 @@ func _update_position_rows(snapshot: Dictionary, owners: PackedInt32Array, conte
 		if owner == local_peer and owner != 0:
 			owner_text = "YOU"
 		elif owner != 0 and owner != BuildPermissionPolicy.HOST_PEER_ID:
-			owner_text = str(names.get(owner, "ALLY"))
+			owner_text = str(names.get(owner, "Player %d" % owner))
 		row.text = "P%d  %-6s  SPAWNED %02d  QUEUED %02d" % [position_index + 1, owner_text, spawned[position_index], queued[position_index]]
 
 
@@ -947,10 +950,57 @@ func show_end_screen(results: Dictionary, catalog: ContentCatalog) -> void:
 		"Seed  %s" % results.get("seed", 0),
 		"Upgrades  %s" % (", ".join(upgrade_names) if not upgrade_names.is_empty() else "none"),
 	]))
+	_show_awards(results.get("awards", []))
 	if not _end_screen_shown:
 		_end_screen_shown = true
 		hide_offer()
 		end_overlay.visible = true
+
+
+## "And the awards go to...": each award's title, winner and the System's
+## line about it, under the run summary.
+func _show_awards(awards: Array) -> void:
+	var signature := str(awards)
+	if signature == _awards_signature:
+		return
+	_awards_signature = signature
+	if _awards_box == null:
+		_awards_box = VBoxContainer.new()
+		_awards_box.add_theme_constant_override("separation", 4)
+		end_summary.get_parent().add_child(_awards_box)
+		end_summary.get_parent().move_child(_awards_box, end_summary.get_index() + 1)
+	for child in _awards_box.get_children():
+		child.queue_free()
+	if awards.is_empty():
+		return
+	var heading := Label.new()
+	heading.text = "AND THE AWARDS GO TO..."
+	BroadcastTheme.headline(heading, 22, BroadcastTheme.CYAN, Color(0, 0, 0, 0.6))
+	_awards_box.add_child(heading)
+	for award: Dictionary in awards:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var title := Label.new()
+		title.text = str(award.get("title", ""))
+		title.custom_minimum_size.x = 250
+		BroadcastTheme.headline(title, 16, BroadcastTheme.GOLD, Color(0, 0, 0, 0.6))
+		row.add_child(title)
+		var winner := Label.new()
+		winner.text = "%s  ·  %s" % [award.get("name", ""), award.get("line", "")]
+		winner.add_theme_font_size_override("font_size", 13)
+		row.add_child(winner)
+		_awards_box.add_child(row)
+
+
+## Award titles shown on the end screen (tests).
+func award_titles() -> PackedStringArray:
+	var titles := PackedStringArray()
+	if _awards_box == null:
+		return titles
+	for row in _awards_box.get_children():
+		if row is HBoxContainer and not row.is_queued_for_deletion():
+			titles.append((row.get_child(0) as Label).text)
+	return titles
 
 
 func show_controls_overlay() -> void:

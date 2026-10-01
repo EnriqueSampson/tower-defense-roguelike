@@ -74,6 +74,7 @@ func _run_tests() -> void:
 	_test_chat_relay_and_give()
 	_test_broadcast_menus()
 	_test_system_announcer()
+	_test_run_awards()
 	_test_snapshot_round_trip()
 	_test_full_run_victory_and_defeat_model()
 	# Ownership and authority
@@ -567,6 +568,47 @@ func _test_system_announcer() -> void:
 	game.call("_try_send_gold", 1, 2, 150)
 	var last: String = hud.chat_history()[-1]
 	_check(last.begins_with("System: ") and "150" in last, "the controller broadcasts the System's lines to the HUD (%s)" % last)
+	game.queue_free()
+
+
+func _test_run_awards() -> void:
+	var stats := {
+		1: {"kills": 10, "leaks": 2, "gold_spent": 300, "towers_built": 5},
+		2: {"kills": 30, "gold_sent": 120, "trips": 1, "gold_spent": 100},
+	}
+	var awards := RunAwards.compute(stats, {1: 50, 2: 5}, {1: "Ann", 2: "Bob"})
+	var winners := {}
+	for award in awards:
+		winners[award["title"]] = award["name"]
+	_check(winners == {"EMPLOYEE OF THE MONTH": "Bob", "MOST LEAKS ALLOWED": "Ann", "PHILANTHROPIST OF THE YEAR": "Bob", "BIG SPENDER": "Ann", "ARCHITECT OF QUESTIONABLE TASTE": "Ann", "PROFESSIONAL FALLER": "Bob", "DRAGON HOARD AWARD": "Ann"}, "each award goes to the player with the most of its stat (%s)" % winners)
+	_check(awards[0]["line"] == "30 kills. Management is pleased.", "award lines carry the number")
+	var clean := RunAwards.compute({1: {"kills": 3}, 2: {"kills": 3}}, {}, {1: "Ann", 2: "Bob"})
+	_check(clean.size() == 1 and clean[0]["name"] == "Ann", "zero-stat awards are skipped and ties go to the lower peer id")
+
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	var map := game.get_node(MAP_PATH) as WintermaulMap
+	state.position_owners[1] = 2
+	state.open_accounts([2], 400)
+	_check(game.call("_try_place_tower", "bolt", P2_OPEN, 2) == WintermaulMap.Placement.OK and int(state.peer_stats[2]["towers_built"]) == 1, "building counts toward the builder's awards")
+	var tower_id: int = state.tower_records()[-1]["id"]
+	state.begin_wave(PackedInt32Array([2, 0, 0, 0, 0, 0, 0, 0, 0]))
+	game.call("_spawn_entry", 0, {"creep_id": "grunt", "health_multiplier": 1.0, "bounty_multiplier": 1.0, "delay": 0.0})
+	game.call("_spawn_entry", 0, {"creep_id": "grunt", "health_multiplier": 1.0, "bounty_multiplier": 1.0, "delay": 0.0})
+	var creeps := map.get_active_creeps()
+	map.set("_impact_tower_id", tower_id)
+	(creeps[0] as RouteRunner).take_damage(100000, 100)
+	map.set("_impact_tower_id", 0)
+	_check(int(state.peer_stats[2].get("kills", 0)) == 1 and not (state.peer_stats.get(1, {}) as Dictionary).has("kills"), "a kill counts for the player controlling the killing tower's position")
+	game.call("_on_creep_route_finished", (creeps[1] as RouteRunner).creep_id)
+	_check(int(state.peer_stats[1].get("leaks", 0)) == 1, "a leak counts against the player defending the creep's home position")
+	state.phase = RunStateModel.Phase.DEFEAT
+	var results: Dictionary = (game.call("_make_state_snapshot") as Dictionary)["results"]
+	var hud: Node = game.get_node("%Hud")
+	hud.call("show_end_screen", results, Catalog)
+	var titles: PackedStringArray = hud.call("award_titles")
+	_check(titles.has("EMPLOYEE OF THE MONTH") and titles.has("MOST LEAKS ALLOWED"), "the end screen lists the run's awards (%s)" % titles)
 	game.queue_free()
 
 

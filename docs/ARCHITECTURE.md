@@ -18,6 +18,7 @@ This document freezes the invariants that the MVP depends on. Change them delibe
 | --- | --- |
 | `phase`, `current_wave_index`, `wave_count` | Run progression |
 | `shared_lives` | Shared defense |
+| `peer_stats` | `peer_id -> {kills, leaks, gold_spent, gold_sent, towers_built, trips}` for the end-of-run awards (`RunAwards`, computed into the results). A kill counts for the controller of the killing tower's position (the map records `killer_tower` with the fallen creep); a leak counts against the controller of the creep's home position |
 | `peer_gold` | `peer_id -> gold`, one account per player; the host's also covers unfilled positions. `open_accounts` splits the lobby's starting gold evenly (remainder to the host); `award_shared_gold` splits each bounty and run-upgrade gold into one share per position, paid to that position's controller (fractions carry over); build, upgrade and sell use the requester's account; `close_account` hands a leaver's gold to the host |
 | `lane_queued`, `lane_spawned` | Per-position spawn bookkeeping |
 | `active_creeps` | `creep_id -> {position, definition_id, health_multiplier}` |

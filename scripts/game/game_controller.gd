@@ -387,8 +387,11 @@ func _spawn_creep_visual(creep_id: int, position_index: int, definition_id: Stri
 
 func _on_creep_route_finished(creep_id: int) -> void:
 	if multiplayer.is_server():
+		var leaker: Dictionary = run_state.active_creeps.get(creep_id, {})
 		if run_state.phase != RunStateModel.Phase.WAVE or not run_state.resolve_creep(creep_id, true):
 			return
+		# A leak counts against the player defending the creep's home position.
+		run_state.count_for(run_state.controller_of(int(leaker.get("position", -1))), "leaks")
 		_creep_bounties.erase(creep_id)
 		_creep_bounty_multipliers.erase(creep_id)
 		_creep_is_boss.erase(creep_id)
@@ -408,6 +411,9 @@ func _on_creep_killed(creep_id: int) -> void:
 			return
 		var definition := CATALOG.get_creep(str(record.get("definition_id", "")))
 		var fell_at := wintermaul_map.last_creep_route(creep_id)
+		var killer := run_state.get_tower(int(fell_at.get("killer_tower", 0)))
+		if not killer.is_empty():
+			run_state.count_for(run_state.controller_of(int(killer["position"])), "kills")
 		if definition != null and definition.splits() and not fell_at.is_empty():
 			_spawn_split_children(definition, int(record["position"]), float(record.get("health_multiplier", 1.0)), float(_creep_bounty_multipliers.get(creep_id, 1.0)), fell_at)
 		var bounty := int(_creep_bounties.get(creep_id, 0))
@@ -517,7 +523,9 @@ func _make_state_snapshot() -> Dictionary:
 	snapshot["wave_one_ready"] = _wave_one_total - _wave_one_pending_ready.size()
 	snapshot["wave_one_total"] = _wave_one_total
 	if run_state.phase in [RunStateModel.Phase.VICTORY, RunStateModel.Phase.DEFEAT]:
-		snapshot["results"] = run_state.results()
+		var results := run_state.results()
+		results["awards"] = RunAwards.compute(run_state.peer_stats, run_state.peer_gold, _account_names())
+		snapshot["results"] = results
 	return snapshot
 
 
@@ -764,6 +772,7 @@ func _tick_builders(delta: float) -> void:
 	var events := builder_system.tick(delta, _start_construction, _is_near_building)
 	for event in events:
 		if event["kind"] == "tripped":
+			run_state.count_for(int(event["peer"]), "trips")
 			_announce(announcer.tripped(_player_name(int(event["peer"]), SteamSession.get_peer_names())))
 		if event["kind"] == "build_failed":
 			var peer := int(event["peer"])
@@ -896,6 +905,7 @@ func _try_place_tower(definition_id: String, cell: Vector2i, peer_id := HOST_PEE
 	if ultimate:
 		run_state.spend_relic(peer_id)
 	var record := run_state.add_tower(definition.id, cell, position_index, definition.default_targeting, cost)
+	run_state.count_for(peer_id, "towers_built")
 	if ultimate:
 		# Cancelling construction hands the Relic back to whoever spent it.
 		record["relic_peer"] = peer_id

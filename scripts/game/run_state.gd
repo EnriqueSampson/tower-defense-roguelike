@@ -19,6 +19,9 @@ var shared_lives := 20
 ## peer id -> gold. Every player has their own account (lives stay shared);
 ## the host's account also covers the positions it controls for absent players.
 var peer_gold: Dictionary = {}
+## peer id -> {kills, leaks, gold_spent, gold_sent, towers_built, trips}: who
+## did what, for the end-of-run awards (RunAwards). Host only; in the results.
+var peer_stats: Dictionary = {}
 var roguelike_enabled := true
 var lane_queued := PackedInt32Array()
 var lane_spawned := PackedInt32Array()
@@ -208,6 +211,7 @@ func spend_gold(peer_id: int, amount: int) -> bool:
 		return false
 	peer_gold[peer_id] = gold_of(peer_id) - amount
 	stats["gold_spent"] += amount
+	count_for(peer_id, "gold_spent", amount)
 	return true
 
 
@@ -250,7 +254,15 @@ func transfer_gold(from_peer: int, to_peer: int, amount: int) -> bool:
 	peer_gold[from_peer] = gold_of(from_peer) - amount
 	peer_gold[to_peer] = gold_of(to_peer) + amount
 	stats["gold_sent"] += amount
+	count_for(from_peer, "gold_sent", amount)
 	return true
+
+
+## Adds to one player's award stats (see peer_stats).
+func count_for(peer_id: int, key: String, amount := 1) -> void:
+	var row: Dictionary = peer_stats.get(peer_id, {})
+	row[key] = int(row.get(key, 0)) + amount
+	peer_stats[peer_id] = row
 
 
 ## A leaving player's gold (and pending fractions) goes to `to_peer`.
@@ -465,4 +477,5 @@ func results() -> Dictionary:
 		"stats": stats.duplicate(),
 		"lives": shared_lives,
 		"gold": peer_gold.duplicate(),
+		"peer_stats": peer_stats.duplicate(true),
 	}

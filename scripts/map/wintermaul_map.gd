@@ -73,6 +73,8 @@ var _last_creep_positions: Dictionary = {}
 var _last_creep_routes: Dictionary = {}
 ## Active creeps shared by every caller within a frame (towers, impacts,
 ## minimap); rebuilt on the next frame or when creeps spawn, die or leave.
+## Tower whose impact is resolving right now, so kills credit their killer.
+var _impact_tower_id := 0
 var _active_creeps_cache: Array = []
 var _active_creeps_frame := -1
 var _terrain_texture: ImageTexture
@@ -644,7 +646,9 @@ func _on_projectile_impact(payload: Dictionary, impact_position: Vector2, target
 	if not _is_authority():
 		impact_resolved.emit(int(payload.get("tower_id", 0)), 0, 0)
 		return
+	_impact_tower_id = int(payload.get("tower_id", 0))
 	var hits := CombatResolver.resolve_impact(get_active_creeps(), payload, impact_position, target)
+	_impact_tower_id = 0
 	var killed := 0
 	for hit in hits:
 		if hit["killed"]:
@@ -1448,6 +1452,7 @@ func _on_runner_killed(creep_id: int) -> void:
 			"start_stage": runner.get_stage_index(),
 			"start_distance": runner.get_progress() - runner.get_stage_index() * RouteRunner.STAGE_PROGRESS_WEIGHT,
 			"spawner": runner.spawner_index,
+			"killer_tower": _impact_tower_id,
 		}
 		runner.queue_free()
 	creep_killed.emit(creep_id)
