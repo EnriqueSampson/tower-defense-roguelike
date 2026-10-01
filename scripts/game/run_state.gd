@@ -47,6 +47,10 @@ var midpoint_done := false
 var run_seed := 0
 var applied_upgrades: Array[String] = []
 var pending_offer: Array[String] = []
+## The broadcast: team viewers, and sponsor offers earned but not yet shown
+## (one opens per build phase).
+var ratings := 0
+var sponsor_offers_due := 0
 var elapsed_seconds := 0.0
 var stats := {
 	"towers_built": 0,
@@ -275,6 +279,16 @@ func close_account(peer_id: int, to_peer: int) -> void:
 	_gold_fractions.erase(peer_id)
 
 
+## Adds viewers. Returns how many sponsor milestones that crossed (each one
+## is owed an offer).
+func add_ratings(amount: int) -> int:
+	var before := ratings / BalanceConfig.RATINGS_MILESTONE
+	ratings += maxi(0, amount)
+	var crossed := ratings / BalanceConfig.RATINGS_MILESTONE - before
+	sponsor_offers_due += crossed
+	return crossed
+
+
 func add_lives(amount: int) -> void:
 	shared_lives = maxi(0, shared_lives + amount)
 
@@ -416,6 +430,8 @@ func snapshot(countdown: float) -> Dictionary:
 		"seed": run_seed,
 		"upgrades": applied_upgrades.duplicate(),
 		"offer": pending_offer.duplicate(),
+		"ratings": ratings,
+		"sponsors_due": sponsor_offers_due,
 		"elapsed": elapsed_seconds,
 		"stats": stats.duplicate(),
 		"next_tower_id": _next_tower_id,
@@ -454,6 +470,8 @@ func restore(data: Dictionary) -> void:
 	run_seed = int(data.get("seed", run_seed))
 	applied_upgrades.assign(data.get("upgrades", []))
 	pending_offer.assign(data.get("offer", []))
+	ratings = int(data.get("ratings", ratings))
+	sponsor_offers_due = int(data.get("sponsors_due", sponsor_offers_due))
 	elapsed_seconds = float(data.get("elapsed", elapsed_seconds))
 	var restored_stats: Dictionary = data.get("stats", {})
 	for key in restored_stats:

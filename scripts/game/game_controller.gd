@@ -43,6 +43,13 @@ var _run_ended_announced := false
 var _chat_times: Dictionary = {}
 ## Host only: the System's commentary.
 var announcer: SystemAnnouncer
+## Host only, for ratings: recent kill times (multi-kills), boss spawn times
+## (fast boss kills) and this level's leaks (flawless levels).
+var _recent_kill_times: Array[float] = []
+var _boss_spawned_at: Dictionary = {}
+var _level_leaks := 0
+## Kill flair paid this level, by label (capped by KILL_FLAIR_PER_LEVEL).
+var _level_flair: Dictionary = {}
 
 @onready var wintermaul_map: WintermaulMap = %WintermaulMap
 @onready var battlefield_camera: BattlefieldCamera = %BattlefieldCamera
@@ -319,6 +326,8 @@ func _begin_wave() -> void:
 		counts[position_index] = queue.size()
 		_spawn_timers[position_index] = float(queue[0]["delay"]) if not queue.is_empty() else 0.0
 	run_state.begin_wave(counts)
+	_level_leaks = 0
+	_level_flair.clear()
 	_play_event.rpc("wave_start")
 	if run_state.current_wave_index == 0:
 		_announce(announcer.run_started())
@@ -355,6 +364,8 @@ func _spawn_entry(position_index: int, entry: Dictionary) -> void:
 	_creep_bounties[creep_id] = modifiers.bounty(roundi(definition.bounty * bounty_multiplier))
 	_creep_bounty_multipliers[creep_id] = bounty_multiplier
 	_creep_is_boss[creep_id] = definition.is_boss
+	if definition.is_boss:
+		_boss_spawned_at[creep_id] = run_state.elapsed_seconds
 	_spawn_creep_visual.rpc(creep_id, position_index, definition.id, health, modifiers.creep_speed_multiplier(), {})
 
 
@@ -392,6 +403,8 @@ func _on_creep_route_finished(creep_id: int) -> void:
 			return
 		# A leak counts against the player defending the creep's home position.
 		run_state.count_for(run_state.controller_of(int(leaker.get("position", -1))), "leaks")
+		_level_leaks += 1
+		_boss_spawned_at.erase(creep_id)
 		_creep_bounties.erase(creep_id)
 		_creep_bounty_multipliers.erase(creep_id)
 		_creep_is_boss.erase(creep_id)
@@ -414,6 +427,7 @@ func _on_creep_killed(creep_id: int) -> void:
 		var killer := run_state.get_tower(int(fell_at.get("killer_tower", 0)))
 		if not killer.is_empty():
 			run_state.count_for(run_state.controller_of(int(killer["position"])), "kills")
+		_rate_kill(creep_id, definition, fell_at)
 		if definition != null and definition.splits() and not fell_at.is_empty():
 			_spawn_split_children(definition, int(record["position"]), float(record.get("health_multiplier", 1.0)), float(_creep_bounty_multipliers.get(creep_id, 1.0)), fell_at)
 		var bounty := int(_creep_bounties.get(creep_id, 0))
@@ -447,18 +461,80 @@ func _finish_creep_resolution() -> void:
 		_clear_creeps_visual.rpc()
 		_announce_run_end()
 	elif run_state.is_wave_clear():
-		var cleared_wave: WaveDefinition = CATALOG.waves[run_state.current_wave_index]
 		run_state.advance_after_clear()
+		_rate_level_clear()
 		if run_state.phase == RunStateModel.Phase.BUILD:
 			_announce(announcer.level_cleared(run_state.shared_lives))
 			if run_state.current_wave_index - 1 == BalanceConfig.midpoint_wave_index(run_state.wave_count):
 				_open_midpoint_choice()
-			if cleared_wave.offers_upgrade_after and run_state.roguelike_enabled:
+			# Sponsor offers are earned with ratings; one opens per build phase.
+			if run_state.sponsor_offers_due > 0 and run_state.roguelike_enabled:
+				run_state.sponsor_offers_due -= 1
 				run_state.pending_offer = UpgradeOffer.roll(CATALOG.upgrades, modifiers, run_state.run_seed, run_state.current_wave_index, BalanceConfig.OFFER_CHOICE_COUNT, _available_lines())
 			_start_build_phase()
 		elif run_state.phase == RunStateModel.Phase.VICTORY:
 			_announce_run_end()
 	_mark_dirty()
+
+
+# --- Ratings (the broadcast) -----------------------------------------------------
+
+## Flair on a kill: a clutch save near the gate, a multi-kill, a fast boss kill.
+func _rate_kill(creep_id: int, definition: CreepDefinition, fell_at: Dictionary) -> void:
+	var now := run_state.elapsed_seconds
+	var fell := fell_at.get("start_position", Vector2.INF) as Vector2
+	var gate := wintermaul_map.grid_to_world(WintermaulMap.GOAL_CELL)
+	if fell != Vector2.INF and fell.distance_to(gate) <= BalanceConfig.CLUTCH_TILES * WintermaulMap.TILE_SIZE:
+		_rate_capped(BalanceConfig.RATINGS_CLUTCH, "CLUTCH SAVE", fell)
+	_recent_kill_times = _recent_kill_times.filter(func(at: float) -> bool: return now - at <= BalanceConfig.MULTI_KILL_SECONDS)
+	_recent_kill_times.append(now)
+	if _recent_kill_times.size() >= BalanceConfig.MULTI_KILL_COUNT:
+		_recent_kill_times.clear()
+		_rate_capped(BalanceConfig.RATINGS_MULTI_KILL, "MULTI-KILL", fell)
+	if _boss_spawned_at.has(creep_id):
+		var spawned := float(_boss_spawned_at[creep_id])
+		_boss_spawned_at.erase(creep_id)
+		if now - spawned <= BalanceConfig.BOSS_SPEED_SECONDS and definition != null:
+			_rate(BalanceConfig.RATINGS_SPEED_BOSS, "BOSS SPEEDRUN", fell)
+
+
+## Kill flair, paid at most KILL_FLAIR_PER_LEVEL times per label per level.
+func _rate_capped(amount: int, label: String, plane: Vector2) -> void:
+	var paid := int(_level_flair.get(label, 0))
+	if paid >= BalanceConfig.KILL_FLAIR_PER_LEVEL:
+		return
+	_level_flair[label] = paid + 1
+	_rate(amount, label, plane)
+
+
+## Flair over a whole level: no leaks, a close call, a long maze.
+func _rate_level_clear() -> void:
+	if _level_leaks == 0:
+		_rate(BalanceConfig.RATINGS_FLAWLESS, "FLAWLESS LEVEL")
+	elif run_state.shared_lives <= BalanceConfig.NAIL_BITER_LIVES:
+		_rate(BalanceConfig.RATINGS_NAIL_BITER, "NAIL-BITER")
+	var ratio := wintermaul_map.maze_ratio()
+	if ratio >= BalanceConfig.MAZE_RATIO_EPIC:
+		_rate(BalanceConfig.RATINGS_MAZE_EPIC, "MAZE OF THE YEAR  x%.1f" % ratio)
+	elif ratio >= BalanceConfig.MAZE_RATIO:
+		_rate(BalanceConfig.RATINGS_MAZE, "MAZE OF THE WEEK  x%.1f" % ratio)
+
+
+## Adds viewers, shows the call-out everywhere, and lets the System announce a
+## sponsor when a milestone is crossed.
+func _rate(amount: int, label: String, plane := Vector2.INF) -> void:
+	var crossed := run_state.add_ratings(amount)
+	_ratings_callout.rpc(label, amount, plane)
+	if crossed > 0:
+		_announce(announcer.sponsor_milestone(run_state.ratings - run_state.ratings % BalanceConfig.RATINGS_MILESTONE))
+	_mark_dirty()
+
+
+@rpc("authority", "call_local", "reliable")
+func _ratings_callout(label: String, amount: int, plane: Vector2) -> void:
+	hud.show_ratings_callout(label, amount)
+	if plane != Vector2.INF:
+		wintermaul_map.effects.floating_text(plane, label, BroadcastTheme.GOLD)
 
 
 func _announce_run_end() -> void:

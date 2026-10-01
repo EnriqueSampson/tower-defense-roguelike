@@ -44,6 +44,15 @@ func _refresh() -> void:
 	_count.text = "%s VIEWERS" % format_count(viewers)
 
 
+## 8000 -> "8K", 1250000 -> "1.25M"
+static func short_count(value: int) -> String:
+	if value >= 1000000:
+		return ("%.2fM" % (value / 1000000.0)).replace(".00M", "M")
+	if value >= 1000:
+		return "%dK" % floori(value / 1000.0)
+	return str(value)
+
+
 ## 1204337 -> "1,204,337"
 static func format_count(value: int) -> String:
 	var digits := str(absi(value))

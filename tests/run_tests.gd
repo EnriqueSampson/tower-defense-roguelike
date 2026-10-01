@@ -75,6 +75,7 @@ func _run_tests() -> void:
 	_test_broadcast_menus()
 	_test_system_announcer()
 	_test_run_awards()
+	_test_ratings()
 	_test_snapshot_round_trip()
 	_test_full_run_victory_and_defeat_model()
 	# Ownership and authority
@@ -610,6 +611,56 @@ func _test_run_awards() -> void:
 	var titles: PackedStringArray = hud.call("award_titles")
 	_check(titles.has("EMPLOYEE OF THE MONTH") and titles.has("MOST LEAKS ALLOWED"), "the end screen lists the run's awards (%s)" % titles)
 	game.queue_free()
+
+
+func _test_ratings() -> void:
+	var model := RunStateModel.new()
+	_check(model.add_ratings(BalanceConfig.RATINGS_MILESTONE - 1) == 0 and model.add_ratings(1) == 1 and model.sponsor_offers_due == 1, "crossing a ratings milestone owes one sponsor offer")
+	_check(model.add_ratings(BalanceConfig.RATINGS_MILESTONE * 2) == 2 and model.sponsor_offers_due == 3, "a big jump can cross several milestones")
+	var restored := RunStateModel.new()
+	restored.restore(model.snapshot(0.0))
+	_check(restored.ratings == model.ratings and restored.sponsor_offers_due == 3, "snapshots carry ratings and owed offers")
+	_check(LiveBadge.short_count(8000) == "8K" and LiveBadge.short_count(1250000) == "1.25M" and LiveBadge.short_count(2000000) == "2M" and LiveBadge.short_count(950) == "950", "viewer counts shorten for the HUD")
+
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	var map := game.get_node(MAP_PATH) as WintermaulMap
+	var hud: Node = game.get_node("%Hud")
+	_check(is_equal_approx(map.maze_ratio(), 1.0), "an empty map has a maze ratio of 1")
+	state.begin_wave(PackedInt32Array([30, 0, 0, 0, 0, 0, 0, 0, 0]))
+	game.call("_spawn_entry", 0, {"creep_id": "grunt", "health_multiplier": 1.0, "bounty_multiplier": 1.0, "delay": 0.0})
+	var near_gate: RouteRunner = map.get_active_creeps()[0]
+	near_gate.plane_position = map.grid_to_world(WintermaulMap.GOAL_CELL + Vector2i(0, -4))
+	near_gate.take_damage(100000, 100)
+	_check(state.ratings == BalanceConfig.RATINGS_CLUTCH and hud.call("ratings_callouts")[-1].ends_with("CLUTCH SAVE"), "a kill right by the gate is a clutch save")
+	for index in range(BalanceConfig.MULTI_KILL_COUNT):
+		game.call("_spawn_entry", 0, {"creep_id": "grunt", "health_multiplier": 1.0, "bounty_multiplier": 1.0, "delay": 0.0})
+	for runner: RouteRunner in map.get_active_creeps():
+		runner.take_damage(100000, 100)
+	_check(state.ratings == BalanceConfig.RATINGS_CLUTCH + BalanceConfig.RATINGS_MULTI_KILL, "five kills at once are a multi-kill")
+	for burst in range(3):
+		for index in range(BalanceConfig.MULTI_KILL_COUNT):
+			game.call("_spawn_entry", 0, {"creep_id": "grunt", "health_multiplier": 1.0, "bounty_multiplier": 1.0, "delay": 0.0})
+		for runner: RouteRunner in map.get_active_creeps():
+			runner.take_damage(100000, 100)
+	_check(state.ratings == BalanceConfig.RATINGS_CLUTCH + BalanceConfig.KILL_FLAIR_PER_LEVEL * BalanceConfig.RATINGS_MULTI_KILL, "multi-kills pay at most %d times per level" % BalanceConfig.KILL_FLAIR_PER_LEVEL)
+	game.queue_free()
+
+	var boss_game: Node = _instantiate_game()
+	root.add_child(boss_game)
+	var boss_state: RunState = boss_game.get("run_state")
+	var boss_map := boss_game.get_node(MAP_PATH) as WintermaulMap
+	var boss_id := ""
+	for creep: CreepDefinition in Catalog.creeps():
+		if creep.is_boss and not creep.splits():
+			boss_id = creep.id
+			break
+	boss_state.begin_wave(PackedInt32Array([1, 0, 0, 0, 0, 0, 0, 0, 0]))
+	boss_game.call("_spawn_entry", 0, {"creep_id": boss_id, "health_multiplier": 1.0, "bounty_multiplier": 1.0, "delay": 0.0})
+	(boss_map.get_active_creeps()[0] as RouteRunner).take_damage(100000000, 1000)
+	_check(boss_state.ratings >= BalanceConfig.RATINGS_SPEED_BOSS, "a boss killed fast is a boss speedrun (%s)" % boss_id)
+	boss_game.queue_free()
 
 
 func _test_snapshot_round_trip() -> void:
@@ -1803,7 +1854,7 @@ func _test_controller_wave_loop_with_offer() -> void:
 		game.call("_finish_creep_resolution")
 	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 3, "three cleared waves return to build for wave four")
 	_check(state.stats["kills"] > 0 and state.gold_of(1) > BalanceConfig.STARTING_GOLD, "kills award team gold and count toward results")
-	_check(state.has_pending_offer() and state.pending_offer.size() == BalanceConfig.OFFER_CHOICE_COUNT, "clearing wave three offers a team upgrade")
+	_check(state.ratings >= 3 * BalanceConfig.RATINGS_FLAWLESS and state.ratings <= 3 * (BalanceConfig.RATINGS_FLAWLESS + BalanceConfig.KILL_FLAIR_PER_LEVEL * BalanceConfig.RATINGS_MULTI_KILL) and state.has_pending_offer() and state.pending_offer.size() == BalanceConfig.OFFER_CHOICE_COUNT, "three flawless levels earn a sponsor offer, kill flair capped per level (%d viewers)" % state.ratings)
 	var countdown_before: float = game.get("build_countdown")
 	game.call("_process", 1.0)
 	_check(is_equal_approx(game.get("build_countdown"), countdown_before), "the build countdown pauses while an offer is open")
@@ -1989,7 +2040,7 @@ func _test_controller_roguelike_toggle_suppresses_offer() -> void:
 				break
 		game.call("_finish_creep_resolution")
 	_check(state.phase == RunStateModel.Phase.BUILD and state.current_wave_index == 3, "three cleared waves return to build for wave four with roguelike disabled")
-	_check(not state.has_pending_offer(), "clearing wave three does not offer an upgrade when roguelike is disabled")
+	_check(not state.has_pending_offer() and state.ratings > 0, "with sponsor upgrades off, ratings still count but no offer opens")
 	steam_session.set("is_solo_session", false)
 	steam_session.set("roguelike_enabled", true)
 	game.queue_free()

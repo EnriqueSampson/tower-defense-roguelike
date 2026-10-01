@@ -13,6 +13,34 @@ const BUILD_DURATION := 25.0
 ## Wave 1 waits for every player to ready up, falling back to this timeout.
 const WAVE_ONE_READY_TIMEOUT := 90.0
 const OFFER_CHOICE_COUNT := 3
+
+## Ratings (the broadcast): viewers earned for playing with flair. Every
+## RATINGS_MILESTONE viewers buys a sponsor offer (a run-upgrade choice). A
+## flawless level earns a bit over a third of a milestone, so clean play gets
+## an offer every third level, as the old fixed schedule did; flair is faster.
+const RATINGS_MILESTONE := 100000
+const RATINGS_FLAWLESS := 35000
+## A kill within CLUTCH_TILES of the gate.
+const RATINGS_CLUTCH := 8000
+const CLUTCH_TILES := 5.0
+## MULTI_KILL_COUNT kills within MULTI_KILL_SECONDS.
+const RATINGS_MULTI_KILL := 5000
+const MULTI_KILL_COUNT := 5
+const MULTI_KILL_SECONDS := 0.6
+## Clutch saves and multi-kills pay at most this many times each per level,
+## or late levels (hundreds of creeps, splash everywhere) would flood ratings.
+const KILL_FLAIR_PER_LEVEL := 2
+## A boss killed within BOSS_SPEED_SECONDS of spawning.
+const RATINGS_SPEED_BOSS := 30000
+const BOSS_SPEED_SECONDS := 25.0
+## A level cleared with this many lives or fewer left.
+const RATINGS_NAIL_BITER := 15000
+const NAIL_BITER_LIVES := 3
+## Mazes: the creeps' current routes against the empty-map routes.
+const RATINGS_MAZE := 15000
+const RATINGS_MAZE_EPIC := 30000
+const MAZE_RATIO := 1.6
+const MAZE_RATIO_EPIC := 2.5
 ## Seconds the host waits for load acknowledgements before starting anyway.
 const LOAD_ACK_TIMEOUT := 15.0
 ## Team-size load scale: solo defenders face fewer creeps per position than a

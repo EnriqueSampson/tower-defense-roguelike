@@ -105,6 +105,9 @@ var _chat_input: LineEdit
 var _chat_refresh_timer := 0.0
 ## The System's broadcast banner over the battlefield (the announcer).
 var _announcer_banner: SystemLowerThird
+## Ratings: the viewers meter in the top bar and the flair call-outs.
+var _ratings_label: Label
+var _callouts: VBoxContainer
 ## End screen: one row per award (RunAwards), rebuilt when they change.
 var _awards_box: VBoxContainer
 var _awards_signature := ""
@@ -193,6 +196,7 @@ func _ready() -> void:
 	_build_players_list()
 	_build_chat()
 	_build_announcer_banner()
+	_build_ratings()
 
 
 func setup(catalog: ContentCatalog) -> void:
@@ -236,6 +240,10 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 	wave_label.text = "WAVE  %s / %s" % [snapshot["wave_index"] + 1, snapshot["wave_count"]]
 	lives_label.text = "LIVES  %s" % snapshot["lives"]
 	gold_label.text = "GOLD  %s" % int(context.get("gold", 0))
+	var ratings := int(snapshot.get("ratings", 0))
+	var next_sponsor := (ratings / BalanceConfig.RATINGS_MILESTONE + 1) * BalanceConfig.RATINGS_MILESTONE
+	_ratings_label.text = "VIEWERS  %s / %s" % [LiveBadge.short_count(ratings), LiveBadge.short_count(next_sponsor)]
+	_ratings_label.tooltip_text = "Ratings: play with flair (clutch saves, multi-kills, fast boss kills, long mazes, flawless levels). Every %s viewers, a sponsor offers the team an upgrade." % LiveBadge.short_count(BalanceConfig.RATINGS_MILESTONE)
 	active_label.text = "CREEPS  %s    TOWERS  %s" % [snapshot["active_count"], snapshot.get("tower_count", 0)]
 	if phase == RunStateModel.Phase.BUILD:
 		if waiting_for > 0:
@@ -289,7 +297,7 @@ func update_state(snapshot: Dictionary, context: Dictionary) -> void:
 	_update_player_rows(snapshot, context)
 
 	var lines := modifiers.summary_lines()
-	modifiers_list.text = "\n".join(PackedStringArray(lines)) if not lines.is_empty() else "None yet. Offers appear after selected waves."
+	modifiers_list.text = "\n".join(PackedStringArray(lines)) if not lines.is_empty() else "None yet. A sponsor offers one every 100K viewers."
 	seed_label.text = "SEED  %s    PLAYERS  %s" % [snapshot.get("seed", 0), snapshot.get("player_count", 1)]
 
 
@@ -820,6 +828,47 @@ func _on_chat_input_gui_input(event: InputEvent) -> void:
 		_chat_input.accept_event()
 
 
+func _build_ratings() -> void:
+	_ratings_label = Label.new()
+	_ratings_label.mouse_filter = Control.MOUSE_FILTER_PASS
+	_ratings_label.add_theme_color_override("font_color", BroadcastTheme.MAGENTA.lightened(0.25))
+	gold_label.get_parent().add_child(_ratings_label)
+	gold_label.get_parent().move_child(_ratings_label, gold_label.get_index() + 1)
+	_callouts = VBoxContainer.new()
+	_callouts.anchor_left = 0.5
+	_callouts.anchor_right = 0.5
+	_callouts.offset_left = -240.0
+	_callouts.offset_right = 240.0
+	_callouts.offset_top = 130.0
+	_callouts.offset_bottom = 230.0
+	_callouts.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_callouts)
+
+
+## "+8K VIEWERS · CLUTCH SAVE": stacks briefly under the announcer banner.
+func show_ratings_callout(label: String, amount: int) -> void:
+	var line := Label.new()
+	line.text = "+%s VIEWERS  ·  %s" % [LiveBadge.short_count(amount), label]
+	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	BroadcastTheme.headline(line, 22, BroadcastTheme.GOLD, Color(BroadcastTheme.MAGENTA, 0.85))
+	_callouts.add_child(line)
+	while _callouts.get_child_count() > 3:
+		_callouts.get_child(0).free()
+	var fade := line.create_tween()
+	fade.tween_interval(1.8)
+	fade.tween_property(line, "modulate:a", 0.0, 0.7)
+	fade.tween_callback(line.queue_free)
+
+
+## Last call-out texts, oldest first (tests).
+func ratings_callouts() -> PackedStringArray:
+	var texts := PackedStringArray()
+	for line in _callouts.get_children():
+		texts.append((line as Label).text)
+	return texts
+
+
+
 ## The announcer's banner: top centre, under the toast line.
 func _build_announcer_banner() -> void:
 	_announcer_banner = SystemLowerThird.new()
@@ -920,7 +969,7 @@ func show_offer(upgrades: Array[RunUpgradeDefinition], can_choose: bool) -> void
 		card.disabled = not can_choose
 		card.pressed.connect(func() -> void: offer_chosen.emit(upgrade.id))
 		offer_cards.add_child(card)
-	offer_subtitle.text = "Pick one team upgrade. The wave timer is paused." if can_choose else "The host is choosing a team upgrade..."
+	offer_subtitle.text = "A SPONSOR IS INTERESTED. Pick one team upgrade; the wave timer is paused." if can_choose else "A sponsor is interested. The host is choosing a team upgrade..."
 	offer_overlay.visible = true
 
 

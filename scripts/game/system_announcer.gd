@@ -16,7 +16,7 @@ const BIG_GIFT := 100
 
 const LINES := {
 	"run_start": [
-		"Welcome to the show, crawlers! Nine positions, one gate, zero refunds.",
+		"Welcome to Frozen Gate TD LIVE!, builders! Nine positions, one gate, zero refunds.",
 		"And we're live! Please remain calm and build towers.",
 		"Good evening and welcome to the Frozen Gate, where hope goes to freeze.",
 	],
@@ -54,6 +54,11 @@ const LINES := {
 	"close_call": [
 		"Level cleared with %d lives left. Nobody panic. (Panic.)",
 		"Survived with %d lives. The ratings love a nail-biter.",
+	],
+	"sponsor": [
+		"%s viewers! A sponsor would like a word. Several words, mostly legal.",
+		"We just crossed %s viewers. Sponsor crate incoming!",
+		"%s people are watching you. A sponsor has noticed. Pick something shiny.",
 	],
 	"halfway": [
 		"Halfway there! Choose wisely: a Relic, or a whole second race. No pressure. Lots of pressure.",
@@ -126,6 +131,11 @@ func level_cleared(lives_left: int) -> String:
 	if lives_left > 3:
 		return ""
 	return _say(_pick("close_call") % lives_left)
+
+
+## A ratings milestone bought a sponsor offer.
+func sponsor_milestone(viewers: int) -> String:
+	return _say(_pick("sponsor") % LiveBadge.format_count(viewers), true)
 
 
 func halfway() -> String:

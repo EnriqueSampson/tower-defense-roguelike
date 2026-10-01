@@ -932,6 +932,23 @@ func get_route_targets(lane_id: int, spawner_index := 0) -> Array[Vector2i]:
 	return targets
 
 
+## How much the mazes lengthen the walk: every lane's current route (first
+## spawner, through all its checkpoints) against its empty-map route. 1.0 on
+## an empty map.
+func maze_ratio() -> float:
+	_ensure_map_data()
+	var empty := 0
+	var current := 0
+	for lane_id in range(_spawner_routes.size()):
+		empty += (_spawner_routes[lane_id][0] as PackedVector2Array).size()
+		var cursor: Vector2i = _spawner_cells[lane_id][0]
+		current += 1
+		for target in get_route_targets(lane_id):
+			current += maxi(0, _path_grid.get_path(cursor, target).size() - 1)
+			cursor = target
+	return float(current) / float(maxi(1, empty))
+
+
 func get_grid_revision() -> int:
 	_ensure_map_data()
 	return _path_grid.revision

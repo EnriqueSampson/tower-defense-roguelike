@@ -483,6 +483,7 @@ func _finish() -> void:
 		"VICTORY" if results["victory"] else ("DEFEAT" if _state.phase == RunState.Phase.DEFEAT else "STOPPED"),
 		results["wave_reached"], results["wave_count"], results["lives"], stats["leaks"], stats["kills"],
 		stats["towers_built"], only_builder, results["duration"], (Time.get_ticks_msec() - _started_msec) / 1000.0])
+	print("BALANCE sponsor upgrades %d  viewers %d" % [(results["upgrades"] as Array).size(), _state.ratings])
 	if not str(_options["out"]).is_empty():
 		var file := FileAccess.open(str(_options["out"]), FileAccess.WRITE)
 		file.store_string(JSON.stringify(report, "  "))
