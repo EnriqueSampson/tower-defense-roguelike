@@ -73,6 +73,7 @@ func _run_tests() -> void:
 	_test_chat_commands()
 	_test_chat_relay_and_give()
 	_test_broadcast_menus()
+	_test_system_announcer()
 	_test_snapshot_round_trip()
 	_test_full_run_victory_and_defeat_model()
 	# Ownership and authority
@@ -535,6 +536,38 @@ func _test_broadcast_menus() -> void:
 	_check(roster.item_count == 9 and roster.get_item_custom_fg_color(0).is_equal_approx(ClassicWintermaulLayout.PLAYER_COLORS[0].lightened(0.2)) and lobby.get_node("%StartButton").text == "GO LIVE  1/9", "the crew list colours each position and counts the crew")
 	lobby.queue_free()
 	steam_session.set("local_race", saved_race)
+
+
+func _test_system_announcer() -> void:
+	var system := SystemAnnouncer.new(7)
+	var opener := system.run_started()
+	_check(not opener.is_empty() and system.run_started().is_empty() and SystemAnnouncer.new(7).run_started() == opener, "the System opens the run once, with lines repeatable from the run seed")
+	_check(not system.leaked(19).is_empty() and system.leaked(18).is_empty(), "the first leak gets a line; later ones do not")
+	_check("4 lives" in system.leaked(4) and system.leaked(3).is_empty(), "low lives get one warning")
+	_check(system.tripped("Bob").is_empty(), "ordinary lines wait out the cooldown after the System spoke")
+	system.tick(SystemAnnouncer.COOLDOWN + 1.0)
+	_check("Bob" in system.tripped("Bob"), "builder trips get roasted by name")
+	system.tick(SystemAnnouncer.COOLDOWN + 1.0)
+	var spree := ""
+	for index in range(SystemAnnouncer.SPREE_SELLS):
+		spree = system.sold(2, "Ann")
+		_check(spree.is_empty() == (index < SystemAnnouncer.SPREE_SELLS - 1), "selling spree fires on sell %d of %d only" % [index + 1, SystemAnnouncer.SPREE_SELLS])
+	system.tick(SystemAnnouncer.COOLDOWN + 1.0)
+	_check(system.gold_sent("Ann", 50, "Bob").is_empty() and "150" in system.gold_sent("Ann", 150, "Bob"), "only big gifts make the broadcast")
+	system.tick(SystemAnnouncer.COOLDOWN + 1.0)
+	_check(system.level_cleared(10).is_empty() and "2 lives" in system.level_cleared(2), "close calls get a line, comfortable clears do not")
+	_check(not "%" in system.boss_wave("The Regional Manager") and "The Regional Manager" in system.boss_killed("The Regional Manager"), "boss lines name the boss and ignore the cooldown")
+
+	var game: Node = _instantiate_game()
+	root.add_child(game)
+	var state: RunState = game.get("run_state")
+	var hud: Node = game.get_node("%Hud")
+	state.position_owners[1] = 2
+	state.open_accounts([2], 400)
+	game.call("_try_send_gold", 1, 2, 150)
+	var last: String = hud.chat_history()[-1]
+	_check(last.begins_with("System: ") and "150" in last, "the controller broadcasts the System's lines to the HUD (%s)" % last)
+	game.queue_free()
 
 
 func _test_snapshot_round_trip() -> void:

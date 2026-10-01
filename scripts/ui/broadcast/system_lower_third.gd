@@ -7,6 +7,9 @@ extends PanelContainer
 const CHARS_PER_SECOND := 45.0
 const HOLD_SECONDS := 6.0
 
+## In game: hidden until the System speaks, and hidden again after the hold.
+@export var auto_hide := false
+
 var _tag: Label
 var _line: Label
 var _lines: Array[String] = []
@@ -41,6 +44,8 @@ func _ready() -> void:
 	_line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(_line)
+	if auto_hide:
+		visible = false
 
 
 ## Cycles through `lines` in a random order, one every few seconds.
@@ -57,6 +62,8 @@ func say(text: String) -> void:
 	_typed = 0.0
 	_hold = HOLD_SECONDS
 	_line.text = ""
+	if auto_hide:
+		visible = true
 
 
 func current_text() -> String:
@@ -71,6 +78,8 @@ func _process(delta: float) -> void:
 	_hold -= delta
 	if _hold <= 0.0 and not _lines.is_empty():
 		_advance()
+	elif _hold <= 0.0 and auto_hide:
+		visible = false
 
 
 func _advance() -> void:

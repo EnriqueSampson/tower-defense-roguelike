@@ -103,6 +103,8 @@ var _chat_lines: Array[Dictionary] = []
 var _chat_log: VBoxContainer
 var _chat_input: LineEdit
 var _chat_refresh_timer := 0.0
+## The System's broadcast banner over the battlefield (the announcer).
+var _announcer_banner: SystemLowerThird
 
 @onready var phase_label: Label = %PhaseLabel
 @onready var wave_label: Label = %WaveLabel
@@ -187,6 +189,7 @@ func _ready() -> void:
 	_build_position_rows()
 	_build_players_list()
 	_build_chat()
+	_build_announcer_banner()
 
 
 func setup(catalog: ContentCatalog) -> void:
@@ -812,6 +815,25 @@ func _on_chat_input_gui_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		close_chat()
 		_chat_input.accept_event()
+
+
+## The announcer's banner: top centre, under the toast line.
+func _build_announcer_banner() -> void:
+	_announcer_banner = SystemLowerThird.new()
+	_announcer_banner.auto_hide = true
+	_announcer_banner.anchor_left = 0.5
+	_announcer_banner.anchor_right = 0.5
+	_announcer_banner.offset_left = -330.0
+	_announcer_banner.offset_right = 330.0
+	_announcer_banner.offset_top = 80.0
+	_announcer_banner.offset_bottom = 124.0
+	add_child(_announcer_banner)
+
+
+## The System speaks: a banner over the battlefield plus a chat-log line.
+func announce(text: String) -> void:
+	_announcer_banner.say(text)
+	add_chat_line("System", SYSTEM_COLOR, text)
 
 
 ## Adds a line to the chat log. `text` is shown literally (no BBCode).

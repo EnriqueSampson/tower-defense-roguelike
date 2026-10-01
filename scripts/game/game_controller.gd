@@ -41,6 +41,8 @@ var _authority_lost := false
 var _run_ended_announced := false
 ## Host only: peer id -> times (s) of their recent chat lines.
 var _chat_times: Dictionary = {}
+## Host only: the System's commentary.
+var announcer: SystemAnnouncer
 
 @onready var wintermaul_map: WintermaulMap = %WintermaulMap
 @onready var battlefield_camera: BattlefieldCamera = %BattlefieldCamera
@@ -144,6 +146,7 @@ func _initialize_host_run() -> void:
 	run_state.roguelike_enabled = SteamSession.roguelike_enabled
 	run_state.position_owners = _resolve_position_owners()
 	run_state.open_accounts(_run_players(), BalanceConfig.starting_gold(SteamSession.player_count()))
+	announcer = SystemAnnouncer.new(run_state.run_seed)
 	run_state.peer_races = _resolve_peer_races()
 	if multiplayer.has_multiplayer_peer():
 		_awaiting_peers.assign(multiplayer.get_peers())
@@ -251,6 +254,7 @@ func _process(delta: float) -> void:
 		return
 	if run_state.phase in [RunStateModel.Phase.BUILD, RunStateModel.Phase.WAVE]:
 		run_state.elapsed_seconds += delta
+		announcer.tick(delta)
 		_tick_builders(delta)
 		_tick_construction(delta)
 
@@ -316,9 +320,12 @@ func _begin_wave() -> void:
 		_spawn_timers[position_index] = float(queue[0]["delay"]) if not queue.is_empty() else 0.0
 	run_state.begin_wave(counts)
 	_play_event.rpc("wave_start")
+	if run_state.current_wave_index == 0:
+		_announce(announcer.run_started())
 	if wave.has_boss():
 		_play_event.rpc("boss_warning")
 		_show_notice.rpc("BOSS INCOMING  ·  %s" % wave.title, true)
+		_announce(announcer.boss_wave(wave.title))
 	_mark_dirty()
 
 
@@ -387,6 +394,8 @@ func _on_creep_route_finished(creep_id: int) -> void:
 		_creep_is_boss.erase(creep_id)
 		_remove_creep_visual.rpc(creep_id, false)
 		_play_event.rpc("leak")
+		if run_state.phase != RunStateModel.Phase.DEFEAT:
+			_announce(announcer.leaked(run_state.shared_lives))
 		_finish_creep_resolution()
 	else:
 		AudioDirector.play("leak")
@@ -405,6 +414,8 @@ func _on_creep_killed(creep_id: int) -> void:
 		run_state.award_shared_gold(bounty)
 		if bool(_creep_is_boss.get(creep_id, false)):
 			run_state.stats["boss_kills"] += 1
+			if definition != null and not definition.splits():
+				_announce(announcer.boss_killed(definition.display_name))
 		_creep_bounties.erase(creep_id)
 		_creep_bounty_multipliers.erase(creep_id)
 		_creep_is_boss.erase(creep_id)
@@ -433,6 +444,7 @@ func _finish_creep_resolution() -> void:
 		var cleared_wave: WaveDefinition = CATALOG.waves[run_state.current_wave_index]
 		run_state.advance_after_clear()
 		if run_state.phase == RunStateModel.Phase.BUILD:
+			_announce(announcer.level_cleared(run_state.shared_lives))
 			if run_state.current_wave_index - 1 == BalanceConfig.midpoint_wave_index(run_state.wave_count):
 				_open_midpoint_choice()
 			if cleared_wave.offers_upgrade_after and run_state.roguelike_enabled:
@@ -448,6 +460,7 @@ func _announce_run_end() -> void:
 		return
 	_run_ended_announced = true
 	_play_event.rpc("victory" if run_state.phase == RunStateModel.Phase.VICTORY else "defeat")
+	_announce(announcer.run_ended(run_state.phase == RunStateModel.Phase.VICTORY))
 
 
 @rpc("authority", "call_local", "reliable")
@@ -750,6 +763,8 @@ func _tick_builders(delta: float) -> void:
 		return
 	var events := builder_system.tick(delta, _start_construction, _is_near_building)
 	for event in events:
+		if event["kind"] == "tripped":
+			_announce(announcer.tripped(_player_name(int(event["peer"]), SteamSession.get_peer_names())))
 		if event["kind"] == "build_failed":
 			var peer := int(event["peer"])
 			if peer == HOST_PEER_ID:
@@ -1017,6 +1032,7 @@ func _try_sell_tower(tower_id: int, peer_id := HOST_PEER_ID) -> bool:
 		refund += int(record.get("upgrade_paid", 0))
 	run_state.remove_tower(tower_id)
 	run_state.refund_gold(peer_id, refund)
+	_announce(announcer.sold(peer_id, _player_name(peer_id, SteamSession.get_peer_names())))
 	_remove_tower_visual.rpc(tower_id)
 	_play_event.rpc("sell")
 	_mark_dirty()
@@ -1073,8 +1089,10 @@ func _try_send_gold(from_peer: int, to_peer: int, amount: int) -> bool:
 		return false
 	if not run_state.transfer_gold(from_peer, to_peer, amount):
 		return false
-	var sender_name := str(SteamSession.get_peer_names().get(from_peer, "A teammate"))
+	var roster_names := SteamSession.get_peer_names()
+	var sender_name := _player_name(from_peer, roster_names)
 	var text := "%s sent you %d gold." % [sender_name, amount]
+	_announce(announcer.gold_sent(sender_name, amount, _player_name(to_peer, roster_names)))
 	if to_peer == multiplayer.get_unique_id():
 		_show_notice(text, false)
 	elif multiplayer.has_multiplayer_peer() and multiplayer.get_peers().has(to_peer):
@@ -1178,7 +1196,18 @@ func _chat_line(peer_id: int, text: String) -> void:
 	AudioDirector.play("ui_confirm")
 
 
-## A line from the System (command replies now, the announcer later).
+## Broadcasts an announcer line to everyone ("" stays quiet).
+func _announce(text: String) -> void:
+	if not text.is_empty() and multiplayer.is_server():
+		_system_announcement.rpc(text)
+
+
+@rpc("authority", "call_local", "reliable")
+func _system_announcement(text: String) -> void:
+	hud.announce(text)
+
+
+## A line from the System to one player (slash-command replies).
 @rpc("authority", "call_local", "reliable")
 func _system_line(text: String) -> void:
 	hud.add_chat_line("System", GameHud.SYSTEM_COLOR, text)
@@ -1213,6 +1242,7 @@ func _open_midpoint_choice() -> void:
 	run_state.midpoint_pending = peers
 	_midpoint_timer = BalanceConfig.MIDPOINT_CHOICE_TIMEOUT
 	_show_notice.rpc("Halfway there! Recruit a second race, or take a Relic for your race's ultimate tower.", false)
+	_announce(announcer.halfway())
 	_play_event.rpc("upgrade_chosen")
 
 
